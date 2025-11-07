@@ -1,4 +1,3 @@
-# UnionCierreKoajExtraccionAlegraApi.py
 from flask import Flask, request, jsonify
 import requests
 from requests.auth import HTTPBasicAuth
@@ -15,252 +14,9 @@ except Exception:
 
 app = Flask(__name__)
 
-# Usuario por defecto (opcional) -> leer de env var si existe
-DEFAULT_USERNAME = os.environ.get("DEFAULT_USERNAME", "koaj.puertocarreno@gmail.com")
-
-# Denominaciones
-DENOMINACIONES_MONEDAS = [50, 100, 200, 500, 1000]
-DENOMINACIONES_BILLETES = [2000, 5000, 10000, 20000, 50000, 100000]
-
-# Constantes caja
-OBJ_BASE = 450000
-UMBRAL_MENUDO = 10000
-
-# ---------------- utilidades ----------------
-def safe_int(x):
-    try:
-        return int(x)
-    except Exception:
-        try:
-            return int(float(x))
-        except Exception:
-            return 0
-
-def safe_number(amount):
-    if amount is None:
-        return 0
-    if isinstance(amount, (int, float)):
-        return amount
-    try:
-        s = str(amount).replace(",", "").strip()
-        if "." in s:
-            return float(s)
-        return int(s)
-    except Exception:
-        try:
-            return float(str(amount))
-        except Exception:
-            return 0
-
-def format_cop(amount):
-    try:
-        formatted = f"{int(round(amount, 0)):,}".replace(",", ".")
-        return f"${formatted}"
-    except Exception:
-        return f"${amount}"
-
-def normalize_method(pm: str) -> str:
-    if not pm:
-        return "other"
-    pm_low = pm.lower()
-    if "credit" in pm_low:
-        return "credit-card"
-    if "debit" in pm_low:
-        return "debit-card"
-    if "transfer" in pm_low:
-        return "transfer"
-    if "cash" in pm_low:
-        return "cash"
-    return "other"
-
-# ---------------- conteo / base algorithms ----------------
-def descomponer_binario(valor, cantidad):
-    partes = []
-    k = 1
-    restante = cantidad
-    while k <= restante:
-        partes.append(k)
-        restante -= k
-        k *= 2
-    if restante > 0:
-        partes.append(restante)
-    return partes
-
-def construir_base_exacta(todas_denoms, monto_objetivo, umbral_menudo=UMBRAL_MENUDO):
-    # ... (mantén tu implementación existente)
-    # Copia aquí la misma implementación que ya tienes (no la abrí completa para ahorrar espacio)
-    MAX = monto_objetivo
-    NEG = -10**18
-    dp = [NEG] * (MAX + 1)
-    dp[0] = 0
-    prev = [None] * (MAX + 1)
-
-    items = []
-    for denom, cnt in todas_denoms.items():
-        if cnt <= 0:
-            continue
-        partes = descomponer_binario(denom, cnt)
-        for k in partes:
-            valor_total = denom * k
-            aporte_menudo = valor_total if denom <= umbral_menudo else 0
-            items.append((valor_total, aporte_menudo, denom, k))
-
-    for valor_total, aporte_menudo, denom, k in items:
-        for s in range(MAX, valor_total - 1, -1):
-            if dp[s - valor_total] != NEG:
-                cand = dp[s - valor_total] + aporte_menudo
-                if cand > dp[s]:
-                    dp[s] = cand
-                    prev[s] = (s - valor_total, denom, k)
-
-    if dp[MAX] != NEG:
-        usado = {}
-        s = MAX
-        while s > 0:
-            entry = prev[s]
-            if entry is None:
-                break
-            s_prev, denom, k = entry
-            usado[denom] = usado.get(denom, 0) + k
-            s = s_prev
-        conteo_base = {d: usado.get(d, 0) for d in todas_denoms}
-        conteo_consignar = {d: todas_denoms[d] - conteo_base[d] for d in todas_denoms}
-        restante = 0
-        return conteo_base, conteo_consignar, restante, True
-
-    mejor_s = -1
-    for s in range(MAX, -1, -1):
-        if dp[s] != NEG:
-            mejor_s = s
-            break
-
-    if mejor_s == -1:
-        conteo_base = {d: 0 for d in todas_denoms}
-        conteo_consignar = dict(todas_denoms)
-        restante = monto_objetivo
-        return conteo_base, conteo_consignar, restante, False
-
-    usado = {}
-    s = mejor_s
-    while s > 0:
-        entry = prev[s]
-        if entry is None:
-            break
-        s_prev, denom, k = entry
-        usado[denom] = usado.get(denom, 0) + k
-        s = s_prev
-    conteo_base = {d: usado.get(d, 0) for d in todas_denoms}
-    conteo_consignar = {d: todas_denoms[d] - conteo_base[d] for d in todas_denoms}
-    restante = monto_objetivo - mejor_s
-    return conteo_base, conteo_consignar, restante, False
-
-# ---------------- procesamiento de facturas (Alegra) ----------------
-def process_invoices(invoices):
-    totals = {
-        "credit-card": 0,
-        "debit-card": 0,
-        "transfer": 0,
-        "cash": 0
-    }
-    for inv in invoices:
-        payments = inv.get("payments", []) or []
-        for p in payments:
-            amount = safe_number(p.get("amount"))
-            pm_raw = p.get("paymentMethod", "")
-            method = normalize_method(pm_raw)
-            if method in totals:
-                totals[method] += amount
-    return totals
-
-def build_alegra_struct(totals, date, username):
-    labels = {
-        "credit-card": "Tarjeta crédito",
-        "debit-card": "Tarjeta débito",
-        "transfer": "Transferencia",
-        "cash": "Efectivo"
-    }
-    result = {}
-    for k, v in totals.items():
-        result[k] = {
-            "label": labels.get(k, k),
-            "total": int(v),
-            "formatted": format_cop(v)
-        }
-    total_sum = sum(totals.get(k, 0) for k in ["credit-card", "debit-card", "transfer", "cash"])
-    result_total = {
-        "label": "TOTAL VENTA DEL DÍA",
-        "total": int(total_sum),
-        "formatted": format_cop(total_sum)
-    }
-    return {
-        "date_requested": date,
-        "username_used": username,
-        "results": result,
-        "total_sale": result_total
-    }
-
-# ---------------- endpoint ----------------
-@app.route("/sum_payments", methods=["POST"])
-def sum_payments_post():
-    # timestamp de la petición: usar ZoneInfo si está, sino fallback UTC-5
-    if HAVE_ZONEINFO:
-        try:
-            now = datetime.now(ZoneInfo("America/Bogota"))
-            tz_used = "America/Bogota"
-        except Exception:
-            now = datetime.now(timezone(timedelta(hours=-5)))
-            tz_used = "UTC-05:00 (fallback)"
-    else:
-        now = datetime.now(timezone(timedelta(hours=-5)))
-        tz_used = "UTC-05:00 (fallback)"
-
-    request_datetime = now.isoformat()
-    request_date = now.date().isoformat()
-    request_time = now.strftime("%H:%M:%S")
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Debe enviar JSON en el body con 'date' y 'password'."}), 400
-
-    date = data.get("date")
-    password = data.get("password") or os.environ.get("ALEGRA_PASS")
-    username = data.get("username") or os.environ.get("ALEGRA_USER") or DEFAULT_USERNAME
-
-    if not date or not password:
-        return jsonify({"error": "Faltan campos obligatorios: 'date' y/o 'password'."}), 400
-
-    # --- resto de tu lógica (conteo, construir base, llamadas a Alegra, etc.)
-    # Copia aquí todo el contenido interno que ya tenías para calcular totales, 
-    # llamar a Alegra con requests.get, procesar facturas y construir la respuesta.
-    # Asegúrate de mantener las mismas funciones y lógica que ya probaste en local.
-
-    # -------------------------------------------------------
-    # (por brevedad no reproduzco todo otra vez aquí; usa tu implementación original
-    # exactamente como la tienes, solo asegúrate de usar username/password desde env vars)
-    # -------------------------------------------------------
-
-    # AL FINAL, devuelve "response" como lo hacías antes:
-    # return jsonify(response), 200
-
-    # placeholder — remplaza con tu return real:
-    return # UnionCierreKoajExtraccionAlegraApi.py
-from flask import Flask, request, jsonify
-import requests
-from requests.auth import HTTPBasicAuth
-from datetime import datetime, timezone, timedelta
-
-# Intentar usar zoneinfo; si no está disponible, caer al fallback UTC-5
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
-    HAVE_ZONEINFO = True
-except Exception:
-    ZoneInfo = None
-    HAVE_ZONEINFO = False
-
-app = Flask(__name__)
-
-# Usuario por defecto (opcional)
-DEFAULT_USERNAME = "koaj.puertocarreno@gmail.com"
+# Credenciales desde variables de entorno
+DEFAULT_USERNAME = os.environ.get("ALEGRA_USER", "koaj.puertocarreno@gmail.com")
+DEFAULT_PASSWORD = os.environ.get("ALEGRA_PASS", "")
 
 # Denominaciones
 DENOMINACIONES_MONEDAS = [50, 100, 200, 500, 1000]
@@ -451,15 +207,16 @@ def sum_payments_post():
     """
     JSON esperado (ejemplo):
     {
-      "date": "2025-10-09",
-      "password": "0990...",
-      "username": "opcional@mail.com",
-      "coins": {"50": 10, "100": 5, ...},
-      "bills": {"2000": 3, "5000": 0, ...},
-      "excedente": 0,
+      "date": "2025-10-03",
+      "coins": {"50": 0, "100": 6, "200": 40, "500": 1, "1000": 0},
+      "bills": {"2000": 16, "5000": 7, "10000": 7, "20000": 12, "50000": 12, "100000": 9},
+      "excedente": 13500,
       "gastos_operativos": 0,
       "prestamos": 0
     }
+    
+    Ya NO se necesita enviar "password" ni "username" desde el front.
+    Se toman de las variables de entorno del servidor.
     """
     # timestamp de la petición: usar ZoneInfo si está, sino fallback UTC-5
     if HAVE_ZONEINFO:
@@ -467,7 +224,6 @@ def sum_payments_post():
             now = datetime.now(ZoneInfo("America/Bogota"))
             tz_used = "America/Bogota"
         except Exception:
-            # zoneinfo presente pero no se pudo cargar la zona: fallback a UTC-5
             now = datetime.now(timezone(timedelta(hours=-5)))
             tz_used = "UTC-05:00 (fallback)"
     else:
@@ -480,14 +236,20 @@ def sum_payments_post():
 
     data = request.get_json(silent=True)
     if not data:
-        return jsonify({"error": "Debe enviar JSON en el body con 'date' y 'password'."}), 400
+        return jsonify({"error": "Debe enviar JSON en el body con 'date'."}), 400
 
     date = data.get("date")
-    password = data.get("password")
-    username = data.get("username", DEFAULT_USERNAME)
+    if not date:
+        return jsonify({"error": "Falta campo obligatorio: 'date'."}), 400
 
-    if not date or not password:
-        return jsonify({"error": "Faltan campos obligatorios: 'date' y/o 'password'."}), 400
+    # Usar credenciales desde variables de entorno
+    username = DEFAULT_USERNAME
+    password = DEFAULT_PASSWORD
+
+    if not password:
+        return jsonify({
+            "error": "ALEGRA_PASS no está configurado en el servidor. Contacte al administrador."
+        }), 500
 
     # ----------------- leer conteos enviados (pueden faltar) -----------------
     coins_input = data.get("coins", {}) or {}
@@ -656,8 +418,3 @@ def sum_payments_post():
 if __name__ == "__main__":
     # Ejecutar servidor Flask en 0.0.0.0:5000
     app.run(host="0.0.0.0", port=5000, debug=True)
-
-
-# Solo para ejecución local: no usado por gunicorn
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
