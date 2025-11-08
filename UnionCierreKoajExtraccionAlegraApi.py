@@ -18,7 +18,7 @@ app = Flask(__name__)
 # ← AGREGAR ESTAS LÍNEAS PARA CONFIGURAR CORS
 CORS(app, resources={
     r"/sum_payments": {
-        "origins": ["https://tuusuario.pythonanywhere.com", "https://cierre-caja-frontend.onrender.com""http://localhost:5173", "http://localhost:5174"],  # Permitir Vite dev server
+        "origins": ["https://jdbarajass.pythonanywhere.com", "https://cierre-caja-frontend.onrender.com""http://localhost:5173", "http://localhost:5174"],  # Permitir Vite dev server
         "methods": ["POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
