@@ -1,3 +1,7 @@
 Dependencias y paquetes a instalar
+pip install flask requests (Esta es la principal)
+
 pip install xlrd openpyxl
-pip install flask requests
+
+npm install lucide-react
+pip install flask-cors
