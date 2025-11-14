@@ -14,14 +14,19 @@ app = create_app(config)
 
 if __name__ == "__main__":
     # Configuración para desarrollo local
+    # En producción (Render), usar 0.0.0.0
+    # En desarrollo local, puedes especificar tu IP en .env como HOST=10.28.168.57
+    host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', 5000))
     debug = config.DEBUG
 
-    app.logger.info(f"Iniciando servidor en puerto {port}")
+    app.logger.info(f"Iniciando servidor en {host}:{port}")
     app.logger.info(f"Modo debug: {debug}")
 
     app.run(
-        host="0.0.0.0",
+        host=host,
         port=port,
-        debug=debug
+        debug=debug,
+        use_reloader=False,
+        threaded=True
     )
