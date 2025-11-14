@@ -27,11 +27,14 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Configurar CORS
-# Configurar CORS (más permisivo para solucionar el error)
+    # Configurar CORS - SOLUCIÓN CORREGIDA
+    # Leer los orígenes permitidos de la configuración
+    allowed_origins = config_class.ALLOWED_ORIGINS
+    
+    # Configurar CORS para todas las rutas con los orígenes permitidos
     CORS(app, resources={
         r"/sum_payments": {
-            "origins": "*",
+            "origins": allowed_origins,
             "methods": ["POST", "OPTIONS", "GET"],
             "allow_headers": ["Content-Type", "Authorization", "Accept"],
             "supports_credentials": False,
@@ -95,7 +98,7 @@ def create_app(config_class=Config):
     app.logger.info("Sistema de Cierre de Caja - KOAJ Puerto Carreño")
     app.logger.info(f"Versión: 2.0.0")
     app.logger.info(f"Ambiente: {'Producción' if not app.config['DEBUG'] else 'Desarrollo'}")
-    app.logger.info(f"CORS Origins: {config_class.ALLOWED_ORIGINS}")
+    app.logger.info(f"CORS Origins: {allowed_origins}")
     app.logger.info("=" * 60)
 
     return app
@@ -109,7 +112,7 @@ def setup_logging(app):
 
     # Formato detallado para logs
     formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s en %(module)s.%(funcName)s:%(lineno)d - %(message)s',
+        '[%(asctime)s] %(levelname)s en %(module)s.%(funcName)s:%(lineno)d - %(mensaje)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
