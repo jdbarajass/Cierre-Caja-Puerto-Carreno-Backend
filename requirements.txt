@@ -17,16 +17,15 @@ Flask-Limiter==3.5.0
 # API Documentation (Swagger)
 flasgger==0.9.7.1
 
-# Validation
-pydantic==2.5.0
+# Validation - VERSIÓN ACTUALIZADA
+pydantic==2.9.2
 
 # Environment Variables
 python-dotenv==1.0.0
 
-# Excel Support (legacy - puede ser removido si no se usa)
+# Excel Support
 openpyxl==3.1.2
 xlrd==2.0.1
 
-# Timezone support (Python 3.9+ tiene zoneinfo built-in)
-# tzdata es necesario en Windows
+# Timezone support
 tzdata==2023.3
