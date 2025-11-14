@@ -31,10 +31,10 @@ def create_app(config_class=Config):
 # Configurar CORS (más permisivo para solucionar el error)
     CORS(app, resources={
         r"/sum_payments": {
-            "origins": config_class.ALLOWED_ORIGINS,
+            "origins": "*",
             "methods": ["POST", "OPTIONS", "GET"],
             "allow_headers": ["Content-Type", "Authorization", "Accept"],
-            "supports_credentials": True,
+            "supports_credentials": False,
             "max_age": 3600
         },
         r"/health": {
