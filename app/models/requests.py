@@ -3,7 +3,7 @@ Modelos Pydantic para requests
 """
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from datetime import date as date_type
-from typing import Dict
+from typing import Dict, List
 
 
 class CashClosingRequest(BaseModel):
@@ -29,7 +29,12 @@ class CashClosingRequest(BaseModel):
     excedente: float = Field(
         default=0,
         ge=0,
-        description="Dinero excedente que no pertenece a las ventas del día"
+        description="Dinero excedente que no pertenece a las ventas del día (deprecado, usar excedentes)"
+    )
+
+    excedentes: List[Dict] = Field(
+        default_factory=list,
+        description="Lista de excedentes categorizados [{tipo, subtipo, valor}]"
     )
 
     gastos_operativos: float = Field(
@@ -38,10 +43,25 @@ class CashClosingRequest(BaseModel):
         description="Gastos operativos del día"
     )
 
+    gastos_operativos_nota: str = Field(
+        default="",
+        description="Nota descriptiva de los gastos operativos"
+    )
+
     prestamos: float = Field(
         default=0,
         ge=0,
         description="Préstamos realizados"
+    )
+
+    prestamos_nota: str = Field(
+        default="",
+        description="Nota descriptiva de los préstamos"
+    )
+
+    metodos_pago: Dict = Field(
+        default_factory=dict,
+        description="Métodos de pago registrados manualmente"
     )
 
     @field_validator('coins', 'bills')
