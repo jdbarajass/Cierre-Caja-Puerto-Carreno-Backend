@@ -39,9 +39,9 @@ class Config:
         for origin in os.getenv(
             'ALLOWED_ORIGINS',
             'https://jdbarajass.pythonanywhere.com,'
-            'https://cierre-caja-api.onrender.com,'
             'http://localhost:5173,'
-            'http://localhost:5174'
+            'http://localhost:5174,'
+            'http://10.28.168.57:5000'
         ).split(',')
         if origin.strip()  # Eliminar elementos vacíos
     ]
