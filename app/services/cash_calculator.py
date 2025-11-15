@@ -85,6 +85,9 @@ class CashCalculator:
         # Combinar todas las denominaciones
         todas_denoms = {**conteo_monedas, **conteo_billetes}
 
+        # Calcular total general PRIMERO para validación
+        total_general_disponible = sum(denom * cant for denom, cant in todas_denoms.items())
+
         # Resolver knapsack
         conteo_base, conteo_consignar, restante_base, exacto = construir_base_exacta(
             todas_denoms,
@@ -112,6 +115,27 @@ class CashCalculator:
             d * c for d, c in consignar_billetes.items()
         )
 
+        # NUEVA VALIDACIÓN: Determinar el estado de la base
+        if total_general_disponible == self.base_objetivo:
+            # Caso 1: Total exacto de 450,000
+            base_status = "exacta"
+            diferencia_base = 0
+            mensaje_base = f"La base es exacta: {format_cop(self.base_objetivo)}"
+
+        elif total_general_disponible < self.base_objetivo:
+            # Caso 2: Falta dinero para completar la base
+            base_status = "faltante"
+            diferencia_base = -(self.base_objetivo - total_general_disponible)
+            faltante = self.base_objetivo - total_general_disponible
+            mensaje_base = f"Falta {format_cop(faltante)} para completar la base de {format_cop(self.base_objetivo)}"
+
+        else:
+            # Caso 3: Sobra dinero por encima de la base
+            base_status = "sobrante"
+            diferencia_base = total_general_disponible - self.base_objetivo
+            sobrante = total_general_disponible - self.base_objetivo
+            mensaje_base = f"Sobra {format_cop(sobrante)} por encima de la base de {format_cop(self.base_objetivo)}"
+
         resultado = {
             'base_monedas': base_monedas,
             'base_billetes': base_billetes,
@@ -121,15 +145,23 @@ class CashCalculator:
             'total_base_formatted': format_cop(total_base),
             'exact_base_obtained': bool(exacto),
             'restante_para_base': int(restante_base),
+            'base_status': base_status,
+            'diferencia_base': int(diferencia_base),
+            'diferencia_base_formatted': format_cop(abs(diferencia_base)),
+            'mensaje_base': mensaje_base,
             'consignar_monedas': consignar_monedas,
             'consignar_billetes': consignar_billetes,
             'total_consignar_sin_ajustes': int(total_consignar_sin_ajustes),
             'total_consignar_sin_ajustes_formatted': format_cop(total_consignar_sin_ajustes)
         }
 
+        # Logging mejorado
+        logger.info(
+            f"Validación de base: {mensaje_base}"
+        )
         logger.info(
             f"Base calculada: {format_cop(total_base)} "
-            f"({'exacta' if exacto else f'inexacta, falta {format_cop(restante_base)}'})"
+            f"({'exacta' if exacto else f'aproximada, restante knapsack: {format_cop(restante_base)}'})"
         )
 
         return resultado
@@ -285,3 +317,270 @@ class CashCalculator:
         logger.info("=" * 60)
 
         return resultado
+
+
+def procesar_excedentes(excedentes_list):
+    """
+    Recibe una lista de excedentes y retorna los totales por tipo.
+
+    Args:
+        excedentes_list: [
+            { "tipo": "efectivo", "subtipo": null, "valor": 10000 },
+            { "tipo": "qr_transferencias", "subtipo": "nequi", "valor": 5000 }
+        ]
+
+    Returns:
+        {
+            "total_excedente": 15000,
+            "excedente_efectivo": 10000,
+            "excedente_datafono": 0,
+            "excedente_nequi": 5000,
+            "excedente_daviplata": 0,
+            "excedente_qr": 0,
+            "excedentes_detalle": [
+                { "tipo": "Efectivo", "valor": 10000 },
+                { "tipo": "Transferencia", "subtipo": "Nequi", "valor": 5000 }
+            ]
+        }
+    """
+    totales = {
+        "total_excedente": 0,
+        "excedente_efectivo": 0,
+        "excedente_datafono": 0,
+        "excedente_nequi": 0,
+        "excedente_daviplata": 0,
+        "excedente_qr": 0,
+        "excedentes_detalle": []
+    }
+
+    for exc in excedentes_list:
+        valor = int(exc.get("valor", 0))
+        if valor > 0:
+            totales["total_excedente"] += valor
+
+            if exc["tipo"] == "efectivo":
+                totales["excedente_efectivo"] += valor
+                totales["excedentes_detalle"].append({
+                    "tipo": "Efectivo",
+                    "valor": valor
+                })
+            elif exc["tipo"] == "datafono":
+                totales["excedente_datafono"] += valor
+                totales["excedentes_detalle"].append({
+                    "tipo": "Datafono",
+                    "valor": valor
+                })
+            elif exc["tipo"] == "qr_transferencias":
+                subtipo = exc.get("subtipo", "")
+                if subtipo == "nequi":
+                    totales["excedente_nequi"] += valor
+                    totales["excedentes_detalle"].append({
+                        "tipo": "Transferencia",
+                        "subtipo": "Nequi",
+                        "valor": valor
+                    })
+                elif subtipo == "daviplata":
+                    totales["excedente_daviplata"] += valor
+                    totales["excedentes_detalle"].append({
+                        "tipo": "Transferencia",
+                        "subtipo": "Daviplata",
+                        "valor": valor
+                    })
+                elif subtipo == "qr":
+                    totales["excedente_qr"] += valor
+                    totales["excedentes_detalle"].append({
+                        "tipo": "Transferencia",
+                        "subtipo": "QR",
+                        "valor": valor
+                    })
+
+    logger.info(
+        f"Excedentes procesados: total={format_cop(totales['total_excedente'])}, "
+        f"efectivo={format_cop(totales['excedente_efectivo'])}, "
+        f"datafono={format_cop(totales['excedente_datafono'])}, "
+        f"nequi={format_cop(totales['excedente_nequi'])}, "
+        f"daviplata={format_cop(totales['excedente_daviplata'])}, "
+        f"qr={format_cop(totales['excedente_qr'])}"
+    )
+
+    return totales
+
+
+def calcular_totales_metodos_pago(metodos_pago):
+    """
+    Calcula los totales de transferencias y datafono.
+
+    Args:
+        metodos_pago: {
+            "addi_datafono": 0,
+            "nequi_luz_helena": 0,
+            "daviplata_jose": 0,
+            "qr_julieth": 0,
+            "tarjeta_debito": 464000,
+            "tarjeta_credito": 0
+        }
+
+    Returns:
+        {
+            **metodos_pago,  # Incluir todos los valores originales
+            "total_transferencias_registradas": 0,
+            "total_datafono_registrado": 464000
+        }
+    """
+    total_transferencias = (
+        int(metodos_pago.get("nequi_luz_helena", 0)) +
+        int(metodos_pago.get("daviplata_jose", 0)) +
+        int(metodos_pago.get("qr_julieth", 0))
+    )
+
+    total_datafono = (
+        int(metodos_pago.get("addi_datafono", 0)) +
+        int(metodos_pago.get("tarjeta_debito", 0)) +
+        int(metodos_pago.get("tarjeta_credito", 0))
+    )
+
+    logger.info(
+        f"Totales métodos de pago calculados: "
+        f"transferencias={format_cop(total_transferencias)}, "
+        f"datafono={format_cop(total_datafono)}"
+    )
+
+    return {
+        **metodos_pago,
+        "total_transferencias_registradas": total_transferencias,
+        "total_datafono_registrado": total_datafono
+    }
+
+
+def validar_cierre(datos_alegra, metodos_pago_calculados):
+    """
+    Valida si el cierre es exitoso comparando Alegra con lo registrado.
+
+    Args:
+        datos_alegra: Los datos obtenidos de Alegra
+        metodos_pago_calculados: Los totales calculados de métodos de pago
+
+    Returns:
+        {
+            "cierre_validado": True/False,
+            "validation_status": "success" | "warning" | "error",
+            "diferencias": {
+                "transferencias": {
+                    "alegra": 852500,
+                    "registrado": 0,
+                    "diferencia": 852500,
+                    "diferencia_formatted": "$852.500",
+                    "es_significativa": True  # Si es > 100
+                },
+                "datafono": {
+                    "alegra": 464000,
+                    "registrado": 464000,
+                    "diferencia": 0,
+                    "diferencia_formatted": "$0",
+                    "es_significativa": False
+                }
+            },
+            "mensaje_validacion": "Diferencias significativas detectadas en transferencias"
+        }
+    """
+    transferencia_alegra = datos_alegra.get("results", {}).get("transfer", {}).get("total", 0)
+
+    datafono_alegra = (
+        datos_alegra.get("results", {}).get("debit-card", {}).get("total", 0) +
+        datos_alegra.get("results", {}).get("credit-card", {}).get("total", 0)
+    )
+
+    transferencias_registradas = metodos_pago_calculados.get("total_transferencias_registradas", 0)
+    datafono_registrado = metodos_pago_calculados.get("total_datafono_registrado", 0)
+
+    diff_transferencia = abs(transferencia_alegra - transferencias_registradas)
+    diff_datafono = abs(datafono_alegra - datafono_registrado)
+
+    # Validación: se considera exitoso si ambas diferencias son < 100
+    cierre_validado = diff_transferencia < 100 and diff_datafono < 100
+
+    validation_status = "success" if cierre_validado else "warning"
+
+    diferencias = {
+        "transferencias": {
+            "alegra": transferencia_alegra,
+            "registrado": transferencias_registradas,
+            "diferencia": diff_transferencia,
+            "diferencia_formatted": format_cop(diff_transferencia),
+            "es_significativa": diff_transferencia >= 100
+        },
+        "datafono": {
+            "alegra": datafono_alegra,
+            "registrado": datafono_registrado,
+            "diferencia": diff_datafono,
+            "diferencia_formatted": format_cop(diff_datafono),
+            "es_significativa": diff_datafono >= 100
+        }
+    }
+
+    # Mensaje descriptivo
+    mensajes = []
+    if diferencias["transferencias"]["es_significativa"]:
+        mensajes.append(f"Diferencia en transferencias: {diferencias['transferencias']['diferencia_formatted']}")
+    if diferencias["datafono"]["es_significativa"]:
+        mensajes.append(f"Diferencia en datafono: {diferencias['datafono']['diferencia_formatted']}")
+
+    mensaje_validacion = " | ".join(mensajes) if mensajes else "Cierre validado correctamente"
+
+    logger.info(
+        f"Validación de cierre: {validation_status} - {mensaje_validacion}"
+    )
+
+    return {
+        "cierre_validado": cierre_validado,
+        "validation_status": validation_status,
+        "diferencias": diferencias,
+        "mensaje_validacion": mensaje_validacion
+    }
+
+
+def preparar_respuesta_completa(
+    datos_alegra,
+    cash_result,
+    excedentes_procesados,
+    metodos_pago_calculados,
+    validacion_cierre,
+    payload_original,
+    datetime_info,
+    tz_used,
+    username
+):
+    """
+    Prepara la respuesta final incluyendo todos los datos necesarios.
+
+    Args:
+        datos_alegra: Datos de Alegra
+        cash_result: Resultado del cálculo de caja
+        excedentes_procesados: Excedentes procesados con totales
+        metodos_pago_calculados: Métodos de pago con totales calculados
+        validacion_cierre: Resultado de la validación
+        payload_original: Payload original del request
+        datetime_info: Información de fecha/hora
+        tz_used: Zona horaria utilizada
+        username: Usuario de Alegra
+
+    Returns:
+        Dict con la respuesta completa
+    """
+    respuesta = {
+        "request_datetime": datetime_info['iso'],
+        "request_date": datetime_info['date'],
+        "request_time": datetime_info['time'],
+        "request_tz": tz_used,
+        "date_requested": payload_original.get("date"),
+        "username_used": username,
+        "alegra": datos_alegra,
+        "cash_count": cash_result,
+        "excedentes_detalle": excedentes_procesados["excedentes_detalle"],
+        "gastos_operativos_nota": payload_original.get("gastos_operativos_nota", ""),
+        "prestamos_nota": payload_original.get("prestamos_nota", ""),
+        "metodos_pago_registrados": metodos_pago_calculados,
+        "validation": validacion_cierre
+    }
+
+    return respuesta
