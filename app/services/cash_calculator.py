@@ -617,11 +617,16 @@ def preparar_respuesta_completa(
     Returns:
         Dict con la respuesta completa
     """
+    from app.utils.timezone import get_colombia_timestamp
+
     respuesta = {
+        "success": True,
         "request_datetime": datetime_info['iso'],
         "request_date": datetime_info['date'],
         "request_time": datetime_info['time'],
         "request_tz": tz_used,
+        "server_timestamp": get_colombia_timestamp(),
+        "timezone": "America/Bogota",
         "date_requested": payload_original.get("date"),
         "username_used": username,
         "alegra": datos_alegra,
