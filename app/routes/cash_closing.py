@@ -20,7 +20,15 @@ from app.exceptions import (
     AlegraConnectionError,
     ConfigurationError
 )
-from app.utils.timezone import get_current_datetime, format_datetime_info
+from app.utils.timezone import (
+    get_current_datetime,
+    format_datetime_info,
+    get_colombia_now,
+    parse_colombia_date,
+    validate_date_is_colombia,
+    format_colombia_datetime,
+    get_colombia_timestamp
+)
 
 bp = Blueprint('cash_closing', __name__)
 
@@ -133,6 +141,56 @@ def sum_payments():
 
     current_app.logger.info(f"Fecha solicitada: {cash_request.date}")
 
+    # ========================================
+    # VALIDAR ZONA HORARIA
+    # ========================================
+    timezone = cash_request.timezone
+    utc_offset = cash_request.utc_offset
+
+    # Validar que la zona horaria sea de Colombia
+    if not validate_date_is_colombia(str(cash_request.date), timezone):
+        current_app.logger.error(f"Zona horaria inválida: {timezone}")
+        raise ValidationError(
+            f"Zona horaria inválida. Debe ser America/Bogota, se recibió: {timezone}"
+        )
+
+    # ========================================
+    # PARSEAR Y VALIDAR FECHA
+    # ========================================
+    date_string = str(cash_request.date)
+    request_timestamp = cash_request.request_timestamp
+
+    # Convertir la fecha a datetime de Colombia
+    try:
+        cierre_date = parse_colombia_date(date_string)
+    except Exception as e:
+        current_app.logger.error(f"Error al parsear fecha: {e}")
+        raise ValidationError(f"Formato de fecha inválido: {str(e)}")
+
+    # ========================================
+    # VALIDACIONES DE NEGOCIO
+    # ========================================
+    colombia_now = get_colombia_now()
+
+    # Validar que la fecha no sea futura (ya validado en Pydantic, pero doble check)
+    if cierre_date.date() > colombia_now.date():
+        raise ValidationError(
+            f"No se puede realizar un cierre con fecha futura. "
+            f"Fecha cierre: {date_string}, Fecha actual Colombia: {colombia_now.strftime('%Y-%m-%d')}"
+        )
+
+    # Validar que no esté más de 7 días en el pasado
+    dias_diferencia = (colombia_now.date() - cierre_date.date()).days
+    if dias_diferencia > 7:
+        current_app.logger.warning(f"Cierre con fecha antigua: {dias_diferencia} días")
+        raise ValidationError(
+            f"La fecha del cierre es demasiado antigua ({dias_diferencia} días). "
+            f"Fecha cierre: {date_string}, Fecha actual Colombia: {colombia_now.strftime('%Y-%m-%d')}"
+        )
+
+    current_app.logger.info(f"✓ Fecha validada: {date_string} (Colombia timezone)")
+    current_app.logger.info(f"✓ Días desde el cierre: {dias_diferencia}")
+
     # Normalizar conteos
     conteo_monedas = cash_request.get_normalized_coins(Config.DENOMINACIONES_MONEDAS)
     conteo_billetes = cash_request.get_normalized_bills(Config.DENOMINACIONES_BILLETES)
@@ -190,10 +248,13 @@ def sum_payments():
 
         # Si falla Alegra, devolver respuesta parcial con código 502
         partial_response = {
+            "success": False,
             "request_datetime": datetime_info['iso'],
             "request_date": datetime_info['date'],
             "request_time": datetime_info['time'],
             "request_tz": tz_used,
+            "server_timestamp": get_colombia_timestamp(),
+            "timezone": "America/Bogota",
             "date_requested": str(cash_request.date),
             "username_used": Config.ALEGRA_USER,
             "cash_count": cash_result,
@@ -211,10 +272,13 @@ def sum_payments():
 
         # Respuesta parcial para errores inesperados
         partial_response = {
+            "success": False,
             "request_datetime": datetime_info['iso'],
             "request_date": datetime_info['date'],
             "request_time": datetime_info['time'],
             "request_tz": tz_used,
+            "server_timestamp": get_colombia_timestamp(),
+            "timezone": "America/Bogota",
             "date_requested": str(cash_request.date),
             "username_used": Config.ALEGRA_USER,
             "cash_count": cash_result,
