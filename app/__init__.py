@@ -2,7 +2,7 @@
 Sistema de Cierre de Caja - KOAJ Puerto Carreño
 Flask Application Factory
 """
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -27,30 +27,51 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Configurar CORS - SOLUCIÓN CORREGIDA
+    # Configurar CORS - SOLUCIÓN MEJORADA Y ROBUSTA
     # Leer los orígenes permitidos de la configuración
     allowed_origins = config_class.ALLOWED_ORIGINS
-    
-    # Configurar CORS para todas las rutas con los orígenes permitidos
+
+    # Configurar CORS para todas las rutas de la API
     CORS(app, resources={
-        r"/sum_payments": {
+        r"/*": {
             "origins": allowed_origins,
-            "methods": ["POST", "OPTIONS", "GET"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept"],
-            "supports_credentials": False,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            "allow_headers": [
+                "Content-Type",
+                "Authorization",
+                "Accept",
+                "X-Requested-With",
+                "X-HTTP-Method-Override",
+                "Accept-Language",
+                "Cache-Control"
+            ],
+            "expose_headers": [
+                "Content-Type",
+                "X-Total-Count",
+                "X-Page",
+                "X-Per-Page"
+            ],
+            "supports_credentials": True,  # Cambiado a True para cookies/auth
             "max_age": 3600
-        },
-        r"/health": {
-            "origins": "*",
-            "methods": ["GET"],
-            "allow_headers": ["Content-Type"]
-        },
-        r"/api/docs/*": {
-            "origins": "*",
-            "methods": ["GET"],
-            "allow_headers": ["Content-Type"]
         }
     })
+
+    # Agregar headers CORS manualmente en cada respuesta como backup
+    @app.after_request
+    def after_request(response):
+        """Agregar headers CORS a todas las respuestas como medida de seguridad"""
+        origin = request.headers.get('Origin')
+
+        # Si el origen está en la lista permitida, agregarlo
+        if origin in allowed_origins:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With, X-HTTP-Method-Override, Accept-Language, Cache-Control'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count, X-Page, X-Per-Page'
+            response.headers['Access-Control-Max-Age'] = '3600'
+
+        return response
 
     # Configurar Rate Limiting
     limiter = Limiter(
@@ -87,7 +108,7 @@ def create_app(config_class=Config):
     from app.routes.cash_closing import bp as cash_bp
     from app.routes.health import bp as health_bp
 
-    app.register_blueprint(cash_bp)
+    app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
 
     # Configurar manejadores de errores
