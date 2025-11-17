@@ -41,6 +41,7 @@ class Config:
             'https://jdbarajass.pythonanywhere.com,'
             'http://localhost:5173,'
             'http://localhost:5174,'
+            'http://localhost:5000,'
             'http://10.28.168.57:5000'
         ).split(',')
         if origin.strip()  # Eliminar elementos vacíos
