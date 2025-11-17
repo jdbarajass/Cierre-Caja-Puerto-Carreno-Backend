@@ -179,14 +179,8 @@ def sum_payments():
             f"Fecha cierre: {date_string}, Fecha actual Colombia: {colombia_now.strftime('%Y-%m-%d')}"
         )
 
-    # Validar que no esté más de 7 días en el pasado
+    # Calcular días de diferencia para logging
     dias_diferencia = (colombia_now.date() - cierre_date.date()).days
-    if dias_diferencia > 7:
-        current_app.logger.warning(f"Cierre con fecha antigua: {dias_diferencia} días")
-        raise ValidationError(
-            f"La fecha del cierre es demasiado antigua ({dias_diferencia} días). "
-            f"Fecha cierre: {date_string}, Fecha actual Colombia: {colombia_now.strftime('%Y-%m-%d')}"
-        )
 
     current_app.logger.info(f"✓ Fecha validada: {date_string} (Colombia timezone)")
     current_app.logger.info(f"✓ Días desde el cierre: {dias_diferencia}")
@@ -329,3 +323,127 @@ def sum_payments():
     current_app.logger.info("=" * 80)
 
     return jsonify(response), 200
+
+
+@bp.route('/monthly_sales', methods=['GET', 'OPTIONS'])
+def get_monthly_sales():
+    """
+    Obtiene las ventas totales del mes actual desde Alegra
+    ---
+    tags:
+      - Ventas
+    parameters:
+      - in: query
+        name: start_date
+        type: string
+        required: false
+        description: Fecha de inicio (YYYY-MM-DD). Si no se proporciona, usa el día 1 del mes actual
+      - in: query
+        name: end_date
+        type: string
+        required: false
+        description: Fecha de fin (YYYY-MM-DD). Si no se proporciona, usa la fecha actual
+    responses:
+      200:
+        description: Resumen de ventas del mes
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            date_range:
+              type: object
+              properties:
+                start:
+                  type: string
+                end:
+                  type: string
+            total_vendido:
+              type: object
+              properties:
+                label:
+                  type: string
+                total:
+                  type: integer
+                formatted:
+                  type: string
+            cantidad_facturas:
+              type: integer
+            payment_methods:
+              type: object
+      500:
+        description: Error al consultar Alegra
+    """
+    # Manejar preflight OPTIONS request
+    if request.method == "OPTIONS":
+        return "", 204
+
+    try:
+        # Obtener fechas desde query params o usar valores por defecto (mes actual)
+        colombia_now = get_colombia_now()
+
+        # Si no se proporciona start_date, usar el día 1 del mes actual
+        start_date = request.args.get('start_date')
+        if not start_date:
+            start_date = colombia_now.replace(day=1).strftime('%Y-%m-%d')
+
+        # Si no se proporciona end_date, usar la fecha actual
+        end_date = request.args.get('end_date')
+        if not end_date:
+            end_date = colombia_now.strftime('%Y-%m-%d')
+
+        current_app.logger.info(f"Consultando ventas mensuales desde {start_date} hasta {end_date}")
+
+        # Crear cliente de Alegra
+        alegra_client = AlegraClient(
+            username=Config.ALEGRA_USER,
+            password=Config.ALEGRA_PASS,
+            base_url=Config.ALEGRA_API_BASE_URL,
+            timeout=Config.ALEGRA_TIMEOUT
+        )
+
+        # Obtener resumen de ventas mensuales
+        sales_summary = alegra_client.get_monthly_sales_summary(start_date, end_date)
+
+        # Agregar campos de éxito y timestamp
+        response = {
+            "success": True,
+            "server_timestamp": get_colombia_timestamp(),
+            "timezone": "America/Bogota",
+            **sales_summary
+        }
+
+        current_app.logger.info("=" * 80)
+        current_app.logger.info("RESUMEN DE VENTAS MENSUALES")
+        current_app.logger.info("-" * 80)
+        current_app.logger.info(f"Periodo: {start_date} hasta {end_date}")
+        current_app.logger.info(f"Total vendido: {sales_summary['total_vendido']['formatted']}")
+        current_app.logger.info(f"Cantidad de facturas: {sales_summary['cantidad_facturas']}")
+        current_app.logger.info("Detalle por método de pago:")
+        for method, data in sales_summary['payment_methods'].items():
+            current_app.logger.info(f"  {data['label']}: {data['formatted']}")
+        current_app.logger.info("=" * 80)
+
+        return jsonify(response), 200
+
+    except AlegraConnectionError as e:
+        current_app.logger.error(f"Error de conexión con Alegra: {str(e)}")
+        error_response = {
+            "success": False,
+            "error": "Error al conectar con Alegra",
+            "details": str(e),
+            "server_timestamp": get_colombia_timestamp(),
+            "timezone": "America/Bogota"
+        }
+        return jsonify(error_response), 502
+
+    except Exception as e:
+        current_app.logger.error(f"Error inesperado: {str(e)}", exc_info=True)
+        error_response = {
+            "success": False,
+            "error": "Error inesperado al procesar la solicitud",
+            "details": str(e),
+            "server_timestamp": get_colombia_timestamp(),
+            "timezone": "America/Bogota"
+        }
+        return jsonify(error_response), 500
