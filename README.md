@@ -187,7 +187,7 @@ http://localhost:5000/api/docs
 
 ### Endpoints Principales
 
-#### 1. POST /sum_payments
+#### 1. POST /api/sum_payments
 
 Procesa un cierre de caja completo.
 
@@ -245,7 +245,56 @@ Procesa un cierre de caja completo.
 }
 ```
 
-#### 2. GET /health
+#### 2. GET /api/monthly_sales
+
+Consulta el resumen de ventas del mes desde Alegra.
+
+**Query Parameters (opcionales):**
+
+- `start_date` (string): Fecha de inicio en formato YYYY-MM-DD. Si no se proporciona, usa el día 1 del mes actual
+- `end_date` (string): Fecha de fin en formato YYYY-MM-DD. Si no se proporciona, usa la fecha actual
+
+**Ejemplos:**
+
+```
+GET /api/monthly_sales
+GET /api/monthly_sales?start_date=2025-11-01&end_date=2025-11-16
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "server_timestamp": "2025-11-16 15:30:45",
+  "timezone": "America/Bogota",
+  "date_range": {
+    "start": "2025-11-01",
+    "end": "2025-11-16"
+  },
+  "total_vendido": {
+    "label": "TOTAL VENDIDO EN EL PERIODO",
+    "total": 15750000,
+    "formatted": "$15.750.000 COP"
+  },
+  "cantidad_facturas": 145,
+  "payment_methods": {
+    "credit-card": {
+      "label": "Tarjeta de Crédito",
+      "total": 8500000,
+      "formatted": "$8.500.000 COP"
+    },
+    "debit-card": {
+      "label": "Tarjeta Débito",
+      "total": 4250000,
+      "formatted": "$4.250.000 COP"
+    }
+  },
+  "username_used": "tu-usuario@alegra.com"
+}
+```
+
+#### 3. GET /health
 
 Health check para monitoreo.
 
@@ -293,8 +342,18 @@ pytest tests/test_cash_calculator.py
 - `ALEGRA_USER`: Usuario/email de Alegra
 - `ALEGRA_PASS`: Token de API de Alegra
 - `SECRET_KEY`: Clave secreta de Flask
+- `ALEGRA_API_BASE_URL`: URL base de la API de Alegra
+- `BASE_OBJETIVO`: Monto base que debe quedar en caja (por defecto: 450000)
+- `UMBRAL_MENUDO`: Valor máximo para considerar un billete/moneda como menudo (por defecto: 10000)
+- `TIMEZONE`: Zona horaria (por defecto: America/Bogota)
 
 Ver `.env.example` para todas las variables disponibles.
+
+### 📖 Documentación Adicional
+
+- **[CONFIGURACION_VARIABLES_RENDER.md](CONFIGURACION_VARIABLES_RENDER.md)** - Guía completa para configurar variables de entorno en Render con explicaciones detalladas de cada variable
+- **[CAMBIOS_FRONTEND.md](CAMBIOS_FRONTEND.md)** - Documentación de cambios en la API que requieren actualización del frontend
+- **[generate_secret_key.py](generate_secret_key.py)** - Script para generar claves secretas seguras para Flask
 
 ---
 
