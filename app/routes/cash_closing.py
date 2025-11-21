@@ -29,11 +29,13 @@ from app.utils.timezone import (
     format_colombia_datetime,
     get_colombia_timestamp
 )
+from app.middlewares.auth import token_required, get_current_user
 
 bp = Blueprint('cash_closing', __name__)
 
 
 @bp.route('/sum_payments', methods=['POST', 'OPTIONS'])
+@token_required
 def sum_payments():
     """
     Procesa un cierre de caja con integración a Alegra
@@ -326,6 +328,7 @@ def sum_payments():
 
 
 @bp.route('/monthly_sales', methods=['GET', 'OPTIONS'])
+@token_required
 def get_monthly_sales():
     """
     Obtiene las ventas totales del mes actual desde Alegra
