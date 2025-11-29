@@ -369,10 +369,13 @@ class ProductReportPDFGenerator:
 
         return elementos
 
-    def _create_size_analysis_table(self, size_data: List[Dict], title: str, header_color) -> List:
+    def _create_size_analysis_table(self, size_data_dict: Dict, title: str, header_color) -> List:
         """Crea tabla de análisis global por tallas"""
         elementos = []
         elementos.append(Paragraph(title, self.h2_style))
+
+        # Extraer la lista de tallas del diccionario
+        size_data = size_data_dict.get('sizes', [])
 
         if not size_data:
             elementos.append(Paragraph(
@@ -388,16 +391,16 @@ class ProductReportPDFGenerator:
         # Datos de tallas
         for size in size_data:
             data.append([
-                size['talla'],
-                size['cantidad_formatted'],
-                size['ingresos_formatted'],
-                size['porcentaje_participacion_formatted']
+                size['size'],
+                size['units_formatted'],
+                size['revenue_formatted'],
+                size['percentage_formatted']
             ])
 
         # Totales
-        total_cantidad = sum(s['cantidad'] for s in size_data)
-        total_ingresos = sum(s['ingresos'] for s in size_data)
-        total_pct = sum(s['porcentaje_participacion'] for s in size_data)
+        total_cantidad = sum(s['units'] for s in size_data)
+        total_ingresos = sum(s['revenue'] for s in size_data)
+        total_pct = sum(s['percentage'] for s in size_data)
 
         data.append([
             'TOTAL',
@@ -423,10 +426,13 @@ class ProductReportPDFGenerator:
 
         return elementos
 
-    def _create_category_size_analysis_table(self, category_data: List[Dict], title: str, header_color) -> List:
+    def _create_category_size_analysis_table(self, category_data_dict: Dict, title: str, header_color) -> List:
         """Crea tabla de análisis por categoría y talla"""
         elementos = []
         elementos.append(Paragraph(title, self.h2_style))
+
+        # Extraer la lista de categorías del diccionario
+        category_data = category_data_dict.get('categories', [])
 
         if not category_data:
             elementos.append(Paragraph(
@@ -439,7 +445,7 @@ class ProductReportPDFGenerator:
         for category in category_data:
             # Título de categoría
             elementos.append(Paragraph(
-                f'<b>{category["categoria"]}</b>',
+                f'<b>{category["category"]}</b>',
                 self.h2_style
             ))
 
@@ -447,18 +453,18 @@ class ProductReportPDFGenerator:
             data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
 
             # Datos de tallas para esta categoría
-            for size in category['tallas']:
+            for size in category['sizes']:
                 data.append([
-                    size['talla'],
-                    size['cantidad_formatted'],
-                    size['ingresos_formatted'],
-                    size['porcentaje_participacion_formatted']
+                    size['size'],
+                    size['units_formatted'],
+                    size['revenue_formatted'],
+                    size['percentage_in_category_formatted']
                 ])
 
             # Totales de la categoría
-            total_cantidad = sum(s['cantidad'] for s in category['tallas'])
-            total_ingresos = sum(s['ingresos'] for s in category['tallas'])
-            total_pct = sum(s['porcentaje_participacion'] for s in category['tallas'])
+            total_cantidad = sum(s['units'] for s in category['sizes'])
+            total_ingresos = sum(s['revenue'] for s in category['sizes'])
+            total_pct = sum(s['percentage_in_category'] for s in category['sizes'])
 
             data.append([
                 'TOTAL',
@@ -485,10 +491,13 @@ class ProductReportPDFGenerator:
         elementos.append(Spacer(1, 10))
         return elementos
 
-    def _create_department_size_analysis_table(self, department_data: List[Dict], title: str, header_color) -> List:
+    def _create_department_size_analysis_table(self, department_data_dict: Dict, title: str, header_color) -> List:
         """Crea tabla de análisis por departamento y talla"""
         elementos = []
         elementos.append(Paragraph(title, self.h2_style))
+
+        # Extraer la lista de departamentos del diccionario
+        department_data = department_data_dict.get('departments', [])
 
         if not department_data:
             elementos.append(Paragraph(
@@ -501,7 +510,7 @@ class ProductReportPDFGenerator:
         for department in department_data:
             # Título de departamento
             elementos.append(Paragraph(
-                f'<b>{department["departamento"]}</b>',
+                f'<b>{department["department"]}</b>',
                 self.h2_style
             ))
 
@@ -509,18 +518,18 @@ class ProductReportPDFGenerator:
             data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
 
             # Datos de tallas para este departamento
-            for size in department['tallas']:
+            for size in department['sizes']:
                 data.append([
-                    size['talla'],
-                    size['cantidad_formatted'],
-                    size['ingresos_formatted'],
-                    size['porcentaje_participacion_formatted']
+                    size['size'],
+                    size['units_formatted'],
+                    size['revenue_formatted'],
+                    size['percentage_in_department_formatted']
                 ])
 
             # Totales del departamento
-            total_cantidad = sum(s['cantidad'] for s in department['tallas'])
-            total_ingresos = sum(s['ingresos'] for s in department['tallas'])
-            total_pct = sum(s['porcentaje_participacion'] for s in department['tallas'])
+            total_cantidad = sum(s['units'] for s in department['sizes'])
+            total_ingresos = sum(s['revenue'] for s in department['sizes'])
+            total_pct = sum(s['percentage_in_department'] for s in department['sizes'])
 
             data.append([
                 'TOTAL',
