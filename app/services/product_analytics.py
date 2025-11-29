@@ -6,6 +6,7 @@ import unicodedata
 from typing import Dict, List, Any, Tuple
 from datetime import datetime
 import logging
+from app.services.sku_parser import SKUParser
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +30,26 @@ class ProductAnalytics:
         for invoice in self.invoices:
             items = invoice.get('items', [])
             for item in items:
+                nombre = item.get('name', '')
+
+                # Parsear SKU y talla del nombre del producto
+                parsed_data = SKUParser.extract_size_from_product_name(nombre)
+
                 # Extraer datos del item
                 product = {
-                    'nombre': item.get('name', ''),
+                    'nombre': nombre,
                     'cantidad': int(item.get('quantity', 0)),
                     'precio_unitario': float(item.get('price', 0)),
                     'total': float(item.get('total', 0)),
                     'factura_id': invoice.get('id', ''),
                     'fecha': invoice.get('date', ''),
-                    'numero_factura': invoice.get('numberTemplate', {}).get('fullNumber', '')
+                    'numero_factura': invoice.get('numberTemplate', {}).get('fullNumber', ''),
+                    # Datos parseados del SKU
+                    'talla': parsed_data.get('size', 'UNKNOWN'),
+                    'talla_codigo': parsed_data.get('size_code', ''),
+                    'genero': parsed_data.get('gender', 'UNKNOWN'),
+                    'sku': parsed_data.get('sku_code', ''),
+                    'producto_base': parsed_data.get('product_base', nombre)
                 }
                 self.products_data.append(product)
 
@@ -267,7 +279,7 @@ class ProductAnalytics:
         Genera reporte completo con todos los análisis
 
         Returns:
-            Dict con resumen, top 10, unificados y listado completo
+            Dict con resumen, top 10, unificados, listado completo y análisis por tallas
         """
         summary = self.get_summary()
         top_10 = self.get_top_products(limit=10, exclude_bolsa=True)
@@ -275,12 +287,20 @@ class ProductAnalytics:
         all_unified = self.get_all_products_unified(exclude_bolsa=True)
         all_products = self.get_all_products(exclude_bolsa=False)
 
+        # Agregar análisis por tallas
+        sales_by_size = self.get_sales_by_size()
+        sales_by_category_size = self.get_sales_by_category_and_size()
+        sales_by_department_size = self.get_sales_by_department_and_size()
+
         return {
             'resumen_ejecutivo': summary,
             'top_10_productos': top_10,
             'top_10_productos_unificados': top_10_unified,
             'todos_productos_unificados': all_unified,
             'listado_completo': all_products,
+            'ventas_por_talla': sales_by_size,
+            'ventas_por_categoria_talla': sales_by_category_size,
+            'ventas_por_departamento_talla': sales_by_department_size,
             'metadata': {
                 'fecha_generacion': datetime.now().isoformat(),
                 'numero_facturas_procesadas': len(self.invoices),
@@ -348,4 +368,323 @@ class ProductAnalytics:
         return {
             'categorias': result,
             'total_categorias': len(result)
+        }
+
+    def get_sales_by_size(self, exclude_bolsa: bool = True, exclude_unknown: bool = True) -> Dict[str, Any]:
+        """
+        Análisis global de ventas por talla
+
+        Args:
+            exclude_bolsa: Si True, excluye BOLSA PAPEL
+            exclude_unknown: Si True, excluye productos sin talla identificada
+
+        Returns:
+            {
+                'total_units': int,
+                'total_revenue': float,
+                'sizes': [
+                    {
+                        'size': str,
+                        'units': int,
+                        'percentage': float,
+                        'revenue': float,
+                        'revenue_formatted': str
+                    },
+                    ...
+                ]
+            }
+        """
+        # Agrupar por talla
+        sizes_data = {}
+        total_units = 0
+        total_revenue = 0
+
+        for p in self.products_data:
+            # Filtros
+            if exclude_bolsa and 'BOLSA PAPEL' in p['nombre'].upper():
+                continue
+
+            talla = p.get('talla', 'UNKNOWN')
+
+            if exclude_unknown and talla == 'UNKNOWN':
+                continue
+
+            if talla not in sizes_data:
+                sizes_data[talla] = {
+                    'size': talla,
+                    'units': 0,
+                    'revenue': 0
+                }
+
+            sizes_data[talla]['units'] += p['cantidad']
+            sizes_data[talla]['revenue'] += p['total']
+            total_units += p['cantidad']
+            total_revenue += p['total']
+
+        # Convertir a lista y ordenar por unidades
+        sizes_list = list(sizes_data.values())
+        sizes_list.sort(key=lambda x: x['units'], reverse=True)
+
+        # Calcular porcentajes y formatear
+        result = []
+        for size_data in sizes_list:
+            pct = (size_data['units'] / total_units * 100) if total_units > 0 else 0
+            result.append({
+                'size': size_data['size'],
+                'units': size_data['units'],
+                'units_formatted': self.format_number(size_data['units']),
+                'percentage': pct,
+                'percentage_formatted': self.format_percentage(pct),
+                'revenue': size_data['revenue'],
+                'revenue_formatted': self.format_pesos(size_data['revenue'])
+            })
+
+        return {
+            'total_units': total_units,
+            'total_units_formatted': self.format_number(total_units),
+            'total_revenue': total_revenue,
+            'total_revenue_formatted': self.format_pesos(total_revenue),
+            'sizes': result,
+            'total_sizes': len(result)
+        }
+
+    def get_sales_by_category_and_size(self, exclude_bolsa: bool = True, exclude_unknown: bool = True) -> Dict[str, Any]:
+        """
+        Análisis de ventas por categoría, desglosado por talla
+
+        Args:
+            exclude_bolsa: Si True, excluye BOLSA PAPEL
+            exclude_unknown: Si True, excluye productos sin talla identificada
+
+        Returns:
+            {
+                'categories': [
+                    {
+                        'category': str,
+                        'total_units': int,
+                        'percentage_of_total': float,
+                        'total_revenue': float,
+                        'sizes': [
+                            {
+                                'size': str,
+                                'units': int,
+                                'percentage_in_category': float,
+                                'revenue': float
+                            },
+                            ...
+                        ]
+                    },
+                    ...
+                ]
+            }
+        """
+        # Keywords de categorías
+        category_keywords = ['CAMISETA', 'JEAN', 'BLUSA', 'POLO', 'MEDIAS',
+                             'PANTALON', 'SHORT', 'VESTIDO', 'FALDA', 'SUDADERA',
+                             'JOGGER', 'BUZO', 'CHAQUETA', 'BODY']
+
+        # Estructura: {categoria: {talla: {units, revenue}}}
+        categories_data = {}
+        total_units = 0
+
+        for p in self.products_data:
+            # Filtros
+            if exclude_bolsa and 'BOLSA PAPEL' in p['nombre'].upper():
+                continue
+
+            talla = p.get('talla', 'UNKNOWN')
+            if exclude_unknown and talla == 'UNKNOWN':
+                continue
+
+            # Determinar categoría
+            nombre_upper = p['nombre'].upper()
+            category = 'OTROS'
+            for keyword in category_keywords:
+                if keyword in nombre_upper:
+                    category = keyword
+                    break
+
+            # Inicializar estructuras
+            if category not in categories_data:
+                categories_data[category] = {
+                    'category': category,
+                    'total_units': 0,
+                    'total_revenue': 0,
+                    'sizes': {}
+                }
+
+            if talla not in categories_data[category]['sizes']:
+                categories_data[category]['sizes'][talla] = {
+                    'size': talla,
+                    'units': 0,
+                    'revenue': 0
+                }
+
+            # Acumular datos
+            categories_data[category]['total_units'] += p['cantidad']
+            categories_data[category]['total_revenue'] += p['total']
+            categories_data[category]['sizes'][talla]['units'] += p['cantidad']
+            categories_data[category]['sizes'][talla]['revenue'] += p['total']
+            total_units += p['cantidad']
+
+        # Convertir a lista y ordenar
+        categories_list = list(categories_data.values())
+        categories_list.sort(key=lambda x: x['total_units'], reverse=True)
+
+        # Formatear resultado
+        result = []
+        for cat_data in categories_list:
+            # Calcular porcentaje de la categoría sobre el total
+            pct_total = (cat_data['total_units'] / total_units * 100) if total_units > 0 else 0
+
+            # Convertir sizes dict a lista y ordenar
+            sizes_list = list(cat_data['sizes'].values())
+            sizes_list.sort(key=lambda x: x['units'], reverse=True)
+
+            # Formatear tallas
+            sizes_formatted = []
+            for size_data in sizes_list:
+                pct_in_cat = (size_data['units'] / cat_data['total_units'] * 100) if cat_data['total_units'] > 0 else 0
+                sizes_formatted.append({
+                    'size': size_data['size'],
+                    'units': size_data['units'],
+                    'units_formatted': self.format_number(size_data['units']),
+                    'percentage_in_category': pct_in_cat,
+                    'percentage_in_category_formatted': self.format_percentage(pct_in_cat),
+                    'revenue': size_data['revenue'],
+                    'revenue_formatted': self.format_pesos(size_data['revenue'])
+                })
+
+            result.append({
+                'category': cat_data['category'],
+                'total_units': cat_data['total_units'],
+                'total_units_formatted': self.format_number(cat_data['total_units']),
+                'percentage_of_total': pct_total,
+                'percentage_of_total_formatted': self.format_percentage(pct_total),
+                'total_revenue': cat_data['total_revenue'],
+                'total_revenue_formatted': self.format_pesos(cat_data['total_revenue']),
+                'sizes': sizes_formatted,
+                'total_sizes_in_category': len(sizes_formatted)
+            })
+
+        return {
+            'categories': result,
+            'total_categories': len(result),
+            'total_units': total_units,
+            'total_units_formatted': self.format_number(total_units)
+        }
+
+    def get_sales_by_department_and_size(self, exclude_bolsa: bool = True, exclude_unknown: bool = True) -> Dict[str, Any]:
+        """
+        Análisis por departamento (género) y talla
+
+        Args:
+            exclude_bolsa: Si True, excluye BOLSA PAPEL
+            exclude_unknown: Si True, excluye productos sin talla identificada
+
+        Returns:
+            {
+                'departments': [
+                    {
+                        'department': str,  # MUJER, HOMBRE, NIÑO, NIÑA
+                        'total_units': int,
+                        'percentage_of_total': float,
+                        'total_revenue': float,
+                        'sizes': [
+                            {
+                                'size': str,
+                                'units': int,
+                                'percentage_in_department': float,
+                                'revenue': float
+                            },
+                            ...
+                        ]
+                    },
+                    ...
+                ]
+            }
+        """
+        # Estructura: {departamento: {talla: {units, revenue}}}
+        departments_data = {}
+        total_units = 0
+
+        for p in self.products_data:
+            # Filtros
+            if exclude_bolsa and 'BOLSA PAPEL' in p['nombre'].upper():
+                continue
+
+            talla = p.get('talla', 'UNKNOWN')
+            if exclude_unknown and talla == 'UNKNOWN':
+                continue
+
+            genero = p.get('genero', 'UNKNOWN')
+
+            # Inicializar estructuras
+            if genero not in departments_data:
+                departments_data[genero] = {
+                    'department': genero,
+                    'total_units': 0,
+                    'total_revenue': 0,
+                    'sizes': {}
+                }
+
+            if talla not in departments_data[genero]['sizes']:
+                departments_data[genero]['sizes'][talla] = {
+                    'size': talla,
+                    'units': 0,
+                    'revenue': 0
+                }
+
+            # Acumular datos
+            departments_data[genero]['total_units'] += p['cantidad']
+            departments_data[genero]['total_revenue'] += p['total']
+            departments_data[genero]['sizes'][talla]['units'] += p['cantidad']
+            departments_data[genero]['sizes'][talla]['revenue'] += p['total']
+            total_units += p['cantidad']
+
+        # Convertir a lista y ordenar
+        departments_list = list(departments_data.values())
+        departments_list.sort(key=lambda x: x['total_units'], reverse=True)
+
+        # Formatear resultado
+        result = []
+        for dept_data in departments_list:
+            # Calcular porcentaje del departamento sobre el total
+            pct_total = (dept_data['total_units'] / total_units * 100) if total_units > 0 else 0
+
+            # Convertir sizes dict a lista y ordenar
+            sizes_list = list(dept_data['sizes'].values())
+            sizes_list.sort(key=lambda x: x['units'], reverse=True)
+
+            # Formatear tallas
+            sizes_formatted = []
+            for size_data in sizes_list:
+                pct_in_dept = (size_data['units'] / dept_data['total_units'] * 100) if dept_data['total_units'] > 0 else 0
+                sizes_formatted.append({
+                    'size': size_data['size'],
+                    'units': size_data['units'],
+                    'units_formatted': self.format_number(size_data['units']),
+                    'percentage_in_department': pct_in_dept,
+                    'percentage_in_department_formatted': self.format_percentage(pct_in_dept),
+                    'revenue': size_data['revenue'],
+                    'revenue_formatted': self.format_pesos(size_data['revenue'])
+                })
+
+            result.append({
+                'department': dept_data['department'],
+                'total_units': dept_data['total_units'],
+                'total_units_formatted': self.format_number(dept_data['total_units']),
+                'percentage_of_total': pct_total,
+                'percentage_of_total_formatted': self.format_percentage(pct_total),
+                'total_revenue': dept_data['total_revenue'],
+                'total_revenue_formatted': self.format_pesos(dept_data['total_revenue']),
+                'sizes': sizes_formatted,
+                'total_sizes_in_department': len(sizes_formatted)
+            })
+
+        return {
+            'departments': result,
+            'total_departments': len(result),
+            'total_units': total_units,
+            'total_units_formatted': self.format_number(total_units)
         }

@@ -454,3 +454,226 @@ def get_products_summary():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@bp.route('/api/products/analysis/sizes', methods=['GET'])
+@token_required
+def get_size_analysis():
+    """
+    Obtiene análisis global de ventas por talla
+
+    Query Parameters:
+        - date (str, optional): Fecha específica (YYYY-MM-DD)
+        - start_date (str, optional): Fecha inicio (YYYY-MM-DD)
+        - end_date (str, optional): Fecha fin (YYYY-MM-DD)
+
+    Returns:
+        JSON con análisis de ventas por talla
+
+    Example:
+        GET /api/products/analysis/sizes?date=2025-11-20
+        GET /api/products/analysis/sizes?start_date=2025-11-01&end_date=2025-11-30
+    """
+    try:
+        # Obtener parámetros
+        date_param = request.args.get('date')
+        start_date_param = request.args.get('start_date')
+        end_date_param = request.args.get('end_date')
+
+        # Determinar rango de fechas
+        if date_param:
+            datetime.strptime(date_param, '%Y-%m-%d')
+            target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+            date_range = date_param
+            invoices = alegra_client.get_invoices_by_date(target_date)
+        elif start_date_param and end_date_param:
+            datetime.strptime(start_date_param, '%Y-%m-%d')
+            datetime.strptime(end_date_param, '%Y-%m-%d')
+            date_range = f"{start_date_param} al {end_date_param}"
+            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+        else:
+            target_date = datetime.now().date()
+            date_range = target_date.strftime('%Y-%m-%d')
+            invoices = alegra_client.get_invoices_by_date(target_date)
+
+        if not invoices:
+            return jsonify({
+                'success': True,
+                'message': 'No se encontraron facturas para el período especificado',
+                'date_range': date_range,
+                'data': {
+                    'total_units': 0,
+                    'total_revenue': 0,
+                    'sizes': []
+                }
+            }), 200
+
+        # Procesar análisis
+        analytics = ProductAnalytics(invoices)
+        size_analysis = analytics.get_sales_by_size()
+
+        return jsonify({
+            'success': True,
+            'date_range': date_range,
+            'data': size_analysis
+        }), 200
+
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Formato de fecha inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error en análisis por talla")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/api/products/analysis/category-sizes', methods=['GET'])
+@token_required
+def get_category_size_analysis():
+    """
+    Obtiene análisis de ventas por categoría, desglosado por talla
+
+    Query Parameters:
+        - date (str, optional): Fecha específica (YYYY-MM-DD)
+        - start_date (str, optional): Fecha inicio (YYYY-MM-DD)
+        - end_date (str, optional): Fecha fin (YYYY-MM-DD)
+
+    Returns:
+        JSON con análisis por categoría y talla
+
+    Example:
+        GET /api/products/analysis/category-sizes?date=2025-11-20
+        GET /api/products/analysis/category-sizes?start_date=2025-11-01&end_date=2025-11-30
+    """
+    try:
+        # Obtener parámetros
+        date_param = request.args.get('date')
+        start_date_param = request.args.get('start_date')
+        end_date_param = request.args.get('end_date')
+
+        # Determinar rango de fechas
+        if date_param:
+            datetime.strptime(date_param, '%Y-%m-%d')
+            target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+            date_range = date_param
+            invoices = alegra_client.get_invoices_by_date(target_date)
+        elif start_date_param and end_date_param:
+            datetime.strptime(start_date_param, '%Y-%m-%d')
+            datetime.strptime(end_date_param, '%Y-%m-%d')
+            date_range = f"{start_date_param} al {end_date_param}"
+            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+        else:
+            target_date = datetime.now().date()
+            date_range = target_date.strftime('%Y-%m-%d')
+            invoices = alegra_client.get_invoices_by_date(target_date)
+
+        if not invoices:
+            return jsonify({
+                'success': True,
+                'message': 'No se encontraron facturas para el período especificado',
+                'date_range': date_range,
+                'data': {
+                    'categories': [],
+                    'total_categories': 0
+                }
+            }), 200
+
+        # Procesar análisis
+        analytics = ProductAnalytics(invoices)
+        category_size_analysis = analytics.get_sales_by_category_and_size()
+
+        return jsonify({
+            'success': True,
+            'date_range': date_range,
+            'data': category_size_analysis
+        }), 200
+
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Formato de fecha inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error en análisis por categoría y talla")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/api/products/analysis/department-sizes', methods=['GET'])
+@token_required
+def get_department_size_analysis():
+    """
+    Obtiene análisis por departamento (género) y talla
+
+    Query Parameters:
+        - date (str, optional): Fecha específica (YYYY-MM-DD)
+        - start_date (str, optional): Fecha inicio (YYYY-MM-DD)
+        - end_date (str, optional): Fecha fin (YYYY-MM-DD)
+
+    Returns:
+        JSON con análisis por departamento y talla
+
+    Example:
+        GET /api/products/analysis/department-sizes?date=2025-11-20
+        GET /api/products/analysis/department-sizes?start_date=2025-11-01&end_date=2025-11-30
+    """
+    try:
+        # Obtener parámetros
+        date_param = request.args.get('date')
+        start_date_param = request.args.get('start_date')
+        end_date_param = request.args.get('end_date')
+
+        # Determinar rango de fechas
+        if date_param:
+            datetime.strptime(date_param, '%Y-%m-%d')
+            target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+            date_range = date_param
+            invoices = alegra_client.get_invoices_by_date(target_date)
+        elif start_date_param and end_date_param:
+            datetime.strptime(start_date_param, '%Y-%m-%d')
+            datetime.strptime(end_date_param, '%Y-%m-%d')
+            date_range = f"{start_date_param} al {end_date_param}"
+            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+        else:
+            target_date = datetime.now().date()
+            date_range = target_date.strftime('%Y-%m-%d')
+            invoices = alegra_client.get_invoices_by_date(target_date)
+
+        if not invoices:
+            return jsonify({
+                'success': True,
+                'message': 'No se encontraron facturas para el período especificado',
+                'date_range': date_range,
+                'data': {
+                    'departments': [],
+                    'total_departments': 0
+                }
+            }), 200
+
+        # Procesar análisis
+        analytics = ProductAnalytics(invoices)
+        department_size_analysis = analytics.get_sales_by_department_and_size()
+
+        return jsonify({
+            'success': True,
+            'date_range': date_range,
+            'data': department_size_analysis
+        }), 200
+
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Formato de fecha inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error en análisis por departamento y talla")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

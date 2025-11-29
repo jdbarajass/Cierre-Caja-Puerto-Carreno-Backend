@@ -98,6 +98,33 @@ class ProductReportPDFGenerator:
             colors.grey
         ))
 
+        # 6. Análisis por tallas (si está disponible)
+        if 'ventas_por_talla' in analytics_data and analytics_data['ventas_por_talla']:
+            elementos.append(PageBreak())
+            elementos.extend(self._create_size_analysis_table(
+                analytics_data['ventas_por_talla'],
+                '📏 Análisis de Ventas por Talla',
+                colors.lightyellow
+            ))
+
+        # 7. Análisis por categoría y talla (si está disponible)
+        if 'ventas_por_categoria_talla' in analytics_data and analytics_data['ventas_por_categoria_talla']:
+            elementos.append(PageBreak())
+            elementos.extend(self._create_category_size_analysis_table(
+                analytics_data['ventas_por_categoria_talla'],
+                '🏷️ Análisis de Ventas por Categoría y Talla',
+                colors.lightcyan
+            ))
+
+        # 8. Análisis por departamento y talla (si está disponible)
+        if 'ventas_por_departamento_talla' in analytics_data and analytics_data['ventas_por_departamento_talla']:
+            elementos.append(PageBreak())
+            elementos.extend(self._create_department_size_analysis_table(
+                analytics_data['ventas_por_departamento_talla'],
+                '👔 Análisis de Ventas por Departamento y Talla',
+                colors.lightpink
+            ))
+
         # Construir PDF
         doc.build(elementos)
         buffer.seek(0)
@@ -340,6 +367,184 @@ class ProductReportPDFGenerator:
         elementos.append(tabla)
         elementos.append(Spacer(1, 20))
 
+        return elementos
+
+    def _create_size_analysis_table(self, size_data: List[Dict], title: str, header_color) -> List:
+        """Crea tabla de análisis global por tallas"""
+        elementos = []
+        elementos.append(Paragraph(title, self.h2_style))
+
+        if not size_data:
+            elementos.append(Paragraph(
+                '<i>No hay datos de tallas disponibles para este período.</i>',
+                self.normal_style
+            ))
+            elementos.append(Spacer(1, 20))
+            return elementos
+
+        # Header
+        data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
+
+        # Datos de tallas
+        for size in size_data:
+            data.append([
+                size['talla'],
+                size['cantidad_formatted'],
+                size['ingresos_formatted'],
+                size['porcentaje_participacion_formatted']
+            ])
+
+        # Totales
+        total_cantidad = sum(s['cantidad'] for s in size_data)
+        total_ingresos = sum(s['ingresos'] for s in size_data)
+        total_pct = sum(s['porcentaje_participacion'] for s in size_data)
+
+        data.append([
+            'TOTAL',
+            ProductReportPDFGenerator._format_number(total_cantidad),
+            ProductReportPDFGenerator._format_pesos(total_ingresos),
+            ProductReportPDFGenerator._format_percentage(total_pct)
+        ])
+
+        tabla = Table(data, hAlign='CENTER', colWidths=[1.5*inch, 1.5*inch, 2*inch, 2*inch])
+        tabla.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BACKGROUND', (0, 0), (-1, 0), header_color),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ]))
+
+        elementos.append(tabla)
+        elementos.append(Spacer(1, 20))
+
+        return elementos
+
+    def _create_category_size_analysis_table(self, category_data: List[Dict], title: str, header_color) -> List:
+        """Crea tabla de análisis por categoría y talla"""
+        elementos = []
+        elementos.append(Paragraph(title, self.h2_style))
+
+        if not category_data:
+            elementos.append(Paragraph(
+                '<i>No hay datos de categorías por talla disponibles para este período.</i>',
+                self.normal_style
+            ))
+            elementos.append(Spacer(1, 20))
+            return elementos
+
+        for category in category_data:
+            # Título de categoría
+            elementos.append(Paragraph(
+                f'<b>{category["categoria"]}</b>',
+                self.h2_style
+            ))
+
+            # Header
+            data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
+
+            # Datos de tallas para esta categoría
+            for size in category['tallas']:
+                data.append([
+                    size['talla'],
+                    size['cantidad_formatted'],
+                    size['ingresos_formatted'],
+                    size['porcentaje_participacion_formatted']
+                ])
+
+            # Totales de la categoría
+            total_cantidad = sum(s['cantidad'] for s in category['tallas'])
+            total_ingresos = sum(s['ingresos'] for s in category['tallas'])
+            total_pct = sum(s['porcentaje_participacion'] for s in category['tallas'])
+
+            data.append([
+                'TOTAL',
+                ProductReportPDFGenerator._format_number(total_cantidad),
+                ProductReportPDFGenerator._format_pesos(total_ingresos),
+                ProductReportPDFGenerator._format_percentage(total_pct)
+            ])
+
+            tabla = Table(data, hAlign='CENTER', colWidths=[1.5*inch, 1.5*inch, 2*inch, 2*inch])
+            tabla.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BACKGROUND', (0, 0), (-1, 0), header_color),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ]))
+
+            elementos.append(tabla)
+            elementos.append(Spacer(1, 15))
+
+        elementos.append(Spacer(1, 10))
+        return elementos
+
+    def _create_department_size_analysis_table(self, department_data: List[Dict], title: str, header_color) -> List:
+        """Crea tabla de análisis por departamento y talla"""
+        elementos = []
+        elementos.append(Paragraph(title, self.h2_style))
+
+        if not department_data:
+            elementos.append(Paragraph(
+                '<i>No hay datos de departamentos por talla disponibles para este período.</i>',
+                self.normal_style
+            ))
+            elementos.append(Spacer(1, 20))
+            return elementos
+
+        for department in department_data:
+            # Título de departamento
+            elementos.append(Paragraph(
+                f'<b>{department["departamento"]}</b>',
+                self.h2_style
+            ))
+
+            # Header
+            data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
+
+            # Datos de tallas para este departamento
+            for size in department['tallas']:
+                data.append([
+                    size['talla'],
+                    size['cantidad_formatted'],
+                    size['ingresos_formatted'],
+                    size['porcentaje_participacion_formatted']
+                ])
+
+            # Totales del departamento
+            total_cantidad = sum(s['cantidad'] for s in department['tallas'])
+            total_ingresos = sum(s['ingresos'] for s in department['tallas'])
+            total_pct = sum(s['porcentaje_participacion'] for s in department['tallas'])
+
+            data.append([
+                'TOTAL',
+                ProductReportPDFGenerator._format_number(total_cantidad),
+                ProductReportPDFGenerator._format_pesos(total_ingresos),
+                ProductReportPDFGenerator._format_percentage(total_pct)
+            ])
+
+            tabla = Table(data, hAlign='CENTER', colWidths=[1.5*inch, 1.5*inch, 2*inch, 2*inch])
+            tabla.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BACKGROUND', (0, 0), (-1, 0), header_color),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ]))
+
+            elementos.append(tabla)
+            elementos.append(Spacer(1, 15))
+
+        elementos.append(Spacer(1, 10))
         return elementos
 
     @staticmethod
