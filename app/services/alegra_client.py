@@ -518,6 +518,99 @@ class AlegraClient:
             "username_used": self.username
         }
 
+    def get_active_items(self) -> List[Dict]:
+        """
+        Obtiene todos los items activos con inventario de Alegra
+
+        Returns:
+            Lista de items activos con información de inventario
+
+        Raises:
+            AlegraTimeoutError: Si la petición excede el timeout
+            AlegraAuthError: Si las credenciales son inválidas
+            AlegraConnectionError: Para otros errores de conexión
+        """
+        url = f"{self.base_url}/items"
+        params = {
+            "status": "active"
+        }
+
+        logger.info("Consultando items activos de Alegra")
+
+        try:
+            response = self.session.get(
+                url,
+                params=params,
+                timeout=self.timeout
+            )
+
+            # Manejar diferentes status codes
+            if response.status_code == 401:
+                logger.error("Credenciales de Alegra inválidas (401)")
+                raise AlegraAuthError("Credenciales de Alegra inválidas")
+
+            if response.status_code == 403:
+                logger.error("Acceso prohibido a Alegra (403)")
+                raise AlegraAuthError("Acceso prohibido. Verifique permisos de la cuenta")
+
+            if response.status_code == 404:
+                logger.warning(f"Endpoint no encontrado en Alegra (404): {url}")
+                raise AlegraConnectionError(
+                    "Endpoint no encontrado en Alegra",
+                    details={'url': url}
+                )
+
+            if response.status_code >= 500:
+                logger.error(f"Error del servidor de Alegra ({response.status_code})")
+                raise AlegraConnectionError(
+                    f"Error del servidor de Alegra (HTTP {response.status_code})",
+                    details={'status_code': response.status_code}
+                )
+
+            response.raise_for_status()
+            data = response.json()
+
+            if not isinstance(data, list):
+                logger.warning(f"Respuesta de Alegra no es una lista: {type(data)}")
+                data = []
+
+            logger.info(f"✓ {len(data)} items activos obtenidos de Alegra")
+            return data
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout al conectar con Alegra (>{self.timeout}s)")
+            raise AlegraTimeoutError(
+                f"Timeout al conectar con Alegra (>{self.timeout}s)"
+            )
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Error de conexión con Alegra: {str(e)}")
+            raise AlegraConnectionError(
+                "No se pudo conectar con Alegra. Verifique la conexión a internet",
+                details={'error': str(e)}
+            )
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"Error HTTP de Alegra: {str(e)}")
+            raise AlegraConnectionError(
+                f"Error HTTP de Alegra: {e.response.status_code}",
+                details={'error': str(e)}
+            )
+
+        except ValueError as e:
+            logger.error(f"Error al parsear JSON de Alegra: {str(e)}")
+            raise AlegraConnectionError(
+                "Respuesta inválida de Alegra (JSON mal formado)",
+                details={'error': str(e)}
+            )
+
+        except Exception as e:
+            logger.error(f"Error inesperado con Alegra: {str(e)}", exc_info=True)
+            raise AlegraConnectionError(
+                f"Error inesperado al conectar con Alegra: {str(e)}",
+                details={'error': str(e)}
+            )
+
     def health_check(self) -> bool:
         """
         Verifica si el servicio de Alegra está disponible

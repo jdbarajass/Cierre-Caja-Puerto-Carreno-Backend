@@ -2,9 +2,9 @@
 
 Sistema backend para procesamiento de cierres de caja con integración a Alegra.
 
-## Versión 2.1.1 - Arquitectura Mejorada + Análisis de Productos
+## Versión 2.2.0 - Sistema Completo de Inventario
 
-Esta versión incluye una refactorización completa del código con mejores prácticas, arquitectura modular, validación robusta y documentación completa. Ahora también incluye análisis completo de productos vendidos con reportes en JSON y PDF, con soporte completo para rangos de fechas.
+Esta versión incluye una refactorización completa del código con mejores prácticas, arquitectura modular, validación robusta y documentación completa. Ahora incluye análisis completo de productos vendidos con reportes en JSON y PDF, más un **sistema completo de análisis de inventario** con métricas ejecutivas, clasificación ABC, alertas de stock y análisis por departamento.
 
 ---
 
@@ -28,6 +28,10 @@ Esta versión incluye una refactorización completa del código con mejores prá
 - ✅ **Top productos más vendidos** con unificación de variantes
 - ✅ **Análisis por categorías** de productos
 - ✅ **Generación de PDFs** profesionales para reportes
+- ✅ **Análisis de inventario** completo con métricas ejecutivas
+- ✅ **Clasificación ABC** de productos por valor
+- ✅ **Alertas de stock** bajo y productos sin inventario
+- ✅ **Análisis por departamento** (HOMBRE, MUJER, NIÑO, NIÑA)
 
 ---
 
@@ -43,13 +47,17 @@ cierre-caja-api/
 │   │   ├── cash_closing.py   # Endpoint principal
 │   │   ├── health.py         # Health check
 │   │   ├── auth.py           # Autenticación
-│   │   └── products.py       # Análisis de productos
+│   │   ├── products.py       # Análisis de productos
+│   │   ├── analytics.py      # Análisis de ventas
+│   │   └── inventory.py      # Análisis de inventario
 │   ├── services/             # Lógica de negocio
 │   │   ├── alegra_client.py  # Cliente API Alegra
 │   │   ├── cash_calculator.py# Calculador de caja
 │   │   ├── knapsack_solver.py# Algoritmo DP
 │   │   ├── jwt_service.py    # Servicio JWT
 │   │   ├── product_analytics.py # Análisis de productos
+│   │   ├── inventory_analytics.py # Análisis de inventario
+│   │   ├── sku_parser.py     # Parser de SKU/códigos
 │   │   └── pdf_generator.py  # Generador de PDFs
 │   ├── middlewares/          # Middlewares
 │   │   └── auth.py           # Middleware de autenticación
@@ -427,7 +435,199 @@ Análisis de productos por categorías (CAMISETA, JEAN, BLUSA, etc.).
 
 **Query Parameters:** `date`, `start_date`, `end_date`
 
-#### 8. GET /health
+#### 8. GET /api/inventory/summary
+
+**Resumen Ejecutivo del Inventario**
+
+Retorna métricas principales del inventario actual.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "summary": {
+    "total_items": 25,
+    "total_items_con_stock": 7,
+    "total_unidades": 22,
+    "valor_total_inventario": 1505850,
+    "valor_potencial_venta": 2007800,
+    "margen_esperado": 501950,
+    "porcentaje_margen": 25.0,
+    "costo_promedio_por_unidad": 68447.73,
+    "precio_promedio_venta": 91263.64
+  }
+}
+```
+
+#### 9. GET /api/inventory/by-department
+
+**Análisis de Inventario por Departamento**
+
+Desglose completo por HOMBRE, MUJER, NIÑO, NIÑA con subcategorías.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "HOMBRE": {
+      "total_items": 25,
+      "total_unidades": 22,
+      "valor_inventario": 1505850,
+      "valor_potencial_venta": 2007800,
+      "margen": 501950,
+      "por_categoria": {
+        "BERMUDA": {
+          "total_items": 7,
+          "total_unidades": 22,
+          "valor_inventario": 1505850
+        }
+      }
+    }
+  }
+}
+```
+
+#### 10. GET /api/inventory/analysis
+
+**Análisis Completo de Inventario (TODO EN UNO)**
+
+Retorna toda la información del inventario en una sola petición: resumen, departamentos, categorías, tallas, alertas de stock, top productos y análisis ABC.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Uso recomendado:** Dashboard completo, exportación de reportes
+
+#### 11. GET /api/inventory/by-category
+
+**Análisis por Categoría de Producto**
+
+Lista de categorías ordenadas por valor de inventario.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+#### 12. GET /api/inventory/by-size
+
+**Análisis por Talla**
+
+Distribución del inventario por tallas (28, 30, S, M, L, XL, etc.).
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+#### 13. GET /api/inventory/out-of-stock
+
+**Productos Sin Stock**
+
+Lista de productos activos con cantidad = 0.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "total": 18,
+  "products": [
+    {
+      "id": "1596",
+      "nombre": "BERMUDA 109900 / 1051421099028",
+      "categoria": "BERMUDA",
+      "departamento": "HOMBRE",
+      "precio_venta": 109900
+    }
+  ]
+}
+```
+
+#### 14. GET /api/inventory/low-stock?threshold=5
+
+**Productos con Bajo Stock**
+
+Lista de productos con cantidad <= threshold.
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Query Parameters:**
+- `threshold` (int, opcional): Umbral de stock bajo (default: 5)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "threshold": 5,
+  "total": 6,
+  "products": [
+    {
+      "id": "1598",
+      "nombre": "BERMUDA 109900 / 1051421099032",
+      "categoria": "BERMUDA",
+      "departamento": "HOMBRE",
+      "cantidad_disponible": 1,
+      "precio_venta": 109900
+    }
+  ]
+}
+```
+
+#### 15. GET /api/inventory/top-by-value?limit=20
+
+**Top Productos por Valor de Inventario**
+
+Lista de productos ordenados por valor total en inventario (cantidad × costo).
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Query Parameters:**
+- `limit` (int, opcional): Cantidad de productos (default: 20)
+
+#### 16. GET /api/inventory/abc-analysis
+
+**Análisis ABC (Pareto)**
+
+Clasificación de productos según su contribución al valor total del inventario:
+- **Clase A**: ~20% de productos que representan ~80% del valor (CRÍTICOS)
+- **Clase B**: ~30% de productos que representan ~15% del valor (IMPORTANTES)
+- **Clase C**: ~50% de productos que representan ~5% del valor (NORMALES)
+
+**Headers:** `Authorization: Bearer <token>` (Requiere autenticación)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "clase_A": {
+      "cantidad_items": 2,
+      "porcentaje_items": 28.57,
+      "valor_inventario": 1183725,
+      "porcentaje_valor": 78.61
+    },
+    "clase_B": {
+      "cantidad_items": 3,
+      "porcentaje_items": 42.86,
+      "valor_inventario": 217275,
+      "porcentaje_valor": 14.43
+    },
+    "clase_C": {
+      "cantidad_items": 2,
+      "porcentaje_items": 28.57,
+      "valor_inventario": 104850,
+      "porcentaje_valor": 6.96
+    }
+  }
+}
+```
+
+#### 17. GET /health
 
 Health check para monitoreo.
 
@@ -656,6 +856,28 @@ Usa **Bounded Knapsack con Programación Dinámica** para calcular la base exact
 ---
 
 ## 📝 Changelog
+
+### v2.2.0 (2025-11-30)
+
+- ✨ **Sistema de Análisis de Inventario** completamente funcional
+  - Nuevo método `get_active_items()` en AlegraClient para obtener inventario de Alegra
+  - Nuevo servicio `InventoryAnalytics` para análisis completo de inventario
+  - Parser de SKU mejorado para extracción de género, departamento y tallas
+  - 9 endpoints nuevos de inventario protegidos con JWT:
+    - `/api/inventory/summary` - Resumen ejecutivo con métricas clave
+    - `/api/inventory/by-department` - Desglose por HOMBRE/MUJER/NIÑO/NIÑA
+    - `/api/inventory/analysis` - Análisis completo (todo en uno)
+    - `/api/inventory/by-category` - Por categoría de producto
+    - `/api/inventory/by-size` - Distribución por tallas
+    - `/api/inventory/out-of-stock` - Productos sin inventario
+    - `/api/inventory/low-stock` - Alertas de stock bajo (threshold configurable)
+    - `/api/inventory/top-by-value` - Top productos por valor
+    - `/api/inventory/abc-analysis` - Clasificación ABC (Pareto)
+- 📊 **Análisis ABC**: Clasificación automática de productos en clases A/B/C según valor
+- 🎯 **Métricas de Negocio**: Cálculo de márgenes, valor potencial de venta, promedios
+- ⚠️ **Alertas Inteligentes**: Detección automática de productos sin stock o stock bajo
+- 🏢 **Análisis por Departamento**: Desglose completo con subcategorías
+- 📏 **Análisis por Talla**: Distribución del inventario por tallas
 
 ### v2.1.2 (2025-11-28)
 

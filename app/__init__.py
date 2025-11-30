@@ -110,12 +110,14 @@ def create_app(config_class=Config):
     from app.routes.auth import bp as auth_bp
     from app.routes.products import bp as products_bp
     from app.routes.analytics import bp as analytics_bp
+    from app.routes.inventory import bp as inventory_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(products_bp)
     app.register_blueprint(analytics_bp)
+    app.register_blueprint(inventory_bp)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
