@@ -857,6 +857,19 @@ Usa **Bounded Knapsack con Programación Dinámica** para calcular la base exact
 
 ## 📝 Changelog
 
+### v2.2.1 (2025-12-02)
+
+- 🔧 **Filtros de Inventario**: Mejoras en el procesamiento de archivos de inventario
+  - Filtro automático para descartar productos con asterisco (*) en el nombre
+  - Filtro automático para descartar productos con estado "Inactivo"
+  - Los filtros se aplican en ambos métodos de procesamiento (inventario nuevo y exportación antigua)
+- 📊 **Lista Completa de Items**: Nueva funcionalidad en endpoint `/api/inventory/upload-file`
+  - Se agregó campo `items_completos` en la respuesta del endpoint
+  - Contiene TODOS los items del archivo procesado (después de aplicar filtros)
+  - Formato simplificado con solo campos necesarios: `item`, `categoria`, `cantidad`, `costo_promedio`, `total`
+  - Permite al frontend implementar paginación y análisis personalizados
+  - Optimizado para envío eficiente de datos al cliente
+
 ### v2.2.0 (2025-11-30)
 
 - ✨ **Sistema de Análisis de Inventario** completamente funcional

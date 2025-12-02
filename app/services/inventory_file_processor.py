@@ -245,12 +245,24 @@ class InventoryFileProcessor:
         total_price_value = Decimal('0')
         categories_count = {}
 
+        # Lista completa de items para enviar al frontend
+        all_items = []
+
         # Procesar cada fila
         for row in rows:
             # Obtener valores (manejar diferentes nombres de columnas)
             tipo = row.get('Tipo', row.get('tipo', ''))
             nombre = row.get('Nombre', row.get('nombre', ''))
             categoria = row.get('Categoría', row.get('Categoria', row.get('categoria', '')))
+
+            # Descartar productos con asterisco en el nombre
+            if nombre and '*' in str(nombre):
+                continue
+
+            # Descartar productos con estado Inactivo (si existe el campo)
+            estado = row.get('Estado', row.get('estado', ''))
+            if estado and str(estado).lower() == 'inactivo':
+                continue
 
             # Solo procesar productos y variantes inventariables
             if tipo not in ['Producto', 'Variante', 'producto', 'variante']:
@@ -384,12 +396,23 @@ class InventoryFileProcessor:
         active_items = 0
         inactive_items = 0
 
+        # Lista completa de items para enviar al frontend
+        all_items = []
+
         # Procesar cada fila
         for row in rows:
             # Obtener valores (maneja diferentes nombres de columnas)
             categoria = row.get('Categoría', row.get('Categoria', row.get('categoria', '')))
             nombre = row.get('Ítem', row.get('Item', row.get('item', row.get('nombre', ''))))
             estado = row.get('Estado', row.get('estado', ''))
+
+            # Descartar productos con asterisco en el nombre
+            if nombre and '*' in str(nombre):
+                continue
+
+            # Descartar productos con estado Inactivo
+            if estado and str(estado).lower() == 'inactivo':
+                continue
 
             # Obtener valores numéricos
             cantidad = int(row.get('Cantidad', row.get('cantidad', 0)) or 0)
@@ -411,6 +434,15 @@ class InventoryFileProcessor:
                 'costo_unitario': float(costo),
                 'valor_total': float(total)
             }
+
+            # Agregar item simplificado a la lista completa (solo campos necesarios para frontend)
+            all_items.append({
+                'item': nombre,
+                'categoria': categoria or '',
+                'cantidad': cantidad,
+                'costo_promedio': float(costo),
+                'total': float(total)
+            })
 
             # Solo contar productos activos con cantidad > 0 para algunos totales
             is_active = estado and estado.lower() == 'activo'
@@ -488,7 +520,8 @@ class InventoryFileProcessor:
                 ],
                 key=lambda x: x['valor'],
                 reverse=True
-            )
+            ),
+            'items_completos': all_items  # Lista completa de items para el frontend
         }
 
     @staticmethod
