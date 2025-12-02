@@ -443,18 +443,24 @@ class ProductReportPDFGenerator:
             data = [['Talla', 'Cantidad', 'Ingresos', '% Participación']]
 
             # Datos de tallas para esta categoría
-            for size in category['sizes']:
+            sizes_list = category.get('sizes', [])
+            if not isinstance(sizes_list, list):
+                sizes_list = []
+
+            for size in sizes_list:
+                if not isinstance(size, dict):
+                    continue
                 data.append([
-                    size['size'],
-                    size['units_formatted'],
-                    size['revenue_formatted'],
-                    size['percentage_in_category_formatted']
+                    size.get('size', 'N/A'),
+                    size.get('units_formatted', '0'),
+                    size.get('revenue_formatted', '$ 0'),
+                    size.get('percentage_in_category_formatted', '0%')
                 ])
 
             # Totales de la categoría
-            total_cantidad = sum(s['units'] for s in category['sizes'])
-            total_ingresos = sum(s['revenue'] for s in category['sizes'])
-            total_pct = sum(s['percentage_in_category'] for s in category['sizes'])
+            total_cantidad = sum(s.get('units', 0) for s in sizes_list if isinstance(s, dict))
+            total_ingresos = sum(s.get('revenue', 0) for s in sizes_list if isinstance(s, dict))
+            total_pct = sum(s.get('percentage_in_category', 0) for s in sizes_list if isinstance(s, dict))
 
             data.append([
                 'TOTAL',

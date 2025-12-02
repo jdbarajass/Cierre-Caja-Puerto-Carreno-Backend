@@ -283,8 +283,13 @@ def sum_payments():
 
         return jsonify(partial_response), 502
 
-    # Validar el cierre comparando Alegra con lo registrado
-    validacion_cierre = validar_cierre(alegra_result, metodos_pago_calculados)
+    # Validar el cierre comparando Alegra con lo registrado (incluye validación de efectivo)
+    validacion_cierre = validar_cierre(
+        alegra_result,
+        metodos_pago_calculados,
+        cash_result,
+        excedentes_procesados
+    )
 
     # Construir respuesta completa exitosa usando la nueva función
     response = preparar_respuesta_completa(
@@ -318,6 +323,18 @@ def sum_payments():
     current_app.logger.info("-" * 80)
     current_app.logger.info(f"Validación del cierre: {validacion_cierre['validation_status'].upper()}")
     current_app.logger.info(f"  {validacion_cierre['mensaje_validacion']}")
+
+    # Validación de EFECTIVO (crítica)
+    diff_efectivo = validacion_cierre['diferencias']['efectivo']
+    current_app.logger.info(
+        f"  Efectivo: Alegra {diff_efectivo['efectivo_alegra_formatted']} + "
+        f"Excedente {diff_efectivo['excedente_efectivo_formatted']} = "
+        f"{diff_efectivo['suma_efectivo_mas_excedente_formatted']} vs "
+        f"Consignar {diff_efectivo['efectivo_para_consignar_formatted']} "
+        f"({'✓ VÁLIDO' if diff_efectivo['es_valido'] else '✗ NO COINCIDE'})"
+    )
+
+    # Otras diferencias
     if validacion_cierre['diferencias']['transferencias']['es_significativa']:
         current_app.logger.info(f"  Diferencia transferencias: {validacion_cierre['diferencias']['transferencias']['diferencia_formatted']}")
     if validacion_cierre['diferencias']['datafono']['es_significativa']:

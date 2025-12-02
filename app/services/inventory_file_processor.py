@@ -166,9 +166,62 @@ class InventoryFileProcessor:
             raise ValueError(f"Error procesando archivo Excel: {str(e)}")
 
     @staticmethod
+    def _detect_file_structure(rows: List[Dict[str, Any]]) -> str:
+        """
+        Detecta qué estructura tiene el archivo de inventario
+
+        Args:
+            rows: Lista de diccionarios con los datos
+
+        Returns:
+            str: 'alegra_export' para exportación de Alegra o 'alegra_inventory' para inventario de Alegra
+        """
+        if not rows:
+            return 'alegra_export'
+
+        # Verificar columnas de la primera fila
+        first_row_keys = set(rows[0].keys())
+
+        # Columnas características de inventario de Alegra
+        inventory_columns = {'Ítem', 'Item', 'Cantidad', 'Estado', 'Costo promedio', 'Total'}
+
+        # Columnas características de exportación de productos
+        export_columns = {'Tipo', 'tipo', 'Nombre', 'nombre', 'Precio base', 'precio_base'}
+
+        # Contar coincidencias
+        inventory_matches = len(inventory_columns & first_row_keys)
+        export_matches = len(export_columns & first_row_keys)
+
+        # Si hay más coincidencias con inventario, es inventario
+        if inventory_matches > export_matches:
+            return 'alegra_inventory'
+        else:
+            return 'alegra_export'
+
+    @staticmethod
     def _process_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Procesa las filas del inventario y genera el análisis
+
+        Args:
+            rows: Lista de diccionarios con los datos de cada producto
+
+        Returns:
+            Dict con el análisis completo del inventario
+        """
+        # Detectar estructura del archivo
+        file_structure = InventoryFileProcessor._detect_file_structure(rows)
+
+        # Procesar según la estructura
+        if file_structure == 'alegra_inventory':
+            return InventoryFileProcessor._process_inventory_rows(rows)
+        else:
+            return InventoryFileProcessor._process_export_rows(rows)
+
+    @staticmethod
+    def _process_export_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Procesa filas de exportación de productos de Alegra (estructura antigua)
 
         Args:
             rows: Lista de diccionarios con los datos de cada producto
@@ -285,6 +338,151 @@ class InventoryFileProcessor:
                         'nombre': dept_name,
                         'cantidad': data['cantidad'],
                         'valor': data['valor_precio']
+                    }
+                    for dept_name, data in departments_summary.items()
+                ],
+                key=lambda x: x['valor'],
+                reverse=True
+            )
+        }
+
+    @staticmethod
+    def _process_inventory_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Procesa filas de inventario de Alegra (estructura nueva)
+
+        Estructura esperada:
+        - Categoría
+        - Ítem (nombre del producto)
+        - Cantidad (inventario actual)
+        - Estado (Activo/Inactivo)
+        - Costo promedio
+        - Total (Cantidad × Costo promedio)
+
+        Args:
+            rows: Lista de diccionarios con los datos de inventario
+
+        Returns:
+            Dict con el análisis completo del inventario
+        """
+        # Inicializar contadores por departamento
+        departments = {
+            'hombre': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0},
+            'mujer': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0},
+            'nino': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0},
+            'nina': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0},
+            'accesorios': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0},
+            'otros': {'items': [], 'total_cost': Decimal('0'), 'total_value': Decimal('0'), 'quantity': 0}
+        }
+
+        # Contadores generales
+        total_items = 0
+        total_quantity = 0
+        total_cost_value = Decimal('0')
+        total_inventory_value = Decimal('0')
+        categories_count = {}
+        active_items = 0
+        inactive_items = 0
+
+        # Procesar cada fila
+        for row in rows:
+            # Obtener valores (maneja diferentes nombres de columnas)
+            categoria = row.get('Categoría', row.get('Categoria', row.get('categoria', '')))
+            nombre = row.get('Ítem', row.get('Item', row.get('item', row.get('nombre', ''))))
+            estado = row.get('Estado', row.get('estado', ''))
+
+            # Obtener valores numéricos
+            cantidad = int(row.get('Cantidad', row.get('cantidad', 0)) or 0)
+            costo_str = row.get('Costo promedio', row.get('costo_promedio', row.get('costo', '0')))
+            total_str = row.get('Total', row.get('total', '0'))
+
+            costo = InventoryFileProcessor.parse_decimal(str(costo_str))
+            total = InventoryFileProcessor.parse_decimal(str(total_str))
+
+            # Clasificar departamento
+            department = InventoryFileProcessor.classify_department(categoria or '', nombre or '')
+
+            # Crear item
+            item = {
+                'nombre': nombre,
+                'categoria': categoria,
+                'cantidad': cantidad,
+                'estado': estado,
+                'costo_unitario': float(costo),
+                'valor_total': float(total)
+            }
+
+            # Solo contar productos activos con cantidad > 0 para algunos totales
+            is_active = estado and estado.lower() == 'activo'
+            has_stock = cantidad > 0
+
+            # Agregar a departamento
+            departments[department]['items'].append(item)
+            departments[department]['total_cost'] += costo * cantidad  # Costo total del inventario
+            departments[department]['total_value'] += total
+            departments[department]['quantity'] += cantidad
+
+            # Actualizar contadores generales
+            total_items += 1
+            total_quantity += cantidad
+            total_cost_value += costo * cantidad
+            total_inventory_value += total
+
+            # Contar categorías
+            if categoria:
+                categories_count[categoria] = categories_count.get(categoria, 0) + 1
+
+            # Contar activos/inactivos
+            if is_active:
+                active_items += 1
+            else:
+                inactive_items += 1
+
+        # Calcular métricas por departamento
+        departments_summary = {}
+        for dept_name, dept_data in departments.items():
+            if dept_data['quantity'] > 0:
+                item_count = len(dept_data['items'])
+                departments_summary[dept_name] = {
+                    'cantidad_items': item_count,
+                    'cantidad_unidades': dept_data['quantity'],
+                    'valor_inventario': float(dept_data['total_value']),
+                    'costo_total': float(dept_data['total_cost']),
+                    'costo_promedio': float(dept_data['total_cost'] / dept_data['quantity']),
+                    'valor_promedio': float(dept_data['total_value'] / dept_data['quantity']) if dept_data['quantity'] > 0 else 0,
+                    'porcentaje_unidades': float(dept_data['quantity'] / total_quantity * 100) if total_quantity > 0 else 0,
+                    'porcentaje_valor': float(dept_data['total_value'] / total_inventory_value * 100) if total_inventory_value > 0 else 0,
+                    'items': dept_data['items'][:10]  # Solo primeros 10 items como muestra
+                }
+
+        # Top categorías
+        top_categories = sorted(
+            [{'categoria': cat, 'cantidad': count} for cat, count in categories_count.items()],
+            key=lambda x: x['cantidad'],
+            reverse=True
+        )[:20]
+
+        # Construir respuesta
+        return {
+            'success': True,
+            'tipo_archivo': 'inventario_alegra',
+            'resumen_general': {
+                'total_items': total_items,
+                'total_unidades': total_quantity,
+                'items_activos': active_items,
+                'items_inactivos': inactive_items,
+                'valor_total_inventario': float(total_inventory_value),
+                'costo_total_inventario': float(total_cost_value),
+                'total_categorias': len(categories_count)
+            },
+            'por_departamento': departments_summary,
+            'top_categorias': top_categories,
+            'departamentos_ordenados': sorted(
+                [
+                    {
+                        'nombre': dept_name,
+                        'cantidad_unidades': data['cantidad_unidades'],
+                        'valor': data['valor_inventario']
                     }
                     for dept_name, data in departments_summary.items()
                 ],

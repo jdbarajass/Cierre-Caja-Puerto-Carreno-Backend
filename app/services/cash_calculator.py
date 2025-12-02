@@ -484,26 +484,31 @@ def calcular_totales_metodos_pago(metodos_pago):
     }
 
 
-def validar_cierre(datos_alegra, metodos_pago_calculados):
+def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, excedentes_procesados=None):
     """
     Valida si el cierre es exitoso comparando Alegra con lo registrado.
 
     LÓGICA DE VALIDACIÓN:
-    1. Transferencias: Alegra "transfer" debe coincidir con (Nequi + Daviplata + QR + Addi)
+    1. Efectivo: Alegra "cash" + Excedente efectivo debe coincidir con Total a consignar
+       - Esta es la validación principal del cierre
+    2. Transferencias: Alegra "transfer" debe coincidir con (Nequi + Daviplata + QR + Addi)
        - Alegra registra Addi como transferencia aunque realmente va al datafono
-    2. Datafono: Alegra "debit-card + credit-card" debe coincidir con (Tarjeta débito + Tarjeta crédito)
+    3. Datafono: Alegra "debit-card + credit-card" debe coincidir con (Tarjeta débito + Tarjeta crédito)
        - Alegra NO incluye Addi en las tarjetas
-    3. Datafono Real: Se calcula como (Tarjetas + Addi) para mostrar lo que realmente llega al datafono
+    4. Datafono Real: Se calcula como (Tarjetas + Addi) para mostrar lo que realmente llega al datafono
 
     Args:
         datos_alegra: Los datos obtenidos de Alegra
         metodos_pago_calculados: Los totales calculados de métodos de pago
+        cash_result: Resultado del cálculo de caja (opcional, para validación de efectivo)
+        excedentes_procesados: Excedentes procesados (opcional, para validación de efectivo)
 
     Returns:
         {
             "cierre_validado": True/False,
-            "validation_status": "success" | "warning",
+            "validation_status": "success" | "warning" | "error",
             "diferencias": {
+                "efectivo": {...},
                 "transferencias": {...},
                 "datafono": {...},
                 "datafono_real": {...}
@@ -512,6 +517,7 @@ def validar_cierre(datos_alegra, metodos_pago_calculados):
         }
     """
     # Obtener totales de Alegra
+    efectivo_alegra = datos_alegra.get("results", {}).get("cash", {}).get("total", 0)
     transferencia_alegra = datos_alegra.get("results", {}).get("transfer", {}).get("total", 0)
 
     datafono_alegra = (
@@ -524,16 +530,60 @@ def validar_cierre(datos_alegra, metodos_pago_calculados):
     solo_tarjetas = metodos_pago_calculados.get("total_solo_tarjetas", 0)  # Solo débito + crédito
     datafono_real = metodos_pago_calculados.get("total_datafono_real", 0)  # Tarjetas + Addi
 
-    # Calcular diferencias
+    # VALIDACIÓN DE EFECTIVO (Validación principal del cierre)
+    # Efectivo de Alegra + Excedente de efectivo = Total a consignar
+    efectivo_validado = True
+    diff_efectivo = 0
+    excedente_efectivo = 0
+    efectivo_para_consignar = 0
+    suma_efectivo_mas_excedente = 0
+
+    if cash_result and excedentes_procesados:
+        excedente_efectivo = excedentes_procesados.get("excedente_efectivo", 0)
+        efectivo_para_consignar = cash_result.get("consignar", {}).get("efectivo_para_consignar_final", 0)
+        suma_efectivo_mas_excedente = efectivo_alegra + excedente_efectivo
+
+        # Calcular diferencia
+        diff_efectivo = abs(suma_efectivo_mas_excedente - efectivo_para_consignar)
+
+        # Validación: diferencia debe ser menor a 100 pesos
+        efectivo_validado = diff_efectivo < 100
+
+    # Calcular diferencias de otros métodos
     diff_transferencia = abs(transferencia_alegra - transferencias_registradas)
     diff_datafono = abs(datafono_alegra - solo_tarjetas)
 
-    # Validación: se considera exitoso si ambas diferencias son < 100
-    cierre_validado = diff_transferencia < 100 and diff_datafono < 100
+    # VALIDACIÓN GLOBAL: El cierre es exitoso si:
+    # 1. Efectivo validado correctamente (CRÍTICO)
+    # 2. Transferencias y datafono con diferencias < 100 (ADVERTENCIA)
+    cierre_validado = efectivo_validado and diff_transferencia < 100 and diff_datafono < 100
 
-    validation_status = "success" if cierre_validado else "warning"
+    # Determinar status:
+    # - "success": Todo validado correctamente
+    # - "warning": Efectivo OK pero hay diferencias en transferencias/datafono
+    # - "error": Efectivo NO coincide (cierre fallido)
+    if not efectivo_validado:
+        validation_status = "error"
+    elif diff_transferencia >= 100 or diff_datafono >= 100:
+        validation_status = "warning"
+    else:
+        validation_status = "success"
 
     diferencias = {
+        "efectivo": {
+            "efectivo_alegra": efectivo_alegra,
+            "efectivo_alegra_formatted": format_cop(efectivo_alegra),
+            "excedente_efectivo": excedente_efectivo,
+            "excedente_efectivo_formatted": format_cop(excedente_efectivo),
+            "suma_efectivo_mas_excedente": suma_efectivo_mas_excedente,
+            "suma_efectivo_mas_excedente_formatted": format_cop(suma_efectivo_mas_excedente),
+            "efectivo_para_consignar": efectivo_para_consignar,
+            "efectivo_para_consignar_formatted": format_cop(efectivo_para_consignar),
+            "diferencia": diff_efectivo,
+            "diferencia_formatted": format_cop(diff_efectivo),
+            "es_valido": efectivo_validado,
+            "detalle": "Efectivo Alegra + Excedente efectivo = Total a consignar"
+        },
         "transferencias": {
             "alegra": transferencia_alegra,
             "registrado": transferencias_registradas,
@@ -559,6 +609,12 @@ def validar_cierre(datos_alegra, metodos_pago_calculados):
 
     # Mensaje descriptivo
     mensajes = []
+
+    # CRÍTICO: Validación de efectivo
+    if not diferencias["efectivo"]["es_valido"]:
+        mensajes.append(f"⚠️ EFECTIVO NO COINCIDE: Diferencia de {diferencias['efectivo']['diferencia_formatted']}")
+
+    # ADVERTENCIAS: Diferencias en otros métodos
     if diferencias["transferencias"]["es_significativa"]:
         mensajes.append(f"Diferencia en transferencias: {diferencias['transferencias']['diferencia_formatted']}")
     if diferencias["datafono"]["es_significativa"]:
@@ -567,7 +623,12 @@ def validar_cierre(datos_alegra, metodos_pago_calculados):
     mensaje_validacion = " | ".join(mensajes) if mensajes else "Cierre validado correctamente"
 
     logger.info(
-        f"Validación de cierre: {validation_status} - {mensaje_validacion}"
+        f"Validación de cierre: {validation_status.upper()} - {mensaje_validacion}"
+    )
+    logger.info(
+        f"  EFECTIVO: Alegra {format_cop(efectivo_alegra)} + Excedente {format_cop(excedente_efectivo)} "
+        f"= {format_cop(suma_efectivo_mas_excedente)} vs Consignar {format_cop(efectivo_para_consignar)} "
+        f"(diff: {format_cop(diff_efectivo)}) {'✓' if efectivo_validado else '✗'}"
     )
     logger.info(
         f"  Transferencias Alegra: {format_cop(transferencia_alegra)} vs "
