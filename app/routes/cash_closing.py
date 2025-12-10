@@ -288,7 +288,8 @@ def sum_payments():
         alegra_result,
         metodos_pago_calculados,
         cash_result,
-        excedentes_procesados
+        excedentes_procesados,
+        cash_request.gastos_operativos
     )
 
     # Construir respuesta completa exitosa usando la nueva función
@@ -328,8 +329,9 @@ def sum_payments():
     diff_efectivo = validacion_cierre['diferencias']['efectivo']
     current_app.logger.info(
         f"  Efectivo: Alegra {diff_efectivo['efectivo_alegra_formatted']} + "
-        f"Excedente {diff_efectivo['excedente_efectivo_formatted']} = "
-        f"{diff_efectivo['suma_efectivo_mas_excedente_formatted']} vs "
+        f"Excedente {diff_efectivo['excedente_efectivo_formatted']} - "
+        f"Gastos {diff_efectivo['gastos_operativos_formatted']} = "
+        f"{diff_efectivo['suma_efectivo_ajustada_formatted']} vs "
         f"Consignar {diff_efectivo['efectivo_para_consignar_formatted']} "
         f"({'✓ VÁLIDO' if diff_efectivo['es_valido'] else '✗ NO COINCIDE'})"
     )

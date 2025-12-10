@@ -484,13 +484,15 @@ def calcular_totales_metodos_pago(metodos_pago):
     }
 
 
-def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, excedentes_procesados=None):
+def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, excedentes_procesados=None, gastos_operativos=0):
     """
     Valida si el cierre es exitoso comparando Alegra con lo registrado.
 
     LÓGICA DE VALIDACIÓN:
-    1. Efectivo: Alegra "cash" + Excedente efectivo debe coincidir con Total a consignar
+    1. Efectivo: Alegra "cash" + Excedente efectivo - Gastos operativos debe coincidir con Total a consignar
        - Esta es la validación principal del cierre
+       - Los gastos operativos se restan porque Alegra reporta efectivo ANTES de sacarlos
+       - El total a consignar ya tiene los gastos descontados (se sacaron físicamente antes de contar)
     2. Transferencias: Alegra "transfer" debe coincidir con (Nequi + Daviplata + QR + Addi)
        - Alegra registra Addi como transferencia aunque realmente va al datafono
     3. Datafono: Alegra "debit-card + credit-card" debe coincidir con (Tarjeta débito + Tarjeta crédito)
@@ -502,6 +504,7 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
         metodos_pago_calculados: Los totales calculados de métodos de pago
         cash_result: Resultado del cálculo de caja (opcional, para validación de efectivo)
         excedentes_procesados: Excedentes procesados (opcional, para validación de efectivo)
+        gastos_operativos: Gastos operativos del día (default: 0)
 
     Returns:
         {
@@ -531,20 +534,23 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
     datafono_real = metodos_pago_calculados.get("total_datafono_real", 0)  # Tarjetas + Addi
 
     # VALIDACIÓN DE EFECTIVO (Validación principal del cierre)
-    # Efectivo de Alegra + Excedente de efectivo = Total a consignar
+    # Efectivo de Alegra + Excedente de efectivo - Gastos operativos = Total a consignar
     efectivo_validado = True
     diff_efectivo = 0
     excedente_efectivo = 0
     efectivo_para_consignar = 0
-    suma_efectivo_mas_excedente = 0
+    suma_efectivo_ajustada = 0
 
     if cash_result and excedentes_procesados:
         excedente_efectivo = excedentes_procesados.get("excedente_efectivo", 0)
         efectivo_para_consignar = cash_result.get("consignar", {}).get("efectivo_para_consignar_final", 0)
-        suma_efectivo_mas_excedente = efectivo_alegra + excedente_efectivo
+
+        # IMPORTANTE: Restar gastos operativos porque Alegra reporta efectivo ANTES de sacarlos
+        # y el total a consignar ya tiene los gastos descontados
+        suma_efectivo_ajustada = efectivo_alegra + excedente_efectivo - gastos_operativos
 
         # Calcular diferencia
-        diff_efectivo = abs(suma_efectivo_mas_excedente - efectivo_para_consignar)
+        diff_efectivo = abs(suma_efectivo_ajustada - efectivo_para_consignar)
 
         # Validación: diferencia debe ser menor a 100 pesos
         efectivo_validado = diff_efectivo < 100
@@ -575,14 +581,16 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
             "efectivo_alegra_formatted": format_cop(efectivo_alegra),
             "excedente_efectivo": excedente_efectivo,
             "excedente_efectivo_formatted": format_cop(excedente_efectivo),
-            "suma_efectivo_mas_excedente": suma_efectivo_mas_excedente,
-            "suma_efectivo_mas_excedente_formatted": format_cop(suma_efectivo_mas_excedente),
+            "gastos_operativos": gastos_operativos,
+            "gastos_operativos_formatted": format_cop(gastos_operativos),
+            "suma_efectivo_ajustada": suma_efectivo_ajustada,
+            "suma_efectivo_ajustada_formatted": format_cop(suma_efectivo_ajustada),
             "efectivo_para_consignar": efectivo_para_consignar,
             "efectivo_para_consignar_formatted": format_cop(efectivo_para_consignar),
             "diferencia": diff_efectivo,
             "diferencia_formatted": format_cop(diff_efectivo),
             "es_valido": efectivo_validado,
-            "detalle": "Efectivo Alegra + Excedente efectivo = Total a consignar"
+            "detalle": "Efectivo Alegra + Excedente efectivo - Gastos operativos = Total a consignar"
         },
         "transferencias": {
             "alegra": transferencia_alegra,
@@ -607,28 +615,53 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
         }
     }
 
-    # Mensaje descriptivo
+    # Mensaje descriptivo mejorado con detalles específicos de cada método de pago
     mensajes = []
+    medios_con_diferencia = []  # Lista de medios de pago con diferencias
 
     # CRÍTICO: Validación de efectivo
     if not diferencias["efectivo"]["es_valido"]:
-        mensajes.append(f"⚠️ EFECTIVO NO COINCIDE: Diferencia de {diferencias['efectivo']['diferencia_formatted']}")
+        medios_con_diferencia.append("EFECTIVO")
+        mensajes.append(
+            f"⚠️ EFECTIVO NO COINCIDE: Diferencia de {diferencias['efectivo']['diferencia_formatted']} "
+            f"(Alegra: {diferencias['efectivo']['efectivo_alegra_formatted']} + "
+            f"Excedente: {diferencias['efectivo']['excedente_efectivo_formatted']} - "
+            f"Gastos: {diferencias['efectivo']['gastos_operativos_formatted']} = "
+            f"{diferencias['efectivo']['suma_efectivo_ajustada_formatted']} vs "
+            f"Consignar: {diferencias['efectivo']['efectivo_para_consignar_formatted']})"
+        )
 
     # ADVERTENCIAS: Diferencias en otros métodos
     if diferencias["transferencias"]["es_significativa"]:
-        mensajes.append(f"Diferencia en transferencias: {diferencias['transferencias']['diferencia_formatted']}")
-    if diferencias["datafono"]["es_significativa"]:
-        mensajes.append(f"Diferencia en datafono: {diferencias['datafono']['diferencia_formatted']}")
+        medios_con_diferencia.append("TRANSFERENCIAS")
+        mensajes.append(
+            f"⚠️ TRANSFERENCIAS NO COINCIDEN: Diferencia de {diferencias['transferencias']['diferencia_formatted']} "
+            f"(Alegra: {format_cop(diferencias['transferencias']['alegra'])} vs "
+            f"Registrado: {format_cop(diferencias['transferencias']['registrado'])})"
+        )
 
-    mensaje_validacion = " | ".join(mensajes) if mensajes else "Cierre validado correctamente"
+    if diferencias["datafono"]["es_significativa"]:
+        medios_con_diferencia.append("DATAFONO")
+        mensajes.append(
+            f"⚠️ DATAFONO NO COINCIDE: Diferencia de {diferencias['datafono']['diferencia_formatted']} "
+            f"(Alegra: {format_cop(diferencias['datafono']['alegra'])} vs "
+            f"Registrado: {format_cop(diferencias['datafono']['registrado'])})"
+        )
+
+    # Mensaje principal con lista de medios con diferencia
+    if medios_con_diferencia:
+        mensaje_validacion = f"Diferencias encontradas en: {', '.join(medios_con_diferencia)}"
+    else:
+        mensaje_validacion = "Cierre validado correctamente"
 
     logger.info(
         f"Validación de cierre: {validation_status.upper()} - {mensaje_validacion}"
     )
     logger.info(
         f"  EFECTIVO: Alegra {format_cop(efectivo_alegra)} + Excedente {format_cop(excedente_efectivo)} "
-        f"= {format_cop(suma_efectivo_mas_excedente)} vs Consignar {format_cop(efectivo_para_consignar)} "
-        f"(diff: {format_cop(diff_efectivo)}) {'✓' if efectivo_validado else '✗'}"
+        f"- Gastos {format_cop(gastos_operativos)} = {format_cop(suma_efectivo_ajustada)} vs "
+        f"Consignar {format_cop(efectivo_para_consignar)} (diff: {format_cop(diff_efectivo)}) "
+        f"{'✓' if efectivo_validado else '✗'}"
     )
     logger.info(
         f"  Transferencias Alegra: {format_cop(transferencia_alegra)} vs "
@@ -642,11 +675,18 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
         f"  Datafono Real (con Addi): {format_cop(datafono_real)}"
     )
 
+    # Imprimir mensajes detallados si hay diferencias
+    if mensajes:
+        logger.info("  DETALLES DE DIFERENCIAS:")
+        for mensaje in mensajes:
+            logger.info(f"    {mensaje}")
+
     return {
         "cierre_validado": cierre_validado,
         "validation_status": validation_status,
         "diferencias": diferencias,
-        "mensaje_validacion": mensaje_validacion
+        "mensaje_validacion": mensaje_validacion,
+        "mensajes_detallados": mensajes  # Lista de mensajes detallados para el frontend
     }
 
 
