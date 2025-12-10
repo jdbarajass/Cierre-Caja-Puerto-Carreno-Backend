@@ -648,9 +648,29 @@ def validar_cierre(datos_alegra, metodos_pago_calculados, cash_result=None, exce
             f"Registrado: {format_cop(diferencias['datafono']['registrado'])})"
         )
 
-    # Mensaje principal con lista de medios con diferencia
+    # Mensaje principal con lista de medios con diferencia y cantidades
     if medios_con_diferencia:
-        mensaje_validacion = f"Diferencias encontradas en: {', '.join(medios_con_diferencia)}"
+        detalles_diferencias = []
+
+        # Agregar efectivo si tiene diferencia
+        if not diferencias["efectivo"]["es_valido"]:
+            detalles_diferencias.append(
+                f"EFECTIVO (diferencia: {diferencias['efectivo']['diferencia_formatted']})"
+            )
+
+        # Agregar transferencias si tiene diferencia
+        if diferencias["transferencias"]["es_significativa"]:
+            detalles_diferencias.append(
+                f"TRANSFERENCIAS (diferencia: {diferencias['transferencias']['diferencia_formatted']})"
+            )
+
+        # Agregar datafono si tiene diferencia
+        if diferencias["datafono"]["es_significativa"]:
+            detalles_diferencias.append(
+                f"DATAFONO (diferencia: {diferencias['datafono']['diferencia_formatted']})"
+            )
+
+        mensaje_validacion = f"Diferencias encontradas en: {' | '.join(detalles_diferencias)}"
     else:
         mensaje_validacion = "Cierre validado correctamente"
 
