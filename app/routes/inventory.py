@@ -4,7 +4,7 @@ Rutas de API para análisis de inventario
 from flask import Blueprint, request, jsonify
 import logging
 
-from app.middlewares.auth import token_required
+from app.middlewares.auth import token_required, role_required
 from app.services.alegra_client import AlegraClient
 from app.services.inventory_analytics import InventoryAnalytics
 from app.services.inventory_file_processor import InventoryFileProcessor
@@ -26,6 +26,7 @@ alegra_client = AlegraClient(
 
 @bp.route('/api/inventory/analysis', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_inventory_analysis():
     """
     Obtiene análisis completo del inventario
@@ -94,6 +95,7 @@ def get_inventory_analysis():
 
 @bp.route('/api/inventory/summary', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_inventory_summary():
     """
     Obtiene resumen ejecutivo del inventario
@@ -142,6 +144,7 @@ def get_inventory_summary():
 
 @bp.route('/api/inventory/by-department', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_inventory_by_department():
     """
     Obtiene análisis de inventario por departamento
@@ -193,6 +196,7 @@ def get_inventory_by_department():
 
 @bp.route('/api/inventory/by-category', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_inventory_by_category():
     """
     Obtiene análisis de inventario por categoría de producto
@@ -241,6 +245,7 @@ def get_inventory_by_category():
 
 @bp.route('/api/inventory/by-size', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_inventory_by_size():
     """
     Obtiene análisis de inventario por talla
@@ -288,6 +293,7 @@ def get_inventory_by_size():
 
 @bp.route('/api/inventory/out-of-stock', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_out_of_stock():
     """
     Obtiene productos sin stock (cantidad = 0)
@@ -337,6 +343,7 @@ def get_out_of_stock():
 
 @bp.route('/api/inventory/low-stock', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_low_stock():
     """
     Obtiene productos con bajo stock
@@ -398,6 +405,7 @@ def get_low_stock():
 
 @bp.route('/api/inventory/top-by-value', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_top_by_value():
     """
     Obtiene top productos por valor de inventario
@@ -462,6 +470,7 @@ def get_top_by_value():
 
 @bp.route('/api/inventory/abc-analysis', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_abc_analysis():
     """
     Obtiene análisis ABC del inventario
@@ -519,6 +528,7 @@ def get_abc_analysis():
 
 @bp.route('/api/inventory/upload-file', methods=['POST'])
 @token_required
+@role_required('admin')
 def upload_inventory_file():
     """
     Procesa un archivo de inventario (CSV o Excel) y retorna análisis completo

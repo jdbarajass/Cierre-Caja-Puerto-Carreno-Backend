@@ -17,10 +17,19 @@ bp = Blueprint('auth', __name__)
 # ===================================
 # CREDENCIALES HARDCODEADAS
 # ===================================
-VALID_EMAIL = 'ventaspuertocarreno@gmail.com'
-VALID_PASSWORD = 'VentasCarreno2025.*'
-USER_NAME = 'Usuario Ventas Puerto Carreño'
-USER_ROLE = 'admin'
+# Diccionario de usuarios con sus credenciales y roles
+USERS = {
+    'ventaspuertocarreno@gmail.com': {
+        'password': 'VentasCarreno2025.*',
+        'name': 'Usuario Ventas Puerto Carreño',
+        'role': 'sales'
+    },
+    'koaj.puertocarreno@gmail.com': {
+        'password': 'Koaj.2025*',
+        'name': 'Administrador KOAJ',
+        'role': 'admin'
+    }
+}
 
 # Control de intentos fallidos (en memoria)
 failed_attempts = {}
@@ -170,12 +179,15 @@ def login():
                 'message': 'Cuenta bloqueada temporalmente. Intente más tarde.'
             }), 403
 
-        # Verificar credenciales hardcodeadas
+        # Verificar credenciales contra el diccionario de usuarios
         max_attempts = current_app.config.get('MAX_LOGIN_ATTEMPTS', 5)
         lockout_time = current_app.config.get('LOCKOUT_TIME_MINUTES', 15)
 
-        # Comparar email y password
-        if email != VALID_EMAIL.lower() or password != VALID_PASSWORD:
+        # Buscar usuario en el diccionario
+        user_data = USERS.get(email)
+        
+        # Validar que el usuario existe y la contraseña coincide
+        if not user_data or user_data['password'] != password:
             # Incrementar intentos fallidos
             attempts = increment_failed_attempts(email)
 
@@ -203,15 +215,20 @@ def login():
         # Login exitoso - Resetear intentos fallidos
         reset_failed_attempts(email)
 
+        # Obtener datos del usuario autenticado
+        user_id = 1 if user_data['role'] == 'sales' else 2  # IDs distintos para cada usuario
+        user_role = user_data['role']
+        user_name = user_data['name']
+
         # Generar token JWT
         token = JWTService.generate_token(
-            user_id=1,
-            email=VALID_EMAIL,
-            role=USER_ROLE
+            user_id=user_id,
+            email=email,
+            role=user_role
         )
 
         logger.info(
-            f"Login exitoso: {email} - IP: {request.remote_addr} "
+            f"Login exitoso: {email} (rol: {user_role}) - IP: {request.remote_addr} "
             f"- Timestamp: {datetime.utcnow().isoformat()}"
         )
 
@@ -219,9 +236,9 @@ def login():
             'success': True,
             'token': token,
             'user': {
-                'email': VALID_EMAIL,
-                'name': USER_NAME,
-                'role': USER_ROLE
+                'email': email,
+                'name': user_name,
+                'role': user_role
             }
         }), 200
 

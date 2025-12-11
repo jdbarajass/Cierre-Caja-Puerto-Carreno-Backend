@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, send_file
 from datetime import datetime, timedelta
 import logging
 
-from app.middlewares.auth import token_required
+from app.middlewares.auth import token_required, role_required
 from app.services.alegra_client import AlegraClient
 from app.services.product_analytics import ProductAnalytics
 from app.services.pdf_generator import ProductReportPDFGenerator
@@ -27,6 +27,7 @@ alegra_client = AlegraClient(
 
 @bp.route('/api/products/analysis', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_products_analysis():
     """
     Obtiene análisis completo de productos en formato JSON
@@ -126,6 +127,7 @@ def get_products_analysis():
 
 @bp.route('/api/products/analysis/pdf', methods=['GET'])
 @token_required
+@role_required('admin')
 def download_products_analysis_pdf():
     """
     Descarga reporte de productos en formato PDF
@@ -225,6 +227,7 @@ def download_products_analysis_pdf():
 
 @bp.route('/api/products/top-sellers', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_top_sellers():
     """
     Obtiene top productos más vendidos
@@ -308,6 +311,7 @@ def get_top_sellers():
 
 @bp.route('/api/products/categories', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_categories_analysis():
     """
     Obtiene análisis de productos por categorías
@@ -381,6 +385,7 @@ def get_categories_analysis():
 
 @bp.route('/api/products/summary', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_products_summary():
     """
     Obtiene resumen ejecutivo de productos (métricas principales)
@@ -458,6 +463,7 @@ def get_products_summary():
 
 @bp.route('/api/products/analysis/sizes', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_size_analysis():
     """
     Obtiene análisis global de ventas por talla
@@ -533,6 +539,7 @@ def get_size_analysis():
 
 @bp.route('/api/products/analysis/category-sizes', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_category_size_analysis():
     """
     Obtiene análisis de ventas por categoría, desglosado por talla
@@ -607,6 +614,7 @@ def get_category_size_analysis():
 
 @bp.route('/api/products/analysis/department-sizes', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_department_size_analysis():
     """
     Obtiene análisis por departamento (género) y talla

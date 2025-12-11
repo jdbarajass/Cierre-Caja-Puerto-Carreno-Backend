@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 import logging
 
-from app.middlewares.auth import token_required
+from app.middlewares.auth import token_required, role_required
 from app.services.alegra_client import AlegraClient
 from app.services.sales_analytics import SalesAnalytics
 from app.config import Config
@@ -96,6 +96,7 @@ def add_voided_info_to_response(response_dict: dict, analytics: SalesAnalytics) 
 
 @bp.route('/api/analytics/peak-hours', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_peak_hours():
     """
     Obtiene análisis de horas pico de ventas
@@ -178,6 +179,7 @@ def get_peak_hours():
 
 @bp.route('/api/analytics/top-customers', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_top_customers():
     """
     Obtiene análisis de clientes que más compran
@@ -262,6 +264,7 @@ def get_top_customers():
 
 @bp.route('/api/analytics/top-sellers', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_top_sellers():
     """
     Obtiene análisis de vendedoras que más venden
@@ -346,6 +349,7 @@ def get_top_sellers():
 
 @bp.route('/api/analytics/customer-retention', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_customer_retention():
     """
     Obtiene análisis de retención de clientes (RFM Analysis)
@@ -426,6 +430,7 @@ def get_customer_retention():
 
 @bp.route('/api/analytics/sales-trends', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_sales_trends():
     """
     Obtiene análisis de tendencias de ventas por día y día de la semana
@@ -506,6 +511,7 @@ def get_sales_trends():
 
 @bp.route('/api/analytics/cross-selling', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_cross_selling():
     """
     Obtiene análisis de productos que se compran juntos (market basket analysis)
@@ -588,6 +594,7 @@ def get_cross_selling():
 
 @bp.route('/api/analytics/dashboard', methods=['GET'])
 @token_required
+@role_required('admin')
 def get_analytics_dashboard():
     """
     Obtiene un resumen completo con todos los análisis disponibles

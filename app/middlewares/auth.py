@@ -128,3 +128,44 @@ def role_required(required_role):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
+
+def role_required_any(allowed_roles):
+    """
+    Decorador que permite acceso si el usuario tiene cualquiera de los roles especificados
+
+    Args:
+        allowed_roles: Lista de roles permitidos (ej: ['admin', 'sales'])
+
+    Usage:
+        @app.route('/sales')
+        @token_required
+        @role_required_any(['admin', 'sales'])
+        def sales_route():
+            return jsonify({'message': 'Access granted'})
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_current_user()
+
+            if not user:
+                return jsonify({
+                    'success': False,
+                    'message': 'Usuario no autenticado'
+                }), 401
+
+            user_role = user.get('role')
+            if user_role not in allowed_roles:
+                logger.warning(
+                    f"Acceso denegado - Usuario: {user.get('email')} "
+                    f"- Roles permitidos: {', '.join(allowed_roles)} - Rol actual: {user_role}"
+                )
+                return jsonify({
+                    'success': False,
+                    'message': 'No tiene permisos para acceder a este recurso'
+                }), 403
+
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
