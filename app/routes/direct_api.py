@@ -33,16 +33,23 @@ direct_client = AlegraDirectClient(
 def get_inventory_value_report():
     """
     Obtiene el reporte de valor de inventario desde la API directa de Alegra
-    
+
+    IMPORTANTE: Filtra automáticamente items con nombres que empiezan con asteriscos (*)
+    ya que son productos obsoletos que no pudieron eliminarse de Alegra.
+
     Query Parameters:
         - toDate (str, optional): Fecha hasta la cual generar el reporte (YYYY-MM-DD). Default: hoy
-        - limit (int, optional): Número de items por página (default: 10, max recomendado: 100)
+        - limit (int, optional): Número de items por página (default: 10, max: 1000)
         - page (int, optional): Número de página (default: 1)
         - query (str, optional): Filtro de búsqueda
-    
+
     Returns:
-        JSON con reporte de inventario y metadata de paginación
-    
+        JSON con reporte de inventario filtrado y metadata de paginación
+        La metadata incluye:
+            - total_received: Items recibidos de Alegra
+            - total_filtered: Items filtrados (asteriscos)
+            - total_returned: Items enviados al frontend
+
     Example:
         GET /api/direct/inventory/value-report?toDate=2025-12-10&limit=10&page=1
     """
@@ -60,11 +67,11 @@ def get_inventory_value_report():
         page = int(request.args.get('page', 1))
         query = request.args.get('query', '')
 
-        # Validar limit razonable
-        if limit > 100:
+        # Validar limit razonable (máximo 1000 para permitir obtener inventarios grandes)
+        if limit > 1000:
             return jsonify({
                 'success': False,
-                'error': 'El límite máximo es 100 items por página'
+                'error': 'El límite máximo es 1000 items por página'
             }), 400
 
         logger.info(f"Obteniendo inventory value report - toDate: {to_date}, limit: {limit}, page: {page}")

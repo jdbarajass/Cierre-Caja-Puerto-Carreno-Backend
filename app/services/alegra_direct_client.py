@@ -88,23 +88,30 @@ class AlegraDirectClient:
         query: str = ""
     ) -> Dict[str, Any]:
         """
-        Obtiene el reporte de valor de inventario
+        Obtiene el reporte de valor de inventario filtrando items obsoletos
+
+        IMPORTANTE: Filtra automáticamente items con nombres que empiezan con asteriscos (*)
+        ya que estos son productos que ya no se venden pero no pudieron eliminarse de Alegra.
 
         Args:
             to_date: Fecha hasta la cual generar el reporte (YYYY-MM-DD)
-            limit: Número de items por página (default: 10, max recomendado: 100)
+            limit: Número de items por página (default: 10, max: 1000)
             page: Número de página (1-indexed)
             query: Filtro de búsqueda opcional
 
         Returns:
             Dict con estructura:
             {
-                'data': [...],  # Lista de items de inventario
+                'success': True,
+                'data': [...],  # Lista de items de inventario (sin items con asteriscos)
                 'metadata': {
                     'page': int,
                     'limit': int,
-                    'total': int,
-                    'has_more': bool
+                    'query': str,
+                    'to_date': str,
+                    'total_received': int,      # Items recibidos de Alegra
+                    'total_filtered': int,      # Items filtrados (asteriscos)
+                    'total_returned': int       # Items enviados al frontend
                 }
             }
         """
@@ -118,17 +125,45 @@ class AlegraDirectClient:
 
         try:
             response = self._make_request('/reports/inventory-value', params)
-            
+
+            # Extraer datos de la respuesta
+            raw_data = response if isinstance(response, list) else response.get('data', [])
+
+            # FILTRAR items con asteriscos en el nombre
+            # Estos son items que ya no se venden pero no pudieron eliminarse de Alegra
+            filtered_data = []
+            items_filtered_count = 0
+
+            for item in raw_data:
+                item_name = item.get('name', '') if isinstance(item, dict) else ''
+
+                # Filtrar si el nombre comienza con asteriscos o es solo asteriscos
+                if item_name and item_name.strip().startswith('*'):
+                    items_filtered_count += 1
+                    logger.debug(f"Item filtrado (asteriscos): {item_name}")
+                    continue
+
+                # Si el item pasa el filtro, agregarlo
+                filtered_data.append(item)
+
+            logger.info(
+                f"Inventario procesado: {len(raw_data)} items recibidos, "
+                f"{items_filtered_count} filtrados (asteriscos), "
+                f"{len(filtered_data)} enviados al frontend"
+            )
+
             # Agregar metadata de paginación
-            # Nota: La estructura exacta depende de la respuesta real de Alegra
             return {
                 'success': True,
-                'data': response if isinstance(response, list) else response.get('data', []),
+                'data': filtered_data,
                 'metadata': {
                     'page': page,
                     'limit': limit,
                     'query': query,
-                    'to_date': to_date
+                    'to_date': to_date,
+                    'total_received': len(raw_data),
+                    'total_filtered': items_filtered_count,
+                    'total_returned': len(filtered_data)
                 }
             }
         except Exception as e:
