@@ -296,3 +296,109 @@ def get_sales_documents():
             'error': 'Error interno del servidor',
             'details': str(e)
         }), 500
+
+
+@bp.route('/api/sales/quick-summary', methods=['GET', 'OPTIONS'])
+@token_required
+def get_quick_sales_summary():
+    """
+    Obtiene un resumen rápido del total de ventas para un rango de fechas
+    Optimizado para ser usado en el header del dashboard
+
+    Query Parameters:
+        - from (str, required): Fecha de inicio (YYYY-MM-DD)
+        - to (str, required): Fecha de fin (YYYY-MM-DD)
+
+    Returns:
+        JSON con total de ventas
+
+    Example:
+        GET /api/sales/quick-summary?from=2025-12-13&to=2025-12-13
+
+    Response:
+        {
+            "success": true,
+            "total_sales": 1234567,
+            "total_sales_formatted": "$ 1.234.567",
+            "date_range": {
+                "from": "2025-12-13",
+                "to": "2025-12-13"
+            }
+        }
+    """
+    # Manejar preflight CORS
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        # Obtener parámetros
+        from_date = request.args.get('from')
+        to_date = request.args.get('to')
+
+        if not from_date or not to_date:
+            return jsonify({
+                'success': False,
+                'error': 'Los parámetros "from" y "to" son requeridos'
+            }), 400
+
+        # Validar formato de fechas
+        try:
+            datetime.strptime(from_date, '%Y-%m-%d')
+            datetime.strptime(to_date, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+            }), 400
+
+        logger.info(f"Quick summary - from: {from_date}, to: {to_date}")
+
+        # Obtener datos de la API directa con límite alto para obtener todos los documentos
+        result = direct_client.get_sales_documents(
+            from_date=from_date,
+            to_date=to_date,
+            limit=1000,  # Límite alto para obtener la mayoría de documentos
+            start=0
+        )
+
+        if not result.get('success'):
+            return jsonify({
+                'success': False,
+                'error': 'Error obteniendo datos de Alegra',
+                'details': result.get('error')
+            }), 502
+
+        # Calcular el total de ventas sumando los totales de cada documento
+        documents = result.get('data', {}).get('data', [])
+        total_sales = sum(float(doc.get('total', 0)) for doc in documents)
+
+        # Formatear el total
+        from app.utils.formatters import format_cop
+        total_sales_formatted = format_cop(total_sales)
+
+        logger.info(f"Quick summary calculado: {total_sales_formatted} ({len(documents)} documentos)")
+
+        return jsonify({
+            'success': True,
+            'total_sales': total_sales,
+            'total_sales_formatted': total_sales_formatted,
+            'document_count': len(documents),
+            'date_range': {
+                'from': from_date,
+                'to': to_date
+            }
+        }), 200
+
+    except ValueError as e:
+        logger.error(f"Error de validación en quick summary: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Parámetro inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error inesperado en quick summary")
+        return jsonify({
+            'success': False,
+            'error': 'Error interno del servidor',
+            'details': str(e)
+        }), 500
