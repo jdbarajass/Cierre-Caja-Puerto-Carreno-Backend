@@ -369,7 +369,8 @@ def get_quick_sales_summary():
             }), 502
 
         # Calcular el total de ventas sumando los totales de cada documento
-        documents = result.get('data', {}).get('data', [])
+        # La respuesta ya tiene los datos en 'data' directamente (es una lista)
+        documents = result.get('data', [])
         total_sales = sum(float(doc.get('total', 0)) for doc in documents)
 
         # Formatear el total
