@@ -85,6 +85,12 @@ class CashClosingRequest(BaseModel):
         description="Timestamp completo ISO 8601 con zona horaria desde el frontend"
     )
 
+    base_objetivo: int = Field(
+        default=None,
+        ge=1,
+        description="Base de caja objetivo personalizable (por defecto usa Config.BASE_OBJETIVO)"
+    )
+
     @field_validator('coins', 'bills')
     @classmethod
     def validate_non_negative(cls, v):

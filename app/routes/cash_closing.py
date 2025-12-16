@@ -211,7 +211,11 @@ def sum_payments():
     # Procesar cierre de caja (usando excedente_efectivo para cálculos de venta)
     # IMPORTANTE: Se usa excedente_efectivo porque la venta en efectivo de Alegra
     # debe compararse solo con el excedente en efectivo, no con otros excedentes
-    calculator = CashCalculator()
+    # Usar base_objetivo personalizado si se proporciona, sino usar el valor por defecto de Config
+    base_objetivo_a_usar = cash_request.base_objetivo if cash_request.base_objetivo else Config.BASE_OBJETIVO
+    current_app.logger.info(f"Base objetivo a usar: {base_objetivo_a_usar}")
+
+    calculator = CashCalculator(base_objetivo=base_objetivo_a_usar)
     cash_result = calculator.procesar_cierre_completo(
         conteo_monedas=conteo_monedas,
         conteo_billetes=conteo_billetes,
