@@ -23,7 +23,7 @@ class Config:
         'ALEGRA_API_BASE_URL',
         'https://api.alegra.com/api/v1'
     )
-    ALEGRA_TIMEOUT = int(os.getenv('ALEGRA_TIMEOUT', '30'))
+    ALEGRA_TIMEOUT = int(os.getenv('ALEGRA_TIMEOUT', '180'))  # 3 minutos para consultas de inventario completo
 
     # Configuración de negocio - Cierre de caja
     BASE_OBJETIVO = int(os.getenv('BASE_OBJETIVO', '450000'))

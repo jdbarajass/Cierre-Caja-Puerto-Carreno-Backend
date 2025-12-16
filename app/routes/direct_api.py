@@ -35,11 +35,11 @@ def get_inventory_value_report():
     Obtiene el reporte de valor de inventario desde la API directa de Alegra
 
     IMPORTANTE: Filtra automáticamente items con nombres que empiezan con asteriscos (*)
-    ya que son productos obsoletos que no pudieron eliminarse de Alegra.
+    y items deshabilitados, ya que son productos obsoletos que no deben aparecer.
 
     Query Parameters:
         - toDate (str, optional): Fecha hasta la cual generar el reporte (YYYY-MM-DD). Default: hoy
-        - limit (int, optional): Número de items por página (default: 10, max: 1000)
+        - limit (int, optional): Número de items por página (default: 3000, max: 3000)
         - page (int, optional): Número de página (default: 1)
         - query (str, optional): Filtro de búsqueda
 
@@ -47,11 +47,13 @@ def get_inventory_value_report():
         JSON con reporte de inventario filtrado y metadata de paginación
         La metadata incluye:
             - total_received: Items recibidos de Alegra
-            - total_filtered: Items filtrados (asteriscos)
+            - total_filtered_asterisk: Items filtrados (asteriscos)
+            - total_filtered_disabled: Items filtrados (deshabilitados)
+            - total_filtered: Total items filtrados
             - total_returned: Items enviados al frontend
 
     Example:
-        GET /api/direct/inventory/value-report?toDate=2025-12-10&limit=10&page=1
+        GET /api/direct/inventory/value-report?toDate=2025-12-10&limit=3000&page=1
     """
     # Manejar preflight CORS
     if request.method == 'OPTIONS':
@@ -63,24 +65,30 @@ def get_inventory_value_report():
         if not to_date:
             to_date = datetime.now().strftime('%Y-%m-%d')
         
-        limit = int(request.args.get('limit', 10))
-        page = int(request.args.get('page', 1))
+        max_items = int(request.args.get('limit', 3000))
+        page_size = int(request.args.get('pageSize', 200))
         query = request.args.get('query', '')
 
-        # Validar limit razonable (máximo 1000 para permitir obtener inventarios grandes)
-        if limit > 1000:
+        # Validar límites razonables
+        if max_items > 3000:
             return jsonify({
                 'success': False,
-                'error': 'El límite máximo es 1000 items por página'
+                'error': 'El límite máximo es 3000 items'
             }), 400
 
-        logger.info(f"Obteniendo inventory value report - toDate: {to_date}, limit: {limit}, page: {page}")
+        if page_size > 300:
+            return jsonify({
+                'success': False,
+                'error': 'El tamaño de página máximo es 300 items'
+            }), 400
 
-        # Obtener datos de la API directa
-        result = direct_client.get_inventory_value_report(
+        logger.info(f"Obteniendo inventory value report paginado - toDate: {to_date}, max_items: {max_items}, page_size: {page_size}")
+
+        # Obtener datos usando paginación automática
+        result = direct_client.get_inventory_value_report_paginated(
             to_date=to_date,
-            limit=limit,
-            page=page,
+            max_items=max_items,
+            page_size=page_size,
             query=query
         )
 

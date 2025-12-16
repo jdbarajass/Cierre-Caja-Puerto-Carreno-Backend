@@ -80,22 +80,119 @@ class AlegraDirectClient:
             logger.error(f"Error decodificando JSON de {url}: {str(e)}")
             raise
 
+    def get_inventory_value_report_paginated(
+        self,
+        to_date: str,
+        max_items: int = 3000,
+        page_size: int = 200,
+        query: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Obtiene el reporte de inventario completo usando paginación automática
+
+        Args:
+            to_date: Fecha hasta la cual generar el reporte (YYYY-MM-DD)
+            max_items: Máximo número total de items a obtener (default: 3000)
+            page_size: Items por página (default: 200, para evitar error 503)
+            query: Filtro de búsqueda opcional
+
+        Returns:
+            Dict con todos los items combinados y filtrados
+        """
+        all_items = []
+        total_received = 0
+        total_filtered_asterisk = 0
+        total_filtered_disabled = 0
+        current_page = 1
+
+        logger.info(f"Iniciando consulta paginada de inventario (max: {max_items}, page_size: {page_size})")
+
+        while total_received < max_items:
+            try:
+                # Calcular cuántos items faltan
+                remaining = max_items - total_received
+                current_limit = min(page_size, remaining)
+
+                logger.info(f"Obteniendo página {current_page} ({current_limit} items)...")
+
+                # Llamar al método original con paginación
+                page_result = self.get_inventory_value_report(
+                    to_date=to_date,
+                    limit=current_limit,
+                    page=current_page,
+                    query=query
+                )
+
+                if not page_result.get('success'):
+                    logger.error(f"Error en página {current_page}: {page_result.get('error')}")
+                    break
+
+                page_data = page_result.get('data', [])
+                page_metadata = page_result.get('metadata', {})
+
+                # Acumular estadísticas
+                total_received += page_metadata.get('total_received', 0)
+                total_filtered_asterisk += page_metadata.get('total_filtered_asterisk', 0)
+                total_filtered_disabled += page_metadata.get('total_filtered_disabled', 0)
+                all_items.extend(page_data)
+
+                logger.info(
+                    f"Página {current_page}: recibidos={page_metadata.get('total_received', 0)}, "
+                    f"válidos={len(page_data)}, total acumulado={len(all_items)}"
+                )
+
+                # Si recibimos menos items de los solicitados, ya no hay más páginas
+                if page_metadata.get('total_received', 0) < current_limit:
+                    logger.info("Última página alcanzada")
+                    break
+
+                current_page += 1
+
+            except Exception as e:
+                logger.error(f"Error obteniendo página {current_page}: {str(e)}")
+                break
+
+        logger.info(
+            f"Paginación completa: {total_received} items recibidos, "
+            f"{total_filtered_asterisk} filtrados (asteriscos), "
+            f"{total_filtered_disabled} filtrados (deshabilitados), "
+            f"{len(all_items)} válidos retornados"
+        )
+
+        return {
+            'success': True,
+            'data': all_items,
+            'metadata': {
+                'page': 1,  # Resultado combinado
+                'limit': max_items,
+                'query': query,
+                'to_date': to_date,
+                'total_received': total_received,
+                'total_filtered_asterisk': total_filtered_asterisk,
+                'total_filtered_disabled': total_filtered_disabled,
+                'total_filtered': total_filtered_asterisk + total_filtered_disabled,
+                'total_returned': len(all_items),
+                'pages_fetched': current_page
+            }
+        }
+
     def get_inventory_value_report(
         self,
         to_date: str,
-        limit: int = 10,
+        limit: int = 200,
         page: int = 1,
         query: str = ""
     ) -> Dict[str, Any]:
         """
-        Obtiene el reporte de valor de inventario filtrando items obsoletos
+        Obtiene el reporte de valor de inventario filtrando items obsoletos y deshabilitados
 
-        IMPORTANTE: Filtra automáticamente items con nombres que empiezan con asteriscos (*)
-        ya que estos son productos que ya no se venden pero no pudieron eliminarse de Alegra.
+        IMPORTANTE: Filtra automáticamente:
+        - Items con nombres que empiezan con asteriscos (*): productos obsoletos
+        - Items deshabilitados (status != 'active'): productos inactivos
 
         Args:
             to_date: Fecha hasta la cual generar el reporte (YYYY-MM-DD)
-            limit: Número de items por página (default: 10, max: 1000)
+            limit: Número de items por página (default: 3000 para traer todo el inventario)
             page: Número de página (1-indexed)
             query: Filtro de búsqueda opcional
 
@@ -103,15 +200,17 @@ class AlegraDirectClient:
             Dict con estructura:
             {
                 'success': True,
-                'data': [...],  # Lista de items de inventario (sin items con asteriscos)
+                'data': [...],  # Lista de items de inventario (sin items obsoletos ni deshabilitados)
                 'metadata': {
                     'page': int,
                     'limit': int,
                     'query': str,
                     'to_date': str,
-                    'total_received': int,      # Items recibidos de Alegra
-                    'total_filtered': int,      # Items filtrados (asteriscos)
-                    'total_returned': int       # Items enviados al frontend
+                    'total_received': int,          # Items recibidos de Alegra
+                    'total_filtered_asterisk': int, # Items filtrados por asteriscos
+                    'total_filtered_disabled': int, # Items filtrados por estar deshabilitados
+                    'total_filtered': int,          # Total items filtrados
+                    'total_returned': int           # Items enviados al frontend
                 }
             }
         """
@@ -129,26 +228,36 @@ class AlegraDirectClient:
             # Extraer datos de la respuesta
             raw_data = response if isinstance(response, list) else response.get('data', [])
 
-            # FILTRAR items con asteriscos en el nombre
-            # Estos son items que ya no se venden pero no pudieron eliminarse de Alegra
+            # FILTRAR items con asteriscos y deshabilitados
             filtered_data = []
-            items_filtered_count = 0
+            items_filtered_asterisk = 0
+            items_filtered_disabled = 0
 
             for item in raw_data:
                 item_name = item.get('name', '') if isinstance(item, dict) else ''
+                item_status = item.get('status', 'active') if isinstance(item, dict) else 'active'
 
                 # Filtrar si el nombre comienza con asteriscos o es solo asteriscos
                 if item_name and item_name.strip().startswith('*'):
-                    items_filtered_count += 1
+                    items_filtered_asterisk += 1
                     logger.debug(f"Item filtrado (asteriscos): {item_name}")
                     continue
 
-                # Si el item pasa el filtro, agregarlo
+                # Filtrar si el item está deshabilitado
+                if item_status != 'active':
+                    items_filtered_disabled += 1
+                    logger.debug(f"Item filtrado (deshabilitado): {item_name} (status: {item_status})")
+                    continue
+
+                # Si el item pasa ambos filtros, agregarlo
                 filtered_data.append(item)
+
+            total_filtered = items_filtered_asterisk + items_filtered_disabled
 
             logger.info(
                 f"Inventario procesado: {len(raw_data)} items recibidos, "
-                f"{items_filtered_count} filtrados (asteriscos), "
+                f"{items_filtered_asterisk} filtrados (asteriscos), "
+                f"{items_filtered_disabled} filtrados (deshabilitados), "
                 f"{len(filtered_data)} enviados al frontend"
             )
 
@@ -162,7 +271,9 @@ class AlegraDirectClient:
                     'query': query,
                     'to_date': to_date,
                     'total_received': len(raw_data),
-                    'total_filtered': items_filtered_count,
+                    'total_filtered_asterisk': items_filtered_asterisk,
+                    'total_filtered_disabled': items_filtered_disabled,
+                    'total_filtered': total_filtered,
                     'total_returned': len(filtered_data)
                 }
             }
