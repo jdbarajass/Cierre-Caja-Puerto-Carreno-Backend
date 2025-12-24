@@ -348,6 +348,121 @@ class AlegraDirectClient:
                 'data': []
             }
 
+    def get_all_invoices_for_date_range(
+        self,
+        from_date: str,
+        to_date: str
+    ) -> Dict[str, Any]:
+        """
+        Obtiene TODAS las facturas para un rango de fechas usando paginación automática
+
+        Este método itera día por día y hace múltiples llamadas de 30 en 30 hasta obtener
+        todas las facturas del día, ya que Alegra solo retorna máximo 30 por defecto.
+
+        Args:
+            from_date: Fecha de inicio (YYYY-MM-DD)
+            to_date: Fecha de fin (YYYY-MM-DD)
+
+        Returns:
+            Dict con estructura:
+            {
+                'success': True,
+                'data': [lista completa de facturas],
+                'metadata': {
+                    'from_date': str,
+                    'to_date': str,
+                    'total_invoices': int,
+                    'days_processed': int
+                }
+            }
+        """
+        from datetime import datetime, timedelta
+
+        try:
+            # Convertir fechas a objetos datetime
+            start_date = datetime.strptime(from_date, '%Y-%m-%d')
+            end_date = datetime.strptime(to_date, '%Y-%m-%d')
+
+            all_invoices = []
+            days_processed = 0
+            current_date = start_date
+
+            # Iterar día por día
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                logger.info(f"Obteniendo facturas para la fecha: {date_str}")
+
+                # Para cada día, obtener todas las facturas con paginación
+                start = 0
+                limit = 30
+                day_invoices = []
+
+                while True:
+                    params = {
+                        'date': date_str,
+                        'limit': limit,
+                        'start': start
+                    }
+
+                    try:
+                        # Llamar al endpoint /invoices con parámetro date para obtener facturas completas
+                        response = self._make_request('/invoices', params)
+
+                        # La respuesta puede ser una lista directamente o un objeto con data
+                        invoices_batch = response if isinstance(response, list) else response.get('data', [])
+
+                        # Log de debugging para ver si las facturas tienen items
+                        if invoices_batch and len(invoices_batch) > 0:
+                            first_invoice = invoices_batch[0]
+                            logger.info(f"Primera factura de {date_str}: ID={first_invoice.get('id')}, tiene items={bool(first_invoice.get('items'))}, items count={len(first_invoice.get('items', []))}")
+                            logger.debug(f"Estructura de primera factura: {list(first_invoice.keys())}")
+
+                        if not invoices_batch or len(invoices_batch) == 0:
+                            # No hay más facturas para este día
+                            break
+
+                        day_invoices.extend(invoices_batch)
+
+                        # Si recibimos menos de 'limit' facturas, es la última página
+                        if len(invoices_batch) < limit:
+                            break
+
+                        # Incrementar el offset para la siguiente página
+                        start += limit
+
+                    except Exception as e:
+                        logger.error(f"Error obteniendo facturas para {date_str} (start={start}): {str(e)}")
+                        # Continuar con el siguiente día si hay un error
+                        break
+
+                logger.info(f"Obtenidas {len(day_invoices)} facturas para {date_str}")
+                all_invoices.extend(day_invoices)
+                days_processed += 1
+
+                # Avanzar al siguiente día
+                current_date += timedelta(days=1)
+
+            logger.info(f"Total de facturas obtenidas: {len(all_invoices)} en {days_processed} días")
+
+            return {
+                'success': True,
+                'data': all_invoices,
+                'metadata': {
+                    'from_date': from_date,
+                    'to_date': to_date,
+                    'total_invoices': len(all_invoices),
+                    'days_processed': days_processed
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error en get_all_invoices_for_date_range: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': []
+            }
+
     def get_sales_documents(
         self,
         from_date: str,
@@ -391,7 +506,7 @@ class AlegraDirectClient:
 
         try:
             response = self._make_request('/invoices/sales-documents', params)
-            
+
             return {
                 'success': True,
                 'data': response if isinstance(response, list) else response.get('data', []),

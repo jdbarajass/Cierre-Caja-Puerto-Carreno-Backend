@@ -224,19 +224,20 @@ def get_sales_totals():
 @role_required('admin')
 def get_sales_documents():
     """
-    Obtiene documentos de ventas discriminados desde la API directa
-    
+    Obtiene TODOS los documentos de ventas para un rango de fechas con paginación automática
+
+    Este endpoint ahora obtiene TODAS las facturas del rango de fechas especificado,
+    haciendo múltiples llamadas a la API de Alegra si es necesario (30 en 30).
+
     Query Parameters:
         - from (str, required): Fecha de inicio (YYYY-MM-DD)
         - to (str, required): Fecha de fin (YYYY-MM-DD)
-        - limit (int, optional): Número de documentos (default: 10)
-        - start (int, optional): Offset para paginación (default: 0)
-    
+
     Returns:
-        JSON con documentos de ventas
-    
+        JSON con TODOS los documentos de ventas del rango de fechas
+
     Example:
-        GET /api/direct/sales/documents?from=2025-12-01&to=2025-12-01&limit=10
+        GET /api/direct/sales/documents?from=2025-12-01&to=2025-12-23
     """
     # Manejar preflight CORS
     if request.method == 'OPTIONS':
@@ -246,7 +247,7 @@ def get_sales_documents():
         # Obtener parámetros
         from_date = request.args.get('from')
         to_date = request.args.get('to')
-        
+
         if not from_date or not to_date:
             return jsonify({
                 'success': False,
@@ -263,17 +264,12 @@ def get_sales_documents():
                 'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
             }), 400
 
-        limit = int(request.args.get('limit', 10))
-        start = int(request.args.get('start', 0))
+        logger.info(f"Obteniendo TODAS las facturas - from: {from_date}, to: {to_date}")
 
-        logger.info(f"Obteniendo sales documents - from: {from_date}, to: {to_date}, limit: {limit}")
-
-        # Obtener datos de la API directa
-        result = direct_client.get_sales_documents(
+        # Usar el nuevo método que obtiene TODAS las facturas con paginación automática
+        result = direct_client.get_all_invoices_for_date_range(
             from_date=from_date,
-            to_date=to_date,
-            limit=limit,
-            start=start
+            to_date=to_date
         )
 
         if not result.get('success'):
@@ -289,6 +285,8 @@ def get_sales_documents():
             'data': result.get('data', []),
             'metadata': result.get('metadata', {})
         }
+
+        logger.info(f"Retornando {len(result.get('data', []))} facturas en total")
 
         return jsonify(response), 200
 
