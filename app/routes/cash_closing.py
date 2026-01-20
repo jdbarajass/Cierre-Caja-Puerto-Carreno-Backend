@@ -646,3 +646,208 @@ def get_sales_comparison_yoy():
             "timezone": "America/Bogota"
         }
         return jsonify(error_response), 500
+
+
+@bp.route('/preconsulta', methods=['GET', 'OPTIONS'])
+@token_required
+@role_required_any(['admin', 'sales'])
+def preconsulta_alegra():
+    """
+    Realiza una preconsulta a Alegra para obtener resumen de ventas del día
+    antes de hacer el cierre de caja.
+
+    Query Parameters:
+        - date (str, required): Fecha en formato YYYY-MM-DD
+
+    Returns:
+        JSON con:
+        - factura_inicial: Número de la primera factura del día
+        - factura_final: Número de la última factura del día
+        - totales por método de pago (efectivo, tarjeta crédito, débito, transferencia)
+        - total de ventas
+    """
+    # Manejar preflight CORS
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        # Obtener fecha del parámetro
+        date_str = request.args.get('date')
+
+        if not date_str:
+            return jsonify({
+                'success': False,
+                'error': 'El parámetro "date" es requerido'
+            }), 400
+
+        # Validar formato de fecha
+        try:
+            from datetime import datetime
+            datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+            }), 400
+
+        # Validar que no sea fecha futura
+        colombia_now = get_colombia_now()
+        request_date = parse_colombia_date(date_str)
+        if request_date.date() > colombia_now.date():
+            return jsonify({
+                'success': False,
+                'error': 'No se puede consultar una fecha futura'
+            }), 400
+
+        current_app.logger.info("=" * 80)
+        current_app.logger.info(f"PRECONSULTA ALEGRA para fecha: {date_str}")
+        current_app.logger.info("=" * 80)
+
+        # Verificar configuración
+        if not Config.ALEGRA_USER or not Config.ALEGRA_PASS:
+            return jsonify({
+                'success': False,
+                'error': 'Configuración de Alegra incompleta'
+            }), 500
+
+        # Crear cliente de Alegra y obtener facturas
+        client = AlegraClient(
+            Config.ALEGRA_USER,
+            Config.ALEGRA_PASS,
+            Config.ALEGRA_API_BASE_URL,
+            Config.ALEGRA_TIMEOUT
+        )
+
+        # Obtener todas las facturas del día
+        invoices = client.get_invoices_by_date(date_str)
+
+        if not invoices:
+            return jsonify({
+                'success': True,
+                'message': 'No hay facturas para esta fecha',
+                'date': date_str,
+                'factura_inicial': None,
+                'factura_final': None,
+                'cantidad_facturas': 0,
+                'totales': {
+                    'efectivo': {'total': 0, 'formatted': '$0'},
+                    'tarjeta_credito': {'total': 0, 'formatted': '$0'},
+                    'tarjeta_debito': {'total': 0, 'formatted': '$0'},
+                    'transferencia': {'total': 0, 'formatted': '$0'}
+                },
+                'total_ventas': {'total': 0, 'formatted': '$0'},
+                'server_timestamp': get_colombia_timestamp()
+            }), 200
+
+        # Procesar facturas para obtener totales
+        process_result = client.process_invoices(invoices)
+        totals = process_result['totals']
+        voided_info = process_result['voided_info']
+
+        # Filtrar facturas activas (no anuladas) para obtener números de factura
+        from app.utils.formatters import filter_voided_invoices, format_cop
+        import re
+        filter_result = filter_voided_invoices(invoices)
+        active_invoices = filter_result['active_invoices']
+
+        # Separar facturas por tipo: electrónica (con letras) y principal (solo números)
+        facturas_electronicas = []
+        facturas_principales = []
+
+        for inv in active_invoices:
+            number = inv.get('numberTemplate', {}).get('fullNumber') or inv.get('number') or inv.get('id')
+            if number:
+                number_str = str(number)
+                # Si tiene letras, es facturación electrónica
+                if re.search(r'[a-zA-Z]', number_str):
+                    facturas_electronicas.append(number_str)
+                else:
+                    # Solo números, es facturación principal
+                    facturas_principales.append(number_str)
+
+        # Ordenar facturas electrónicas
+        facturas_electronicas_sorted = sorted(facturas_electronicas)
+        factura_electronica_inicial = facturas_electronicas_sorted[0] if facturas_electronicas_sorted else None
+        factura_electronica_final = facturas_electronicas_sorted[-1] if facturas_electronicas_sorted else None
+
+        # Ordenar facturas principales (numéricamente)
+        facturas_principales_sorted = sorted(facturas_principales, key=lambda x: int(x) if x.isdigit() else 0)
+        factura_principal_inicial = facturas_principales_sorted[0] if facturas_principales_sorted else None
+        factura_principal_final = facturas_principales_sorted[-1] if facturas_principales_sorted else None
+
+        # Calcular total de ventas
+        total_ventas = sum(totals.values())
+
+        response = {
+            'success': True,
+            'date': date_str,
+            'facturacion_electronica': {
+                'factura_inicial': factura_electronica_inicial,
+                'factura_final': factura_electronica_final,
+                'cantidad': len(facturas_electronicas)
+            },
+            'facturacion_principal': {
+                'factura_inicial': factura_principal_inicial,
+                'factura_final': factura_principal_final,
+                'cantidad': len(facturas_principales)
+            },
+            'cantidad_facturas': len(active_invoices),
+            'facturas_anuladas': voided_info.get('voided_count', 0),
+            'totales': {
+                'efectivo': {
+                    'total': int(totals.get('cash', 0)),
+                    'formatted': format_cop(totals.get('cash', 0))
+                },
+                'tarjeta_credito': {
+                    'total': int(totals.get('credit-card', 0)),
+                    'formatted': format_cop(totals.get('credit-card', 0))
+                },
+                'tarjeta_debito': {
+                    'total': int(totals.get('debit-card', 0)),
+                    'formatted': format_cop(totals.get('debit-card', 0))
+                },
+                'transferencia': {
+                    'total': int(totals.get('transfer', 0)),
+                    'formatted': format_cop(totals.get('transfer', 0))
+                }
+            },
+            'total_ventas': {
+                'total': int(total_ventas),
+                'formatted': format_cop(total_ventas)
+            },
+            'server_timestamp': get_colombia_timestamp(),
+            'timezone': 'America/Bogota'
+        }
+
+        # Si hay facturas anuladas, incluir el detalle
+        if voided_info.get('voided_count', 0) > 0:
+            response['detalle_anuladas'] = {
+                'cantidad': voided_info.get('voided_count', 0),
+                'total_anulado': voided_info.get('total_voided_amount', 0),
+                'total_anulado_formatted': voided_info.get('total_voided_amount_formatted', '$0')
+            }
+
+        current_app.logger.info(f"Preconsulta exitosa: {len(active_invoices)} facturas activas")
+        current_app.logger.info(f"Facturación Electrónica: {factura_electronica_inicial} - {factura_electronica_final} ({len(facturas_electronicas)} facturas)")
+        current_app.logger.info(f"Facturación Principal: {factura_principal_inicial} - {factura_principal_final} ({len(facturas_principales)} facturas)")
+        current_app.logger.info(f"Total ventas: {format_cop(total_ventas)}")
+
+        return jsonify(response), 200
+
+    except AlegraConnectionError as e:
+        current_app.logger.error(f"Error de conexión con Alegra: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Error al conectar con Alegra',
+            'details': str(e),
+            'server_timestamp': get_colombia_timestamp()
+        }), 502
+
+    except Exception as e:
+        current_app.logger.error(f"Error inesperado en preconsulta: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'Error inesperado al procesar la preconsulta',
+            'details': str(e),
+            'server_timestamp': get_colombia_timestamp()
+        }), 500
