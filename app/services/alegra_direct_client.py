@@ -524,3 +524,58 @@ class AlegraDirectClient:
                 'error': str(e),
                 'data': []
             }
+
+    def get_inventory_value_totals(
+        self,
+        to_date: str,
+        query: str = "",
+        force_inventory_parallel: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Obtiene el total del valor del inventario para una fecha específica
+
+        Este endpoint es extremadamente rápido ya que solo retorna el total agregado
+        sin detalles de cada producto.
+
+        Args:
+            to_date: Fecha hasta la cual calcular el inventario (YYYY-MM-DD)
+            query: Filtro de búsqueda opcional
+            force_inventory_parallel: Forzar procesamiento paralelo
+
+        Returns:
+            Dict con estructura:
+            {
+                'success': True,
+                'data': {
+                    'total': 123456789
+                }
+            }
+
+        Nota:
+            Alegra retorna únicamente el valor total del inventario,
+            no la cantidad de unidades.
+        """
+        params = {
+            'toDate': to_date,
+            'query': query,
+            'forceInventoryParallel': str(force_inventory_parallel).lower()
+        }
+
+        try:
+            response = self._make_request('/reports/inventory-value-totals', params)
+
+            return {
+                'success': True,
+                'data': response,
+                'metadata': {
+                    'to_date': to_date,
+                    'query': query
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error obteniendo inventory value totals: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': {}
+            }

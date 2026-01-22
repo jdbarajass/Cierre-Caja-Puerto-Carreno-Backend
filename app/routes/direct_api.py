@@ -311,6 +311,9 @@ def get_quick_sales_summary():
     Obtiene un resumen rápido del total de ventas para un rango de fechas
     Optimizado para ser usado en el header del dashboard
 
+    OPTIMIZADO: Usa el endpoint /invoices/sales-totals de Alegra que retorna
+    totales agregados sin detalles de facturas (2-4x más rápido)
+
     Query Parameters:
         - from (str, required): Fecha de inicio (YYYY-MM-DD)
         - to (str, required): Fecha de fin (YYYY-MM-DD)
@@ -326,6 +329,7 @@ def get_quick_sales_summary():
             "success": true,
             "total_sales": 1234567,
             "total_sales_formatted": "$ 1.234.567",
+            "days_count": 1,
             "date_range": {
                 "from": "2025-12-13",
                 "to": "2025-12-13"
@@ -359,11 +363,13 @@ def get_quick_sales_summary():
 
         logger.info(f"Quick summary - from: {from_date}, to: {to_date}")
 
-        # Obtener datos de la API directa con límite alto para obtener todos los documentos
-        result = direct_client.get_sales_documents(
+        # Obtener totales de ventas usando el endpoint rápido de Alegra
+        # Este endpoint retorna totales agregados sin detalles de facturas (mucho más rápido)
+        result = direct_client.get_sales_totals(
             from_date=from_date,
             to_date=to_date,
-            limit=1000,  # Límite alto para obtener la mayoría de documentos
+            group_by='day',  # Agrupa por día
+            limit=100,       # Suficiente para 100 días
             start=0
         )
 
@@ -374,22 +380,22 @@ def get_quick_sales_summary():
                 'details': result.get('error')
             }), 502
 
-        # Calcular el total de ventas sumando los totales de cada documento
-        # La respuesta ya tiene los datos en 'data' directamente (es una lista)
-        documents = result.get('data', [])
-        total_sales = sum(float(doc.get('total', 0)) for doc in documents)
+        # Calcular el total de ventas sumando los totales de cada día
+        # La respuesta tiene estructura: [{'date': '2025-12-10', 'total': 3330350, ...}, ...]
+        sales_data = result.get('data', [])
+        total_sales = sum(float(day.get('total', 0)) for day in sales_data)
 
         # Formatear el total
         from app.utils.formatters import format_cop
         total_sales_formatted = format_cop(total_sales)
 
-        logger.info(f"Quick summary calculado: {total_sales_formatted} ({len(documents)} documentos)")
+        logger.info(f"Quick summary calculado: {total_sales_formatted} ({len(sales_data)} días procesados)")
 
         return jsonify({
             'success': True,
             'total_sales': total_sales,
             'total_sales_formatted': total_sales_formatted,
-            'document_count': len(documents),
+            'days_count': len(sales_data),
             'date_range': {
                 'from': from_date,
                 'to': to_date
@@ -404,6 +410,110 @@ def get_quick_sales_summary():
         }), 400
     except Exception as e:
         logger.exception("Error inesperado en quick summary")
+        return jsonify({
+            'success': False,
+            'error': 'Error interno del servidor',
+            'details': str(e)
+        }), 500
+
+
+@bp.route('/api/inventory/quick-total', methods=['GET', 'OPTIONS'])
+@token_required
+def get_quick_inventory_total():
+    """
+    Obtiene el total del valor del inventario para una fecha específica
+    Optimizado para ser usado en el dashboard
+
+    OPTIMIZADO: Usa el endpoint /reports/inventory-value-totals de Alegra
+    que retorna solo el total agregado (extremadamente rápido)
+
+    Query Parameters:
+        - to_date (str, optional): Fecha hasta la cual calcular (YYYY-MM-DD).
+                                   Si no se proporciona, usa la fecha actual
+
+    Returns:
+        JSON con total del inventario
+
+    Example:
+        GET /api/inventory/quick-total?to_date=2026-01-21
+
+    Response:
+        {
+            "success": true,
+            "total_value": 123456789,
+            "total_value_formatted": "$ 123.456.789",
+            "to_date": "2026-01-21"
+        }
+
+    Nota:
+        Alegra solo retorna el valor total del inventario, no la cantidad de unidades.
+    """
+    # Manejar preflight CORS
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        # Obtener parámetro (opcional, por defecto fecha actual)
+        from app.utils.timezone import get_colombia_now
+        to_date = request.args.get('to_date')
+
+        if not to_date:
+            colombia_now = get_colombia_now()
+            to_date = colombia_now.strftime('%Y-%m-%d')
+
+        # Validar formato de fecha
+        try:
+            datetime.strptime(to_date, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+            }), 400
+
+        logger.info(f"Quick inventory total - to_date: {to_date}")
+
+        # Obtener total del inventario usando el endpoint rápido de Alegra
+        result = direct_client.get_inventory_value_totals(
+            to_date=to_date,
+            query="",
+            force_inventory_parallel=False
+        )
+
+        if not result.get('success'):
+            return jsonify({
+                'success': False,
+                'error': 'Error obteniendo datos de Alegra',
+                'details': result.get('error')
+            }), 502
+
+        # Extraer datos de la respuesta
+        data = result.get('data', {})
+
+        # Alegra retorna {'total': 145967454.87072}
+        # NO retorna cantidad de unidades en este endpoint
+        total_value = float(data.get('total', 0))
+
+        # Formatear el total
+        from app.utils.formatters import format_cop
+        total_value_formatted = format_cop(total_value)
+
+        logger.info(f"✅ Quick inventory total calculado: {total_value_formatted}")
+
+        return jsonify({
+            'success': True,
+            'total_value': total_value,
+            'total_value_formatted': total_value_formatted,
+            'to_date': to_date
+        }), 200
+
+    except ValueError as e:
+        logger.error(f"Error de validación en quick inventory total: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Parámetro inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error inesperado en quick inventory total")
         return jsonify({
             'success': False,
             'error': 'Error interno del servidor',
