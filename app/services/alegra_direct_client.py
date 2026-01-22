@@ -579,3 +579,52 @@ class AlegraDirectClient:
                 'error': str(e),
                 'data': {}
             }
+
+    def get_bills_open_totals(
+        self,
+        from_date: str,
+        to_date: str
+    ) -> Dict[str, Any]:
+        """
+        Obtiene el total de cuentas por pagar pendientes para un rango de fechas
+
+        Este endpoint es rápido ya que solo retorna totales agregados
+        sin detalles de cada factura de proveedor.
+
+        Args:
+            from_date: Fecha de inicio (YYYY-MM-DD)
+            to_date: Fecha de fin (YYYY-MM-DD)
+
+        Returns:
+            Dict con estructura:
+            {
+                'success': True,
+                'data': {
+                    'missingAmount': 13699200,
+                    'totalDocuments': 4
+                }
+            }
+        """
+        params = {
+            'from': from_date,
+            'to': to_date
+        }
+
+        try:
+            response = self._make_request('/reports/bills-open-totals', params)
+
+            return {
+                'success': True,
+                'data': response,
+                'metadata': {
+                    'from_date': from_date,
+                    'to_date': to_date
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error obteniendo bills open totals: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'data': {}
+            }

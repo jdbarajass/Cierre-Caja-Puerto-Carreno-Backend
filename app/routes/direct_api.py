@@ -519,3 +519,122 @@ def get_quick_inventory_total():
             'error': 'Error interno del servidor',
             'details': str(e)
         }), 500
+
+
+@bp.route('/api/bills/open-totals', methods=['GET', 'OPTIONS'])
+@token_required
+def get_bills_open_totals():
+    """
+    Obtiene el total de cuentas por pagar pendientes para un rango de fechas
+    Optimizado para ser usado en el dashboard
+
+    OPTIMIZADO: Usa el endpoint /reports/bills-open-totals de Alegra
+    que retorna solo totales agregados (extremadamente rápido)
+
+    Query Parameters:
+        - from_date (str, optional): Fecha de inicio (YYYY-MM-DD).
+                                     Si no se proporciona, usa el primer día del mes actual
+        - to_date (str, optional): Fecha de fin (YYYY-MM-DD).
+                                   Si no se proporciona, usa el último día del mes actual
+
+    Returns:
+        JSON con total de cuentas por pagar
+
+    Example:
+        GET /api/bills/open-totals?from_date=2026-01-01&to_date=2026-01-31
+
+    Response:
+        {
+            "success": true,
+            "missing_amount": 13699200,
+            "missing_amount_formatted": "$ 13.699.200",
+            "total_documents": 4,
+            "from_date": "2026-01-01",
+            "to_date": "2026-01-31"
+        }
+    """
+    # Manejar preflight CORS
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        # Obtener parámetros (opcional, por defecto mes actual)
+        from app.utils.timezone import get_colombia_now
+        colombia_now = get_colombia_now()
+
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+
+        if not from_date:
+            # Primer día del mes actual
+            year = colombia_now.year
+            month = colombia_now.month
+            from_date = f"{year}-{month:02d}-01"
+
+        if not to_date:
+            # Último día del mes actual
+            import calendar
+            year = colombia_now.year
+            month = colombia_now.month
+            last_day = calendar.monthrange(year, month)[1]
+            to_date = f"{year}-{month:02d}-{last_day:02d}"
+
+        # Validar formato de fechas
+        try:
+            datetime.strptime(from_date, '%Y-%m-%d')
+            datetime.strptime(to_date, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+            }), 400
+
+        logger.info(f"Bills open totals - from: {from_date}, to: {to_date}")
+
+        # Obtener total de cuentas por pagar usando el endpoint rápido de Alegra
+        result = direct_client.get_bills_open_totals(
+            from_date=from_date,
+            to_date=to_date
+        )
+
+        if not result.get('success'):
+            return jsonify({
+                'success': False,
+                'error': 'Error obteniendo datos de Alegra',
+                'details': result.get('error')
+            }), 502
+
+        # Extraer datos de la respuesta
+        # Alegra retorna {'missingAmount': 13699200, 'totalDocuments': 4}
+        data = result.get('data', {})
+        missing_amount = float(data.get('missingAmount', 0))
+        total_documents = int(data.get('totalDocuments', 0))
+
+        # Formatear el total
+        from app.utils.formatters import format_cop
+        missing_amount_formatted = format_cop(missing_amount)
+
+        logger.info(f"✅ Bills open totals calculado: {missing_amount_formatted} ({total_documents} documentos)")
+
+        return jsonify({
+            'success': True,
+            'missing_amount': missing_amount,
+            'missing_amount_formatted': missing_amount_formatted,
+            'total_documents': total_documents,
+            'from_date': from_date,
+            'to_date': to_date
+        }), 200
+
+    except ValueError as e:
+        logger.error(f"Error de validación en bills open totals: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Parámetro inválido: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.exception("Error inesperado en bills open totals")
+        return jsonify({
+            'success': False,
+            'error': 'Error interno del servidor',
+            'details': str(e)
+        }), 500
