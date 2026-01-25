@@ -27,6 +27,19 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Initialize SQLAlchemy database
+    from app.models.user import db
+
+    db.init_app(app)
+
+    # Create tables if they don't exist
+    with app.app_context():
+        try:
+            db.create_all()
+            app.logger.info("Database tables created/verified successfully")
+        except Exception as e:
+            app.logger.error(f"Error creating database tables: {e}")
+
     # Configurar CORS - SOLUCIÓN MEJORADA Y ROBUSTA
     # Leer los orígenes permitidos de la configuración
     allowed_origins = config_class.ALLOWED_ORIGINS

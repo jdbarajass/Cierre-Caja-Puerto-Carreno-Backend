@@ -75,6 +75,15 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Database connection pooling (para PostgreSQL/Supabase)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 10,
+        'pool_recycle': 3600,
+        'pool_pre_ping': True,
+        'max_overflow': 20,
+        'pool_timeout': 30
+    }
+
     # Security
     MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '5'))
     LOCKOUT_TIME_MINUTES = int(os.getenv('LOCKOUT_TIME_MINUTES', '15'))

@@ -1,6 +1,6 @@
 """
-Rutas de autenticación
-Credenciales hardcodeadas (sin base de datos)
+Rutas de autenticacion
+Autenticacion basada en base de datos con bcrypt
 """
 from flask import Blueprint, request, jsonify, current_app
 import bcrypt
@@ -9,31 +9,11 @@ import logging
 from datetime import datetime
 
 from app.services.jwt_service import JWTService
+from app.models.user import db, User
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('auth', __name__)
-
-# ===================================
-# CREDENCIALES HARDCODEADAS
-# ===================================
-# Diccionario de usuarios con sus credenciales y roles
-USERS = {
-    'ventaspuertocarreno@gmail.com': {
-        'password': 'VentasCarreno2025.*',
-        'name': 'Usuario Ventas Puerto Carreño',
-        'role': 'sales'
-    },
-    'koaj.puertocarreno@gmail.com': {
-        'password': 'Koaj.2025*',
-        'name': 'Administrador KOAJ',
-        'role': 'admin'
-    }
-}
-
-# Control de intentos fallidos (en memoria)
-failed_attempts = {}
-locked_until = {}
 
 
 def validate_email(email: str) -> bool:
@@ -47,48 +27,13 @@ def validate_password(password: str) -> bool:
     return 8 <= len(password) <= 128
 
 
-def is_account_locked(email: str) -> bool:
-    """Verifica si la cuenta está bloqueada"""
-    if email not in locked_until:
-        return False
-    if datetime.utcnow() < locked_until[email]:
-        return True
-    # Si ya pasó el tiempo, desbloquear
-    del locked_until[email]
-    if email in failed_attempts:
-        del failed_attempts[email]
-    return False
-
-
-def increment_failed_attempts(email: str) -> int:
-    """Incrementa y retorna el número de intentos fallidos"""
-    if email not in failed_attempts:
-        failed_attempts[email] = 0
-    failed_attempts[email] += 1
-    return failed_attempts[email]
-
-
-def lock_account(email: str, minutes: int = 15):
-    """Bloquea la cuenta por un tiempo determinado"""
-    from datetime import timedelta
-    locked_until[email] = datetime.utcnow() + timedelta(minutes=minutes)
-
-
-def reset_failed_attempts(email: str):
-    """Resetea los intentos fallidos"""
-    if email in failed_attempts:
-        del failed_attempts[email]
-    if email in locked_until:
-        del locked_until[email]
-
-
 @bp.route('/login', methods=['POST', 'OPTIONS'])
 def login():
     """
-    Endpoint de autenticación
+    Endpoint de autenticacion con base de datos
     ---
     tags:
-      - Autenticación
+      - Autenticacion
     parameters:
       - name: body
         in: body
@@ -127,7 +72,7 @@ def login():
                 role:
                   type: string
       400:
-        description: Datos de entrada inválidos
+        description: Datos de entrada invalidos
       401:
         description: Credenciales incorrectas
       403:
@@ -151,84 +96,96 @@ def login():
         email = data.get('email', '').strip().lower()
         password = data.get('password', '')
 
-        # Validaciones básicas
+        # Validaciones basicas
         if not email or not password:
             return jsonify({
                 'success': False,
-                'message': 'Email y contraseña son requeridos'
+                'message': 'Email y contrasena son requeridos'
             }), 400
 
         if not validate_email(email):
-            logger.warning(f"Intento de login con email inválido: {email} - IP: {request.remote_addr}")
+            logger.warning(f"Intento de login con email invalido: {email} - IP: {request.remote_addr}")
             return jsonify({
                 'success': False,
-                'message': 'Formato de email inválido'
+                'message': 'Formato de email invalido'
             }), 400
 
         if not validate_password(password):
             return jsonify({
                 'success': False,
-                'message': 'La contraseña debe tener entre 8 y 128 caracteres'
+                'message': 'La contrasena debe tener entre 8 y 128 caracteres'
             }), 400
 
-        # Verificar si la cuenta está bloqueada
-        if is_account_locked(email):
+        # Buscar usuario en la base de datos
+        user = User.query.filter_by(email=email).first()
+
+        if not user:
+            logger.warning(f"Usuario no existe: {email} - IP: {request.remote_addr}")
+            return jsonify({
+                'success': False,
+                'message': 'Credenciales incorrectas'
+            }), 401
+
+        # Verificar cuenta activa
+        if not user.is_active:
+            logger.warning(f"Cuenta inactiva: {email} - IP: {request.remote_addr}")
+            return jsonify({
+                'success': False,
+                'message': 'Cuenta inactiva. Contacte al administrador.'
+            }), 403
+
+        # Verificar si la cuenta esta bloqueada
+        if user.is_locked():
             logger.warning(f"Intento de login en cuenta bloqueada: {email} - IP: {request.remote_addr}")
             return jsonify({
                 'success': False,
-                'message': 'Cuenta bloqueada temporalmente. Intente más tarde.'
+                'message': 'Cuenta bloqueada temporalmente. Intente mas tarde.'
             }), 403
 
-        # Verificar credenciales contra el diccionario de usuarios
+        # Verificar contrasena con bcrypt
         max_attempts = current_app.config.get('MAX_LOGIN_ATTEMPTS', 5)
         lockout_time = current_app.config.get('LOCKOUT_TIME_MINUTES', 15)
 
-        # Buscar usuario en el diccionario
-        user_data = USERS.get(email)
-        
-        # Validar que el usuario existe y la contraseña coincide
-        if not user_data or user_data['password'] != password:
+        if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
             # Incrementar intentos fallidos
-            attempts = increment_failed_attempts(email)
+            user.increment_failed_attempts()
 
-            if attempts >= max_attempts:
-                lock_account(email, minutes=lockout_time)
+            if user.failed_login_attempts >= max_attempts:
+                user.lock_account(minutes=lockout_time)
+                db.session.commit()
                 logger.warning(
-                    f"Cuenta bloqueada por múltiples intentos fallidos: {email} "
+                    f"Cuenta bloqueada por multiples intentos fallidos: {email} "
                     f"- IP: {request.remote_addr}"
                 )
                 return jsonify({
                     'success': False,
-                    'message': f'Cuenta bloqueada por {lockout_time} minutos debido a múltiples intentos fallidos'
+                    'message': f'Cuenta bloqueada por {lockout_time} minutos debido a multiples intentos fallidos'
                 }), 403
 
+            db.session.commit()
             logger.warning(
-                f"Login fallido - Credenciales incorrectas: {email} "
-                f"- Intentos: {attempts}/{max_attempts} - IP: {request.remote_addr}"
+                f"Login fallido - Contrasena incorrecta: {email} "
+                f"- Intentos: {user.failed_login_attempts}/{max_attempts} - IP: {request.remote_addr}"
             )
 
             return jsonify({
                 'success': False,
-                'message': f'Credenciales incorrectas ({attempts}/{max_attempts} intentos)'
+                'message': f'Credenciales incorrectas ({user.failed_login_attempts}/{max_attempts} intentos)'
             }), 401
 
         # Login exitoso - Resetear intentos fallidos
-        reset_failed_attempts(email)
-
-        # Obtener datos del usuario autenticado
-        user_id = 1 if user_data['role'] == 'sales' else 2  # IDs distintos para cada usuario
-        user_role = user_data['role']
-        user_name = user_data['name']
+        user.reset_failed_attempts()
+        db.session.commit()
 
         # Generar token JWT
         token = JWTService.generate_token(
-            user_id=user_id,
-            email=email,
-            role=user_role
+            user_id=user.id,
+            email=user.email,
+            role=user.role
         )
 
         logger.info(
-            f"Login exitoso: {email} (rol: {user_role}) - IP: {request.remote_addr} "
+            f"Login exitoso: {user.email} (rol: {user.role}) - IP: {request.remote_addr} "
             f"- Timestamp: {datetime.utcnow().isoformat()}"
         )
 
@@ -236,9 +193,9 @@ def login():
             'success': True,
             'token': token,
             'user': {
-                'email': email,
-                'name': user_name,
-                'role': user_role
+                'email': user.email,
+                'name': user.name,
+                'role': user.role
             }
         }), 200
 
@@ -253,10 +210,10 @@ def login():
 @bp.route('/verify', methods=['GET', 'OPTIONS'])
 def verify_token():
     """
-    Verifica si el token es válido
+    Verifica si el token es valido
     ---
     tags:
-      - Autenticación
+      - Autenticacion
     parameters:
       - name: Authorization
         in: header
@@ -265,9 +222,9 @@ def verify_token():
         description: Bearer token
     responses:
       200:
-        description: Token válido
+        description: Token valido
       401:
-        description: Token inválido o expirado
+        description: Token invalido o expirado
     """
     from app.middlewares.auth import token_required, get_current_user
 
@@ -276,7 +233,7 @@ def verify_token():
         user = get_current_user()
         return jsonify({
             'success': True,
-            'message': 'Token válido',
+            'message': 'Token valido',
             'user': user
         }), 200
 

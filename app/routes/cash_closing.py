@@ -603,24 +603,71 @@ def get_sales_comparison_yoy():
             }
         }
 
+        # ========================================
+        # CALCULAR METAS (Ventas año anterior + 25%)
+        # ========================================
+        GROWTH_TARGET_PERCENTAGE = 25  # Meta de crecimiento del 25%
+
+        # Meta Diaria: Ventas del mismo dia del año pasado + 25%
+        previous_day_total = daily_comparison.get('previous_year', {}).get('total', 0)
+        daily_goal = previous_day_total * (1 + GROWTH_TARGET_PERCENTAGE / 100)
+        daily_goal_progress = (daily_comparison.get('current', {}).get('total', 0) / daily_goal * 100) if daily_goal > 0 else 0
+
+        # Meta Mensual: Ventas del mismo mes del año pasado (hasta el mismo dia) + 25%
+        monthly_goal = previous_month_total * (1 + GROWTH_TARGET_PERCENTAGE / 100)
+        monthly_goal_progress = (current_month_total / monthly_goal * 100) if monthly_goal > 0 else 0
+
+        goals = {
+            'growth_target_percentage': GROWTH_TARGET_PERCENTAGE,
+            'daily': {
+                'base_previous_year': previous_day_total,
+                'base_previous_year_formatted': format_cop(previous_day_total),
+                'goal': daily_goal,
+                'goal_formatted': format_cop(daily_goal),
+                'current': daily_comparison.get('current', {}).get('total', 0),
+                'current_formatted': daily_comparison.get('current', {}).get('formatted', '$0'),
+                'progress_percentage': round(daily_goal_progress, 1),
+                'remaining': max(0, daily_goal - daily_comparison.get('current', {}).get('total', 0)),
+                'remaining_formatted': format_cop(max(0, daily_goal - daily_comparison.get('current', {}).get('total', 0))),
+                'is_achieved': daily_comparison.get('current', {}).get('total', 0) >= daily_goal
+            },
+            'monthly': {
+                'base_previous_year': previous_month_total,
+                'base_previous_year_formatted': format_cop(previous_month_total),
+                'goal': monthly_goal,
+                'goal_formatted': format_cop(monthly_goal),
+                'current': current_month_total,
+                'current_formatted': format_cop(current_month_total),
+                'progress_percentage': round(monthly_goal_progress, 1),
+                'remaining': max(0, monthly_goal - current_month_total),
+                'remaining_formatted': format_cop(max(0, monthly_goal - current_month_total)),
+                'is_achieved': current_month_total >= monthly_goal
+            }
+        }
+
         response = {
             "success": True,
             "server_timestamp": get_colombia_timestamp(),
             "timezone": "America/Bogota",
             "daily_comparison": daily_comparison,
-            "monthly_comparison": monthly_comparison
+            "monthly_comparison": monthly_comparison,
+            "goals": goals
         }
 
         current_app.logger.info("=" * 80)
-        current_app.logger.info("COMPARACIÓN AÑO SOBRE AÑO")
+        current_app.logger.info("COMPARACION ANO SOBRE ANO Y METAS")
         current_app.logger.info("-" * 80)
-        current_app.logger.info(f"DÍA ACTUAL ({daily_comparison['current']['date']}): {daily_comparison['current']['formatted']}")
-        current_app.logger.info(f"MISMO DÍA AÑO ANTERIOR ({daily_comparison['previous_year']['date']}): {daily_comparison['previous_year']['formatted']}")
+        current_app.logger.info(f"DIA ACTUAL ({daily_comparison['current']['date']}): {daily_comparison['current']['formatted']}")
+        current_app.logger.info(f"MISMO DIA ANO ANTERIOR ({daily_comparison['previous_year']['date']}): {daily_comparison['previous_year']['formatted']}")
         current_app.logger.info(f"CAMBIO DIARIO: {daily_comparison['comparison']['percentage_change']}% ({daily_comparison['comparison']['growth_label']})")
         current_app.logger.info("-" * 80)
         current_app.logger.info(f"MES ACTUAL: {monthly_comparison['current']['formatted']}")
-        current_app.logger.info(f"MISMO MES AÑO ANTERIOR: {monthly_comparison['previous_year']['formatted']}")
+        current_app.logger.info(f"MISMO MES ANO ANTERIOR: {monthly_comparison['previous_year']['formatted']}")
         current_app.logger.info(f"CAMBIO MENSUAL: {monthly_comparison['comparison']['percentage_change']}% ({monthly_comparison['comparison']['growth_label']})")
+        current_app.logger.info("-" * 80)
+        current_app.logger.info("METAS (+25% sobre ano anterior)")
+        current_app.logger.info(f"META DIARIA: {goals['daily']['goal_formatted']} | Progreso: {goals['daily']['progress_percentage']}%")
+        current_app.logger.info(f"META MENSUAL: {goals['monthly']['goal_formatted']} | Progreso: {goals['monthly']['progress_percentage']}%")
         current_app.logger.info("=" * 80)
 
         return jsonify(response), 200
