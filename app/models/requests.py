@@ -1,9 +1,10 @@
 """
 Modelos Pydantic para requests
 """
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, EmailStr
 from datetime import date as date_type
-from typing import Dict, List
+from typing import Dict, List, Optional
+import re
 
 
 class CashClosingRequest(BaseModel):
@@ -143,3 +144,180 @@ class CashClosingRequest(BaseModel):
             if denom in valid_denominations:
                 result[denom] = max(0, int(value))
         return result
+
+
+class UserCreateRequest(BaseModel):
+    """Modelo para la creación de usuario"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: str = Field(
+        ...,
+        min_length=5,
+        max_length=255,
+        description="Email del usuario"
+    )
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="Contraseña del usuario"
+    )
+
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Nombre completo del usuario"
+    )
+
+    role: str = Field(
+        default="sales",
+        description="Rol del usuario (admin o sales)"
+    )
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Valida el formato del email"""
+        pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(pattern, v):
+            raise ValueError('Formato de email inválido')
+        return v.lower()
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        """Valida la fortaleza de la contraseña"""
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('La contraseña debe contener al menos una mayúscula')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('La contraseña debe contener al menos una minúscula')
+        if not re.search(r'\d', v):
+            raise ValueError('La contraseña debe contener al menos un número')
+        return v
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        """Valida que el rol sea válido"""
+        allowed_roles = ['admin', 'sales']
+        if v.lower() not in allowed_roles:
+            raise ValueError(f'Rol inválido. Debe ser uno de: {", ".join(allowed_roles)}')
+        return v.lower()
+
+
+class UserUpdateRequest(BaseModel):
+    """Modelo para la actualización de usuario"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: Optional[str] = Field(
+        default=None,
+        min_length=5,
+        max_length=255,
+        description="Email del usuario"
+    )
+
+    name: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+        description="Nombre completo del usuario"
+    )
+
+    role: Optional[str] = Field(
+        default=None,
+        description="Rol del usuario (admin o sales)"
+    )
+
+    is_active: Optional[bool] = Field(
+        default=None,
+        description="Estado del usuario"
+    )
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Valida el formato del email"""
+        if v is None:
+            return v
+        pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(pattern, v):
+            raise ValueError('Formato de email inválido')
+        return v.lower()
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        """Valida que el rol sea válido"""
+        if v is None:
+            return v
+        allowed_roles = ['admin', 'sales']
+        if v.lower() not in allowed_roles:
+            raise ValueError(f'Rol inválido. Debe ser uno de: {", ".join(allowed_roles)}')
+        return v.lower()
+
+
+class DateRangeRequest(BaseModel):
+    """Modelo para validación de rangos de fechas"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    start_date: date_type = Field(
+        ...,
+        description="Fecha de inicio en formato YYYY-MM-DD"
+    )
+
+    end_date: date_type = Field(
+        ...,
+        description="Fecha de fin en formato YYYY-MM-DD"
+    )
+
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_date_range(cls, v):
+        """Valida que las fechas estén en un rango razonable"""
+        from datetime import date
+        if v.year < 2020:
+            raise ValueError('La fecha debe ser posterior a 2020')
+        if v > date.today():
+            raise ValueError('La fecha no puede ser futura')
+        return v
+
+    def model_post_init(self, __context):
+        """Valida que start_date <= end_date"""
+        if self.start_date > self.end_date:
+            raise ValueError('La fecha de inicio no puede ser posterior a la fecha de fin')
+
+
+class ChangePasswordRequest(BaseModel):
+    """Modelo para cambio de contraseña"""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    current_password: str = Field(
+        ...,
+        min_length=1,
+        description="Contraseña actual"
+    )
+
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="Nueva contraseña"
+    )
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        """Valida la fortaleza de la nueva contraseña"""
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('La contraseña debe contener al menos una mayúscula')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('La contraseña debe contener al menos una minúscula')
+        if not re.search(r'\d', v):
+            raise ValueError('La contraseña debe contener al menos un número')
+        return v

@@ -46,3 +46,6 @@ openpyxl==3.1.2
 # PostgreSQL Database Driver (para Supabase)
 # Usando psycopg3 (mas moderno, mejor soporte Python 3.13+)
 psycopg[binary]>=3.1.0
+
+# Security Headers
+flask-talisman==1.1.0

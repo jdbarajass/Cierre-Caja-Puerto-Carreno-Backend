@@ -2,11 +2,11 @@
 Rutas de autenticacion
 Autenticacion basada en base de datos con bcrypt
 """
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, make_response
 import bcrypt
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.services.jwt_service import JWTService
 from app.models.user import db, User
@@ -189,15 +189,49 @@ def login():
             f"- Timestamp: {datetime.utcnow().isoformat()}"
         )
 
-        return jsonify({
+        # Crear respuesta con cookie httpOnly
+        response = make_response(jsonify({
             'success': True,
-            'token': token,
+            'token': token,  # También enviamos en body para compatibilidad
             'user': {
+                'id': user.id,
                 'email': user.email,
                 'name': user.name,
                 'role': user.role
             }
-        }), 200
+        }), 200)
+
+        # Configurar cookie httpOnly para el token JWT
+        # La cookie expira en 8 horas (igual que el token)
+        max_age = 8 * 60 * 60  # 8 horas en segundos
+        is_production = not current_app.config.get('DEBUG', False)
+
+        # En desarrollo local (DEBUG=True), usar SameSite=None para cross-origin
+        # En producción, usar SameSite=Lax para mayor seguridad
+        if is_production:
+            response.set_cookie(
+                'access_token',
+                value=token,
+                max_age=max_age,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                path='/'
+            )
+        else:
+            # En desarrollo: SameSite=None requiere Secure, pero sin HTTPS
+            # usamos Lax y confiamos en el fallback del header Authorization
+            response.set_cookie(
+                'access_token',
+                value=token,
+                max_age=max_age,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                path='/'
+            )
+
+        return response
 
     except Exception as e:
         logger.error(f"Error en login: {str(e)} - IP: {request.remote_addr}")
@@ -205,6 +239,43 @@ def login():
             'success': False,
             'message': 'Error interno del servidor'
         }), 500
+
+
+@bp.route('/logout', methods=['POST', 'OPTIONS'])
+def logout():
+    """
+    Endpoint para cerrar sesion y eliminar cookie
+    ---
+    tags:
+      - Autenticacion
+    responses:
+      200:
+        description: Logout exitoso
+    """
+    # Manejar preflight CORS
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    response = make_response(jsonify({
+        'success': True,
+        'message': 'Sesion cerrada exitosamente'
+    }), 200)
+
+    # Eliminar la cookie de acceso
+    is_production = not current_app.config.get('DEBUG', False)
+    response.set_cookie(
+        'access_token',
+        value='',
+        max_age=0,
+        httponly=True,
+        secure=is_production,
+        samesite='Lax',
+        path='/',
+        expires=0
+    )
+
+    logger.info(f"Logout exitoso - IP: {request.remote_addr}")
+    return response
 
 
 @bp.route('/verify', methods=['GET', 'OPTIONS'])

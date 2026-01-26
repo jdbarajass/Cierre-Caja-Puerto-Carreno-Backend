@@ -6,6 +6,7 @@ from flask import Flask, request, send_from_directory, send_file
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
 from flasgger import Swagger
 import logging
 import os
@@ -86,6 +87,35 @@ def create_app(config_class=Config):
 
         return response
 
+    # Configurar Flask-Talisman para headers de seguridad
+    # Solo habilitar en producción (cuando no está en modo DEBUG)
+    if not app.config['DEBUG']:
+        # Content Security Policy
+        csp = {
+            'default-src': "'self'",
+            'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            'style-src': ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            'font-src': ["'self'", "https://fonts.gstatic.com"],
+            'img-src': ["'self'", "data:", "blob:"],
+            'connect-src': ["'self'"] + allowed_origins,
+        }
+
+        Talisman(
+            app,
+            force_https=False,  # Manejar HTTPS a nivel de proxy/Render
+            strict_transport_security=True,
+            strict_transport_security_max_age=31536000,  # 1 año
+            strict_transport_security_include_subdomains=True,
+            content_security_policy=csp,
+            content_security_policy_nonce_in=['script-src'],
+            referrer_policy='strict-origin-when-cross-origin',
+            session_cookie_secure=True,
+            session_cookie_http_only=True,
+        )
+        app.logger.info("Flask-Talisman habilitado con headers de seguridad")
+    else:
+        app.logger.info("Flask-Talisman deshabilitado en modo DEBUG")
+
     # Configurar Rate Limiting
     limiter = Limiter(
         app=app,
@@ -125,6 +155,7 @@ def create_app(config_class=Config):
     from app.routes.analytics import bp as analytics_bp
     from app.routes.inventory import bp as inventory_bp
     from app.routes.direct_api import bp as direct_api_bp
+    from app.routes.users import bp as users_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -133,6 +164,7 @@ def create_app(config_class=Config):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(inventory_bp)
     app.register_blueprint(direct_api_bp)  # APIs directas de Alegra
+    app.register_blueprint(users_bp)  # CRUD de usuarios (admin)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

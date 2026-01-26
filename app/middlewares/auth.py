@@ -35,17 +35,21 @@ def token_required(f):
 
         token = None
 
-        # Obtener el token del header Authorization
-        auth_header = request.headers.get('Authorization')
+        # PRIORIDAD 1: Intentar obtener el token de la cookie httpOnly
+        token = request.cookies.get('access_token')
 
-        if auth_header:
-            # Formato esperado: "Bearer <token>"
-            parts = auth_header.split()
-            if len(parts) == 2 and parts[0].lower() == 'bearer':
-                token = parts[1]
-            elif len(parts) == 1:
-                # Por si envían solo el token sin "Bearer"
-                token = parts[0]
+        # PRIORIDAD 2 (fallback): Obtener el token del header Authorization
+        if not token:
+            auth_header = request.headers.get('Authorization')
+
+            if auth_header:
+                # Formato esperado: "Bearer <token>"
+                parts = auth_header.split()
+                if len(parts) == 2 and parts[0].lower() == 'bearer':
+                    token = parts[1]
+                elif len(parts) == 1:
+                    # Por si envían solo el token sin "Bearer"
+                    token = parts[0]
 
         if not token:
             logger.warning(f"Token no proporcionado - IP: {request.remote_addr}")
