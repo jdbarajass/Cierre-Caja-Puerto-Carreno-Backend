@@ -30,6 +30,7 @@ def create_app(config_class=Config):
 
     # Initialize SQLAlchemy database
     from app.models.user import db
+    from app.models.koaj_code import KoajCode  # Import to ensure table is created
 
     db.init_app(app)
 
@@ -156,6 +157,7 @@ def create_app(config_class=Config):
     from app.routes.inventory import bp as inventory_bp
     from app.routes.direct_api import bp as direct_api_bp
     from app.routes.users import bp as users_bp
+    from app.routes.koaj_codes import bp as koaj_codes_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -165,6 +167,7 @@ def create_app(config_class=Config):
     app.register_blueprint(inventory_bp)
     app.register_blueprint(direct_api_bp)  # APIs directas de Alegra
     app.register_blueprint(users_bp)  # CRUD de usuarios (admin)
+    app.register_blueprint(koaj_codes_bp)  # Códigos y precios KOAJ
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
