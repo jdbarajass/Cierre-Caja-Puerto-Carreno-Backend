@@ -8,7 +8,7 @@ Werkzeug==3.0.0
 requests==2.31.0
 
 # WSGI Server
-gunicorn==20.1.0
+gunicorn==22.0.0
 
 # CORS
 flask-cors==4.0.0
