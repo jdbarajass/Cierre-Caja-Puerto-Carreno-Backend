@@ -222,31 +222,114 @@ class SKUParser:
             if any(code in sku_code for code in ['62', '63', '64', '65']):
                 return SKUParser._parse_unique_size_sku(sku_code, gender_code, gender)
 
-            # Intentar parseo normal
-            # El SKU tiene formato variable, intentaremos múltiples estrategias
+            # Estrategia principal: identificar el código de prenda primero,
+            # luego determinar el tipo de talla correcto para ese tipo de prenda.
+            # Esto evita confundir tallas numéricas de jean (ej: 002 → "2") con
+            # tallas alfabéticas de camiseta (ej: último dígito 2 → "S").
+            for garment_len in [2, 1]:
+                garment_code = sku_code[4:4 + garment_len]
+                if garment_code not in SKUParser.GARMENT_TYPE_MAP:
+                    continue
 
-            # Estrategia 1: Talla de 1 dígito (alfabéticas: 1-5)
+                garment_type = SKUParser.GARMENT_TYPE_MAP[garment_code]
+                size_type = SKUParser.determine_size_type(garment_code, gender)
+                remaining = sku_code[4 + garment_len:]  # precio(5) + talla(1 o 2 o 3 o 4)
+
+                if size_type == 'ALPHA':
+                    size_code = remaining[-1]
+                    if size_code in SKUParser.ALPHA_SIZE_MAP:
+                        price_str = remaining[:-1]
+                        price = int(price_str) if price_str.isdigit() else 0
+                        return {
+                            'sku_code': sku_code,
+                            'gender_code': gender_code,
+                            'gender': gender,
+                            'garment_code': garment_code,
+                            'garment_type': garment_type,
+                            'price': price,
+                            'size_code': size_code,
+                            'size': SKUParser.ALPHA_SIZE_MAP[size_code],
+                            'size_type': 'ALPHA',
+                            'is_valid': True,
+                            'error': ''
+                        }
+
+                elif size_type == 'NUMERIC':
+                    # Intentar 3 dígitos primero (002-038), luego 2 dígitos (10-38)
+                    for size_len in [3, 2]:
+                        if len(remaining) > size_len:
+                            size_code = remaining[-size_len:]
+                            if size_code in SKUParser.NUMERIC_SIZE_MAP:
+                                price_str = remaining[:-size_len]
+                                price = int(price_str) if price_str.isdigit() else 0
+                                return {
+                                    'sku_code': sku_code,
+                                    'gender_code': gender_code,
+                                    'gender': gender,
+                                    'garment_code': garment_code,
+                                    'garment_type': garment_type,
+                                    'price': price,
+                                    'size_code': size_code,
+                                    'size': SKUParser.NUMERIC_SIZE_MAP[size_code],
+                                    'size_type': 'NUMERIC',
+                                    'is_valid': True,
+                                    'error': ''
+                                }
+
+                elif size_type == 'KIDS':
+                    # Intentar rango de 4 dígitos (1214), luego 3 dígitos numéricos
+                    size_code_4 = remaining[-4:]
+                    if size_code_4 in SKUParser.KIDS_SIZE_MAP:
+                        price_str = remaining[:-4]
+                        price = int(price_str) if price_str.isdigit() else 0
+                        return {
+                            'sku_code': sku_code,
+                            'gender_code': gender_code,
+                            'gender': gender,
+                            'garment_code': garment_code,
+                            'garment_type': garment_type,
+                            'price': price,
+                            'size_code': size_code_4,
+                            'size': SKUParser.KIDS_SIZE_MAP[size_code_4],
+                            'size_type': 'KIDS',
+                            'is_valid': True,
+                            'error': ''
+                        }
+                    # Fallback niños: talla numérica de 3 dígitos
+                    size_code_3 = remaining[-3:]
+                    if size_code_3 in SKUParser.NUMERIC_SIZE_MAP:
+                        price_str = remaining[:-3]
+                        price = int(price_str) if price_str.isdigit() else 0
+                        return {
+                            'sku_code': sku_code,
+                            'gender_code': gender_code,
+                            'gender': gender,
+                            'garment_code': garment_code,
+                            'garment_type': garment_type,
+                            'price': price,
+                            'size_code': size_code_3,
+                            'size': SKUParser.NUMERIC_SIZE_MAP[size_code_3],
+                            'size_type': 'NUMERIC',
+                            'is_valid': True,
+                            'error': ''
+                        }
+
+            # Fallback: heurísticas originales para SKUs con código de prenda no reconocido
+            last_3 = sku_code[-3:]
+            if len(sku_code) >= 3 and last_3 in SKUParser.NUMERIC_SIZE_MAP and last_3.startswith('0'):
+                return SKUParser._parse_with_numeric_size(sku_code, gender_code, gender, last_3)
+
+            last_2 = sku_code[-2:]
+            if len(sku_code) >= 2 and last_2 in SKUParser.NUMERIC_SIZE_MAP and last_2.isdigit() and int(last_2) >= 10:
+                return SKUParser._parse_with_numeric_size(sku_code, gender_code, gender, last_2)
+
+            last_4 = sku_code[-4:]
+            if len(sku_code) >= 4 and last_4 in SKUParser.KIDS_SIZE_MAP:
+                return SKUParser._parse_with_kids_size(sku_code, gender_code, gender, last_4)
+
             last_1 = sku_code[-1]
             if last_1 in SKUParser.ALPHA_SIZE_MAP:
                 return SKUParser._parse_with_alpha_size(sku_code, gender_code, gender, last_1)
-
-            # Estrategia 2: Talla de 3 dígitos (numéricas: 002-038)
-            if len(sku_code) >= 3:
-                last_3 = sku_code[-3:]
-                if last_3 in SKUParser.NUMERIC_SIZE_MAP:
-                    return SKUParser._parse_with_numeric_size(sku_code, gender_code, gender, last_3)
-
-            # Estrategia 3: Talla de 2 dígitos (numéricas sin cero: 10-38)
-            if len(sku_code) >= 2:
-                last_2 = sku_code[-2:]
-                if last_2 in SKUParser.NUMERIC_SIZE_MAP and last_2.isdigit():
-                    return SKUParser._parse_with_numeric_size(sku_code, gender_code, gender, last_2)
-
-            # Estrategia 4: Talla de 4 dígitos (niños con rangos: 1214)
-            if len(sku_code) >= 4:
-                last_4 = sku_code[-4:]
-                if last_4 in SKUParser.KIDS_SIZE_MAP:
-                    return SKUParser._parse_with_kids_size(sku_code, gender_code, gender, last_4)
 
             # Si no se pudo determinar, marcar como UNKNOWN
             logger.warning(f"No se pudo determinar talla para SKU: {sku_code}")
