@@ -222,10 +222,10 @@ def create_user():
             }), 400
 
         # Validar rol
-        if role not in ['admin', 'sales']:
+        if role not in ['admin', 'sales', 'partner']:
             return jsonify({
                 'success': False,
-                'message': 'Rol invalido. Debe ser admin o sales'
+                'message': 'Rol invalido. Debe ser admin, sales o partner'
             }), 400
 
         # Verificar si el email ya existe
@@ -360,7 +360,7 @@ def update_user(user_id):
 
         if 'role' in data and data['role']:
             role = data['role'].strip().lower()
-            if role not in ['admin', 'sales']:
+            if role not in ['admin', 'sales', 'partner']:
                 return jsonify({
                     'success': False,
                     'message': 'Rol invalido'
