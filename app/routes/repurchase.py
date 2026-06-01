@@ -1,12 +1,10 @@
 """
 Rutas de Cuentas de Recompras.
-
-Acceso:
-- admin:   CRUD completo
-- partner: solo lectura (GET)
+Acceso: solo admin.
 """
 from flask import Blueprint, request, jsonify
-from datetime import datetime
+from datetime import datetime, date as dt_date
+import calendar
 import logging
 
 from app.middlewares.auth import token_required, get_current_user
@@ -16,21 +14,25 @@ from app.models.repurchase import RepurchaseEntry
 logger = logging.getLogger(__name__)
 bp = Blueprint('repurchase', __name__)
 
-ALLOWED_ROLES = ('admin', 'partner')
 MONEY_FIELDS = ['efectivo', 'datafono', 'qr', 'daviplata', 'nequi', 'bbva',
                 'valor_no_enviado', 'sobrante_mes_anterior']
 
 
-def _check_role():
-    """Devuelve el rol del usuario actual o lanza 403."""
+def _require_admin():
     role = get_current_user().get('role')
-    if role not in ALLOWED_ROLES:
-        return None, (jsonify({'success': False, 'message': 'Sin permisos para esta sección'}), 403)
-    return role, None
+    if role != 'admin':
+        return jsonify({'success': False, 'message': 'Solo el administrador puede acceder'}), 403
+    return None
 
 
 def parse_date(value):
     return datetime.strptime(value, '%Y-%m-%d').date()
+
+
+def _month_range(year, month):
+    """Devuelve (inicio, fin) para un mes dado."""
+    last_day = calendar.monthrange(year, month)[1]
+    return dt_date(year, month, 1), dt_date(year, month, last_day)
 
 
 # ─────────────────────────────────────────────
@@ -43,40 +45,45 @@ def list_entries():
     if request.method == 'OPTIONS':
         return '', 204
 
-    role, err = _check_role()
+    err = _require_admin()
     if err:
         return err
 
     try:
-        # Filtros opcionales por mes/año
         year  = request.args.get('year',  type=int)
         month = request.args.get('month', type=int)
 
         q = RepurchaseEntry.query
-        if year:
-            q = q.filter(db.extract('year', RepurchaseEntry.date) == year)
-        if month:
-            q = q.filter(db.extract('month', RepurchaseEntry.date) == month)
 
-        entries = q.order_by(RepurchaseEntry.date.asc()).all()
+        # Filtro por rango de fechas en lugar de db.extract (no disponible en Flask-SQLAlchemy)
+        if year and month:
+            start, end = _month_range(year, month)
+            q = q.filter(RepurchaseEntry.date >= start, RepurchaseEntry.date <= end)
+        elif year:
+            q = q.filter(RepurchaseEntry.date >= dt_date(year, 1, 1),
+                         RepurchaseEntry.date <= dt_date(year, 12, 31))
 
-        # Totales globales del período
+        entries = q.order_by(RepurchaseEntry.date.asc(), RepurchaseEntry.id.asc()).all()
+
         totals = {
-            'efectivo':   sum(e.efectivo   for e in entries),
-            'datafono':   sum(e.datafono   for e in entries),
-            'qr':         sum(e.qr         for e in entries),
-            'daviplata':  sum(e.daviplata  for e in entries),
-            'nequi':      sum(e.nequi      for e in entries),
-            'bbva':       sum(e.bbva       for e in entries),
-            'total_enviado': sum(e.total_enviado for e in entries),
-            'sobrante_acumulado': sum(e.sobrante_mes_anterior for e in entries),
+            'efectivo':          sum(e.efectivo   for e in entries),
+            'datafono':          sum(e.datafono   for e in entries),
+            'qr':                sum(e.qr         for e in entries),
+            'daviplata':         sum(e.daviplata  for e in entries),
+            'nequi':             sum(e.nequi      for e in entries),
+            'bbva':              sum(e.bbva       for e in entries),
+            'total_enviado':     sum(e.total_enviado for e in entries),
+            'sobrante_acumulado':sum(e.sobrante_mes_anterior for e in entries),
         }
+        # Comisión 4‰ sobre el total enviado
+        totals['fee_4mil']      = round(totals['total_enviado'] * 4 / 1000)
+        totals['valor_sobrante']= totals['total_enviado'] - totals['fee_4mil']
 
         return jsonify({
             'success': True,
             'entries': [e.to_dict() for e in entries],
-            'totals': totals,
-            'count': len(entries)
+            'totals':  totals,
+            'count':   len(entries)
         }), 200
 
     except Exception as e:
@@ -94,11 +101,9 @@ def create_entry():
     if request.method == 'OPTIONS':
         return '', 204
 
-    role, err = _check_role()
+    err = _require_admin()
     if err:
         return err
-    if role != 'admin':
-        return jsonify({'success': False, 'message': 'Solo el administrador puede crear registros'}), 403
 
     try:
         data = request.get_json() or {}
@@ -106,8 +111,13 @@ def create_entry():
         if 'date' not in data:
             return jsonify({'success': False, 'message': 'El campo date es requerido'}), 400
 
+        fecha_compra = None
+        if data.get('fecha_compra'):
+            fecha_compra = parse_date(data['fecha_compra'])
+
         entry = RepurchaseEntry(
             date=parse_date(data['date']),
+            descripcion=data.get('descripcion', '').strip() or 'Recompra Jhonatan',
             valor_no_enviado=float(data.get('valor_no_enviado', 0)),
             efectivo=float(data.get('efectivo', 0)),
             datafono=float(data.get('datafono', 0)),
@@ -116,6 +126,7 @@ def create_entry():
             nequi=float(data.get('nequi', 0)),
             bbva=float(data.get('bbva', 0)),
             sobrante_mes_anterior=float(data.get('sobrante_mes_anterior', 0)),
+            fecha_compra=fecha_compra,
             notes=data.get('notes', '').strip() or None,
             created_by=get_current_user().get('userId')
         )
@@ -143,11 +154,9 @@ def update_entry(entry_id):
     if request.method == 'OPTIONS':
         return '', 204
 
-    role, err = _check_role()
+    err = _require_admin()
     if err:
         return err
-    if role != 'admin':
-        return jsonify({'success': False, 'message': 'Solo el administrador puede editar'}), 403
 
     entry = RepurchaseEntry.query.get_or_404(entry_id)
 
@@ -156,6 +165,10 @@ def update_entry(entry_id):
 
         if 'date' in data:
             entry.date = parse_date(data['date'])
+        if 'descripcion' in data:
+            entry.descripcion = data['descripcion'].strip() or 'Recompra Jhonatan'
+        if 'fecha_compra' in data:
+            entry.fecha_compra = parse_date(data['fecha_compra']) if data['fecha_compra'] else None
 
         for field in MONEY_FIELDS:
             if field in data:
@@ -183,11 +196,9 @@ def delete_entry(entry_id):
     if request.method == 'OPTIONS':
         return '', 204
 
-    role, err = _check_role()
+    err = _require_admin()
     if err:
         return err
-    if role != 'admin':
-        return jsonify({'success': False, 'message': 'Solo el administrador puede eliminar'}), 403
 
     entry = RepurchaseEntry.query.get_or_404(entry_id)
     db.session.delete(entry)
@@ -196,7 +207,7 @@ def delete_entry(entry_id):
 
 
 # ─────────────────────────────────────────────
-#  RESUMEN POR MES (para el panel de totales)
+#  RESUMEN POR MES
 # ─────────────────────────────────────────────
 
 @bp.route('/api/repurchase/monthly-summary', methods=['GET', 'OPTIONS'])
@@ -205,12 +216,11 @@ def monthly_summary():
     if request.method == 'OPTIONS':
         return '', 204
 
-    role, err = _check_role()
+    err = _require_admin()
     if err:
         return err
 
     try:
-        # Obtener todos los años/meses disponibles
         entries = RepurchaseEntry.query.order_by(RepurchaseEntry.date.asc()).all()
 
         months = {}
@@ -227,21 +237,23 @@ def monthly_summary():
                     'valor_no_enviado': 0, 'count': 0
                 }
             m = months[key]
-            m['efectivo']   += e.efectivo
-            m['datafono']   += e.datafono
-            m['qr']         += e.qr
-            m['daviplata']  += e.daviplata
-            m['nequi']      += e.nequi
-            m['bbva']       += e.bbv if hasattr(e, 'bbv') else e.bbva
-            m['total_enviado'] += e.total_enviado
+            m['efectivo']            += e.efectivo
+            m['datafono']            += e.datafono
+            m['qr']                  += e.qr
+            m['daviplata']           += e.daviplata
+            m['nequi']               += e.nequi
+            m['bbva']                += e.bbva
+            m['total_enviado']       += e.total_enviado
             m['sobrante_mes_anterior'] += e.sobrante_mes_anterior
-            m['valor_no_enviado'] = e.valor_no_enviado  # último valor del mes
-            m['count'] += 1
+            m['valor_no_enviado']    = e.valor_no_enviado
+            m['count']               += 1
 
-        return jsonify({
-            'success': True,
-            'months': list(months.values())
-        }), 200
+        # Calcular fee 4‰ y sobrante por mes
+        for m in months.values():
+            m['fee_4mil']       = round(m['total_enviado'] * 4 / 1000)
+            m['valor_sobrante'] = m['total_enviado'] - m['fee_4mil']
+
+        return jsonify({'success': True, 'months': list(months.values())}), 200
 
     except Exception as e:
         logger.error(f"Error en resumen mensual recompras: {e}")
