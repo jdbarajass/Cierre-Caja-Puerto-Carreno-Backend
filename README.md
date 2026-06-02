@@ -2,7 +2,7 @@
 
 Sistema backend para procesamiento de cierres de caja con integración a Alegra.
 
-## Versión 2.2.0 - Sistema Completo de Inventario
+## Versión 2.3.0 - Control de Empleadas y Cuentas Recompras
 
 Esta versión incluye una refactorización completa del código con mejores prácticas, arquitectura modular, validación robusta y documentación completa. Ahora incluye análisis completo de productos vendidos con reportes en JSON y PDF, más un **sistema completo de análisis de inventario** con métricas ejecutivas, clasificación ABC, alertas de stock y análisis por departamento.
 
@@ -32,6 +32,9 @@ Esta versión incluye una refactorización completa del código con mejores prá
 - ✅ **Clasificación ABC** de productos por valor
 - ✅ **Alertas de stock** bajo y productos sin inventario
 - ✅ **Análisis por departamento** (HOMBRE, MUJER, NIÑO, NIÑA)
+- ✅ **Control de Empleadas** — ropa, préstamos, permisos, vacaciones, pagos
+- ✅ **Cuentas Recompras** — tabla mensual de dinero enviado al socio con cálculo 4‰
+- ✅ **Migración segura** de base de datos (ADD COLUMN, nunca DROP TABLE)
 
 ---
 
@@ -44,12 +47,17 @@ cierre-caja-api/
 │   ├── config.py             # Configuración centralizada
 │   ├── exceptions.py         # Excepciones custom
 │   ├── routes/               # Endpoints de la API
-│   │   ├── cash_closing.py   # Endpoint principal
+│   │   ├── cash_closing.py   # Endpoint principal de cierre
 │   │   ├── health.py         # Health check
-│   │   ├── auth.py           # Autenticación
+│   │   ├── auth.py           # Autenticación JWT
 │   │   ├── products.py       # Análisis de productos
 │   │   ├── analytics.py      # Análisis de ventas
-│   │   └── inventory.py      # Análisis de inventario
+│   │   ├── inventory.py      # Análisis de inventario
+│   │   ├── direct_api.py     # APIs directas de Alegra
+│   │   ├── users.py          # CRUD de usuarios (admin)
+│   │   ├── koaj_codes.py     # Códigos y precios KOAJ
+│   │   ├── employee_records.py  # Control de empleadas
+│   │   └── repurchase.py     # Cuentas de recompras
 │   ├── services/             # Lógica de negocio
 │   │   ├── alegra_client.py  # Cliente API Alegra
 │   │   ├── cash_calculator.py# Calculador de caja
@@ -61,10 +69,13 @@ cierre-caja-api/
 │   │   └── pdf_generator.py  # Generador de PDFs
 │   ├── middlewares/          # Middlewares
 │   │   └── auth.py           # Middleware de autenticación
-│   ├── models/               # Schemas y modelos
-│   │   ├── requests.py       # Request models
-│   │   ├── responses.py      # Response models
-│   │   └── user.py           # Modelo de usuario
+│   ├── models/               # Schemas y modelos SQLAlchemy
+│   │   ├── user.py              # Usuario (auth, roles: admin/sales/partner)
+│   │   ├── koaj_code.py         # Códigos de categorías KOAJ
+│   │   ├── employee_records.py  # Empleadas: ropa, préstamos, permisos, vacaciones, pagos
+│   │   ├── repurchase.py        # Entradas de cuentas recompras
+│   │   ├── requests.py          # Request models (Pydantic)
+│   │   └── responses.py         # Response models
 │   └── utils/                # Utilidades
 │       ├── formatters.py     # Formateo de datos
 │       ├── validators.py     # Validaciones
@@ -856,6 +867,71 @@ Usa **Bounded Knapsack con Programación Dinámica** para calcular la base exact
 ---
 
 ## 📝 Changelog
+
+### v2.3.0 (2026-06-02)
+
+#### ✨ Módulo Control de Empleadas
+
+Nuevo conjunto de endpoints para gestión interna del personal de la tienda.
+Las tablas se crean automáticamente en Supabase/SQLite al arrancar el servidor.
+
+**Identificación**: campo `nombre_empleada` de texto libre (no FK a usuarios), permite
+que varias personas compartan la misma cuenta y se identifiquen por nombre (Mónica, Camila, etc.)
+
+| Endpoint | Método | Auth | Descripción |
+|---|---|---|---|
+| `/api/employee-records/clothing` | GET | JWT | Lista prendas (filtro opcional: `?nombre_empleada=Monica`) |
+| `/api/employee-records/clothing` | POST | JWT | Registra prenda con descuento |
+| `/api/employee-records/clothing/<id>` | PUT/DELETE | JWT Admin | Edita o elimina |
+| `/api/employee-records/loans` | GET/POST | JWT | Préstamos de dinero |
+| `/api/employee-records/loans/<id>` | PUT/DELETE | JWT Admin | — |
+| `/api/employee-records/permissions` | GET/POST | JWT | Permisos/incapacidades/llegadas tarde |
+| `/api/employee-records/permissions/<id>` | PUT/DELETE | JWT Admin | — |
+| `/api/employee-records/vacations` | GET/POST | JWT | Vacaciones (calcula días automáticamente) |
+| `/api/employee-records/vacations/<id>` | PUT/DELETE | JWT Admin | — |
+| `/api/employee-records/payments` | GET | JWT | Ver pagos |
+| `/api/employee-records/payments` | POST | JWT Admin | Registrar quincena/prima/comisión |
+| `/api/employee-records/payments/<id>` | PUT/DELETE | JWT Admin | — |
+| `/api/employee-records/summary` | GET | JWT Admin | Resumen agrupado por empleada |
+
+**Reglas de negocio**:
+- Cualquier usuario autenticado puede crear y ver registros
+- Solo `admin` puede editar, eliminar y registrar pagos
+
+#### ✨ Módulo Cuentas Recompras
+
+Seguimiento del dinero enviado al socio para recompra de mercancía.
+Replica la estructura del cuadro Excel de control.
+
+| Endpoint | Método | Auth | Descripción |
+|---|---|---|---|
+| `/api/repurchase` | GET | JWT Admin | Lista entradas (filtros: `?year=2026&month=6`) |
+| `/api/repurchase` | POST | JWT Admin | Crea una fila |
+| `/api/repurchase/<id>` | PUT/DELETE | JWT Admin | Edita o elimina |
+| `/api/repurchase/monthly-summary` | GET | JWT Admin | Resumen agrupado por mes |
+
+**Cálculos automáticos** (propiedades del modelo, no almacenadas):
+- `total_enviado` = efectivo + datafono + qr + daviplata + nequi + bbva
+- `fee_4mil` = total_enviado × 4 / 1000 (comisión 4‰)
+- `valor_sobrante` = total_enviado − fee_4mil
+
+**Campos de la tabla**:
+```
+date, descripcion, valor_no_enviado,
+efectivo, datafono, qr, daviplata, nequi, bbva,
+sobrante_mes_anterior, fecha_compra, notes
+```
+
+#### 🔒 Migración segura de base de datos
+
+La función `_migrate_employee_tables()` en `app/__init__.py` usa únicamente
+`ALTER TABLE ADD COLUMN` para cambios de esquema. **Nunca borra tablas ni datos**.
+
+Para agregar una columna en el futuro:
+```python
+# En _migrate_employee_tables(), dentro del bloque with db.engine.connect() as conn:
+add_column_if_missing(conn, 'employee_clothing', 'nueva_columna', 'VARCHAR(100)')
+```
 
 ### v2.2.1 (2025-12-02)
 
