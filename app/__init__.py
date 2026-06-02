@@ -39,9 +39,10 @@ def create_app(config_class=Config):
 
     db.init_app(app)
 
-    # Create tables if they don't exist
+    # Create tables and run migrations if needed
     with app.app_context():
         try:
+            _migrate_employee_tables(db, app)
             db.create_all()
             app.logger.info("Database tables created/verified successfully")
         except Exception as e:
@@ -259,6 +260,32 @@ def create_app(config_class=Config):
     app.logger.info("=" * 60)
 
     return app
+
+
+def _migrate_employee_tables(db, app):
+    """
+    Detecta si las tablas de empleadas tienen el esquema antiguo (employee_id FK)
+    y las recrea con el nuevo esquema (nombre_empleada texto libre).
+    Se ejecuta una sola vez; después db.create_all() ya no las toca.
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    tables = inspector.get_table_names()
+    needs_migration = False
+
+    if 'employee_clothing' in tables:
+        cols = [c['name'] for c in inspector.get_columns('employee_clothing')]
+        if 'employee_id' in cols:
+            needs_migration = True
+
+    if needs_migration:
+        app.logger.info("Migrando tablas de empleadas al nuevo esquema (nombre_empleada)...")
+        with db.engine.connect() as conn:
+            for table in ['employee_clothing', 'employee_loans', 'employee_permissions',
+                          'employee_vacations', 'employee_payments']:
+                conn.execute(text(f'DROP TABLE IF EXISTS {table}'))
+            conn.commit()
+        app.logger.info("Tablas de empleadas eliminadas; se recrearán con el nuevo esquema.")
 
 
 def setup_logging(app):

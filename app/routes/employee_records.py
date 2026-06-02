@@ -1,16 +1,16 @@
 """
-Rutas de Control de Empleadas: Ropa, Préstamos, Permisos, Vacaciones, Pagos.
-
-Reglas de acceso:
-- sales: solo puede CREAR y VER sus propios registros (sin editar ni borrar)
-- admin: CRUD completo sobre todos los registros
+Rutas de Control de Empleadas.
+El campo nombre_empleada es texto libre — identifica a la persona sin depender de la sesión.
+Reglas:
+- Cualquier usuario autenticado puede CREAR y VER registros
+- Solo admin puede EDITAR y ELIMINAR
 """
 from flask import Blueprint, request, jsonify
-from datetime import datetime, date
+from datetime import datetime
 import logging
 
-from app.middlewares.auth import token_required, role_required, get_current_user
-from app.models.user import db, User
+from app.middlewares.auth import token_required, get_current_user
+from app.models.user import db
 from app.models.employee_records import (
     EmployeeClothing, EmployeeLoan,
     EmployeePermission, EmployeeVacation, EmployeePayment
@@ -21,7 +21,6 @@ bp = Blueprint('employee_records', __name__)
 
 
 def parse_date(value):
-    """Convierte string YYYY-MM-DD a date, o lanza ValueError."""
     return datetime.strptime(value, '%Y-%m-%d').date()
 
 
@@ -29,8 +28,11 @@ def _is_admin():
     return get_current_user().get('role') == 'admin'
 
 
-def _current_user_id():
-    return get_current_user().get('userId')
+def _require_name(data):
+    name = (data.get('nombre_empleada') or '').strip()
+    if not name:
+        return None, (jsonify({'success': False, 'message': 'El campo nombre_empleada es requerido'}), 400)
+    return name, None
 
 
 # ─────────────────────────────────────────────
@@ -43,21 +45,13 @@ def list_clothing():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        if _is_admin():
-            employee_id = request.args.get('employee_id')
-            q = EmployeeClothing.query
-            if employee_id:
-                q = q.filter_by(employee_id=int(employee_id))
-        else:
-            q = EmployeeClothing.query.filter_by(employee_id=_current_user_id())
-
+        q = EmployeeClothing.query
+        nombre = request.args.get('nombre_empleada')
+        if nombre:
+            q = q.filter(EmployeeClothing.nombre_empleada.ilike(f'%{nombre}%'))
         items = q.order_by(EmployeeClothing.date.desc()).all()
         total = sum(i.final_value for i in items)
-        return jsonify({
-            'success': True,
-            'items': [i.to_dict() for i in items],
-            'total_acumulado': total
-        }), 200
+        return jsonify({'success': True, 'items': [i.to_dict() for i in items], 'total_acumulado': total}), 200
     except Exception as e:
         logger.error(f"Error listando ropa: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener registros'}), 500
@@ -70,8 +64,9 @@ def create_clothing():
         return '', 204
     try:
         data = request.get_json() or {}
-        required = ['date', 'product', 'value', 'discount_pct']
-        for f in required:
+        nombre, err = _require_name(data)
+        if err: return err
+        for f in ['date', 'product', 'value', 'discount_pct']:
             if f not in data:
                 return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
 
@@ -79,14 +74,8 @@ def create_clothing():
         discount_pct = float(data['discount_pct'])
         final_value = round(value * (1 - discount_pct / 100), 2)
 
-        # sales registra para sí mismo; admin puede especificar employee_id
-        if _is_admin() and data.get('employee_id'):
-            employee_id = int(data['employee_id'])
-        else:
-            employee_id = _current_user_id()
-
         item = EmployeeClothing(
-            employee_id=employee_id,
+            nombre_empleada=nombre,
             date=parse_date(data['date']),
             product=data['product'].strip(),
             value=value,
@@ -96,7 +85,6 @@ def create_clothing():
         )
         db.session.add(item)
         db.session.commit()
-        logger.info(f"Ropa creada id={item.id} por user={_current_user_id()}")
         return jsonify({'success': True, 'item': item.to_dict()}), 201
     except ValueError as e:
         return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
@@ -108,34 +96,30 @@ def create_clothing():
 
 @bp.route('/api/employee-records/clothing/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def manage_clothing(item_id):
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
     item = EmployeeClothing.query.get_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
-    # PUT
+        return jsonify({'success': True}), 200
     try:
         data = request.get_json() or {}
-        if 'date' in data:
-            item.date = parse_date(data['date'])
-        if 'product' in data:
-            item.product = data['product'].strip()
-        if 'value' in data:
-            item.value = float(data['value'])
-        if 'discount_pct' in data:
-            item.discount_pct = float(data['discount_pct'])
+        if 'nombre_empleada' in data and data['nombre_empleada'].strip():
+            item.nombre_empleada = data['nombre_empleada'].strip()
+        if 'date' in data: item.date = parse_date(data['date'])
+        if 'product' in data: item.product = data['product'].strip()
+        if 'value' in data: item.value = float(data['value'])
+        if 'discount_pct' in data: item.discount_pct = float(data['discount_pct'])
         item.final_value = round(item.value * (1 - item.discount_pct / 100), 2)
-        if 'notes' in data:
-            item.notes = data['notes'].strip() or None
+        if 'notes' in data: item.notes = data['notes'].strip() or None
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error actualizando ropa {item_id}: {e}")
         return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
 
 
@@ -149,21 +133,13 @@ def list_loans():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        if _is_admin():
-            employee_id = request.args.get('employee_id')
-            q = EmployeeLoan.query
-            if employee_id:
-                q = q.filter_by(employee_id=int(employee_id))
-        else:
-            q = EmployeeLoan.query.filter_by(employee_id=_current_user_id())
-
+        q = EmployeeLoan.query
+        nombre = request.args.get('nombre_empleada')
+        if nombre:
+            q = q.filter(EmployeeLoan.nombre_empleada.ilike(f'%{nombre}%'))
         items = q.order_by(EmployeeLoan.date.desc()).all()
-        total = sum(i.amount for i in items)
-        return jsonify({
-            'success': True,
-            'items': [i.to_dict() for i in items],
-            'total_acumulado': total
-        }), 200
+        return jsonify({'success': True, 'items': [i.to_dict() for i in items],
+                        'total_acumulado': sum(i.amount for i in items)}), 200
     except Exception as e:
         logger.error(f"Error listando préstamos: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener registros'}), 500
@@ -176,26 +152,16 @@ def create_loan():
         return '', 204
     try:
         data = request.get_json() or {}
+        nombre, err = _require_name(data)
+        if err: return err
         for f in ['date', 'amount']:
             if f not in data:
                 return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
-
-        if _is_admin() and data.get('employee_id'):
-            employee_id = int(data['employee_id'])
-        else:
-            employee_id = _current_user_id()
-
-        item = EmployeeLoan(
-            employee_id=employee_id,
-            date=parse_date(data['date']),
-            amount=float(data['amount']),
-            notes=data.get('notes', '').strip() or None
-        )
+        item = EmployeeLoan(nombre_empleada=nombre, date=parse_date(data['date']),
+                            amount=float(data['amount']), notes=data.get('notes', '').strip() or None)
         db.session.add(item)
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 201
-    except ValueError as e:
-        return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando préstamo: {e}")
@@ -204,23 +170,22 @@ def create_loan():
 
 @bp.route('/api/employee-records/loans/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def manage_loan(item_id):
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
     item = EmployeeLoan.query.get_or_404(item_id)
     if request.method == 'DELETE':
-        db.session.delete(item)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+        db.session.delete(item); db.session.commit()
+        return jsonify({'success': True}), 200
     try:
         data = request.get_json() or {}
-        if 'date' in data:
-            item.date = parse_date(data['date'])
-        if 'amount' in data:
-            item.amount = float(data['amount'])
-        if 'notes' in data:
-            item.notes = data['notes'].strip() or None
+        if 'nombre_empleada' in data and data['nombre_empleada'].strip():
+            item.nombre_empleada = data['nombre_empleada'].strip()
+        if 'date' in data: item.date = parse_date(data['date'])
+        if 'amount' in data: item.amount = float(data['amount'])
+        if 'notes' in data: item.notes = data['notes'].strip() or None
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 200
     except Exception as e:
@@ -238,14 +203,10 @@ def list_permissions():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        if _is_admin():
-            employee_id = request.args.get('employee_id')
-            q = EmployeePermission.query
-            if employee_id:
-                q = q.filter_by(employee_id=int(employee_id))
-        else:
-            q = EmployeePermission.query.filter_by(employee_id=_current_user_id())
-
+        q = EmployeePermission.query
+        nombre = request.args.get('nombre_empleada')
+        if nombre:
+            q = q.filter(EmployeePermission.nombre_empleada.ilike(f'%{nombre}%'))
         items = q.order_by(EmployeePermission.date.desc()).all()
         return jsonify({'success': True, 'items': [i.to_dict() for i in items]}), 200
     except Exception as e:
@@ -260,30 +221,20 @@ def create_permission():
         return '', 204
     try:
         data = request.get_json() or {}
+        nombre, err = _require_name(data)
+        if err: return err
         for f in ['date', 'type']:
             if f not in data:
                 return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
-
         if data['type'] not in EmployeePermission.TYPES:
-            return jsonify({'success': False, 'message': f'Tipo inválido. Use: {EmployeePermission.TYPES}'}), 400
-
-        if _is_admin() and data.get('employee_id'):
-            employee_id = int(data['employee_id'])
-        else:
-            employee_id = _current_user_id()
-
+            return jsonify({'success': False, 'message': f'Tipo inválido'}), 400
         item = EmployeePermission(
-            employee_id=employee_id,
-            date=parse_date(data['date']),
-            type=data['type'],
+            nombre_empleada=nombre, date=parse_date(data['date']), type=data['type'],
             description=data.get('description', '').strip() or None,
             hours=float(data['hours']) if data.get('hours') else None
         )
-        db.session.add(item)
-        db.session.commit()
+        db.session.add(item); db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 201
-    except ValueError as e:
-        return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando permiso: {e}")
@@ -292,25 +243,23 @@ def create_permission():
 
 @bp.route('/api/employee-records/permissions/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def manage_permission(item_id):
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
     item = EmployeePermission.query.get_or_404(item_id)
     if request.method == 'DELETE':
-        db.session.delete(item)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+        db.session.delete(item); db.session.commit()
+        return jsonify({'success': True}), 200
     try:
         data = request.get_json() or {}
-        if 'date' in data:
-            item.date = parse_date(data['date'])
-        if 'type' in data and data['type'] in EmployeePermission.TYPES:
-            item.type = data['type']
-        if 'description' in data:
-            item.description = data['description'].strip() or None
-        if 'hours' in data:
-            item.hours = float(data['hours']) if data['hours'] else None
+        if 'nombre_empleada' in data and data['nombre_empleada'].strip():
+            item.nombre_empleada = data['nombre_empleada'].strip()
+        if 'date' in data: item.date = parse_date(data['date'])
+        if 'type' in data and data['type'] in EmployeePermission.TYPES: item.type = data['type']
+        if 'description' in data: item.description = data['description'].strip() or None
+        if 'hours' in data: item.hours = float(data['hours']) if data['hours'] else None
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 200
     except Exception as e:
@@ -328,21 +277,13 @@ def list_vacations():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        if _is_admin():
-            employee_id = request.args.get('employee_id')
-            q = EmployeeVacation.query
-            if employee_id:
-                q = q.filter_by(employee_id=int(employee_id))
-        else:
-            q = EmployeeVacation.query.filter_by(employee_id=_current_user_id())
-
+        q = EmployeeVacation.query
+        nombre = request.args.get('nombre_empleada')
+        if nombre:
+            q = q.filter(EmployeeVacation.nombre_empleada.ilike(f'%{nombre}%'))
         items = q.order_by(EmployeeVacation.start_date.desc()).all()
-        total_days = sum(i.days for i in items)
-        return jsonify({
-            'success': True,
-            'items': [i.to_dict() for i in items],
-            'total_dias': total_days
-        }), 200
+        return jsonify({'success': True, 'items': [i.to_dict() for i in items],
+                        'total_dias': sum(i.days for i in items)}), 200
     except Exception as e:
         logger.error(f"Error listando vacaciones: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener registros'}), 500
@@ -355,34 +296,18 @@ def create_vacation():
         return '', 204
     try:
         data = request.get_json() or {}
-        for f in ['start_date', 'end_date']:
-            if f not in data:
-                return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
-
+        nombre, err = _require_name(data)
+        if err: return err
         start = parse_date(data['start_date'])
         end = parse_date(data['end_date'])
         if end < start:
-            return jsonify({'success': False, 'message': 'La fecha de fin debe ser mayor o igual a la de inicio'}), 400
-
-        days = (end - start).days + 1
-
-        if _is_admin() and data.get('employee_id'):
-            employee_id = int(data['employee_id'])
-        else:
-            employee_id = _current_user_id()
-
+            return jsonify({'success': False, 'message': 'Fecha fin debe ser >= fecha inicio'}), 400
         item = EmployeeVacation(
-            employee_id=employee_id,
-            start_date=start,
-            end_date=end,
-            days=days,
-            notes=data.get('notes', '').strip() or None
+            nombre_empleada=nombre, start_date=start, end_date=end,
+            days=(end - start).days + 1, notes=data.get('notes', '').strip() or None
         )
-        db.session.add(item)
-        db.session.commit()
+        db.session.add(item); db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 201
-    except ValueError as e:
-        return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando vacaciones: {e}")
@@ -391,24 +316,23 @@ def create_vacation():
 
 @bp.route('/api/employee-records/vacations/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def manage_vacation(item_id):
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
     item = EmployeeVacation.query.get_or_404(item_id)
     if request.method == 'DELETE':
-        db.session.delete(item)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+        db.session.delete(item); db.session.commit()
+        return jsonify({'success': True}), 200
     try:
         data = request.get_json() or {}
-        if 'start_date' in data:
-            item.start_date = parse_date(data['start_date'])
-        if 'end_date' in data:
-            item.end_date = parse_date(data['end_date'])
+        if 'nombre_empleada' in data and data['nombre_empleada'].strip():
+            item.nombre_empleada = data['nombre_empleada'].strip()
+        if 'start_date' in data: item.start_date = parse_date(data['start_date'])
+        if 'end_date' in data: item.end_date = parse_date(data['end_date'])
         item.days = (item.end_date - item.start_date).days + 1
-        if 'notes' in data:
-            item.notes = data['notes'].strip() or None
+        if 'notes' in data: item.notes = data['notes'].strip() or None
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 200
     except Exception as e:
@@ -426,21 +350,13 @@ def list_payments():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        if _is_admin():
-            employee_id = request.args.get('employee_id')
-            q = EmployeePayment.query
-            if employee_id:
-                q = q.filter_by(employee_id=int(employee_id))
-        else:
-            q = EmployeePayment.query.filter_by(employee_id=_current_user_id())
-
+        q = EmployeePayment.query
+        nombre = request.args.get('nombre_empleada')
+        if nombre:
+            q = q.filter(EmployeePayment.nombre_empleada.ilike(f'%{nombre}%'))
         items = q.order_by(EmployeePayment.date.desc()).all()
-        total = sum(i.amount for i in items)
-        return jsonify({
-            'success': True,
-            'items': [i.to_dict() for i in items],
-            'total_pagado': total
-        }), 200
+        return jsonify({'success': True, 'items': [i.to_dict() for i in items],
+                        'total_pagado': sum(i.amount for i in items)}), 200
     except Exception as e:
         logger.error(f"Error listando pagos: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener registros'}), 500
@@ -448,32 +364,27 @@ def list_payments():
 
 @bp.route('/api/employee-records/payments', methods=['POST', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def create_payment():
-    """Solo admin puede registrar pagos"""
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede registrar pagos'}), 403
     try:
         data = request.get_json() or {}
-        for f in ['date', 'amount', 'type', 'employee_id']:
+        nombre, err = _require_name(data)
+        if err: return err
+        for f in ['date', 'amount', 'type']:
             if f not in data:
                 return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
-
         if data['type'] not in EmployeePayment.TYPES:
-            return jsonify({'success': False, 'message': f'Tipo inválido. Use: {EmployeePayment.TYPES}'}), 400
-
+            return jsonify({'success': False, 'message': 'Tipo inválido'}), 400
         item = EmployeePayment(
-            employee_id=int(data['employee_id']),
-            date=parse_date(data['date']),
-            type=data['type'],
-            amount=float(data['amount']),
+            nombre_empleada=nombre, date=parse_date(data['date']),
+            type=data['type'], amount=float(data['amount']),
             notes=data.get('notes', '').strip() or None
         )
-        db.session.add(item)
-        db.session.commit()
+        db.session.add(item); db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 201
-    except ValueError as e:
-        return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando pago: {e}")
@@ -482,25 +393,23 @@ def create_payment():
 
 @bp.route('/api/employee-records/payments/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def manage_payment(item_id):
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
     item = EmployeePayment.query.get_or_404(item_id)
     if request.method == 'DELETE':
-        db.session.delete(item)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+        db.session.delete(item); db.session.commit()
+        return jsonify({'success': True}), 200
     try:
         data = request.get_json() or {}
-        if 'date' in data:
-            item.date = parse_date(data['date'])
-        if 'type' in data and data['type'] in EmployeePayment.TYPES:
-            item.type = data['type']
-        if 'amount' in data:
-            item.amount = float(data['amount'])
-        if 'notes' in data:
-            item.notes = data['notes'].strip() or None
+        if 'nombre_empleada' in data and data['nombre_empleada'].strip():
+            item.nombre_empleada = data['nombre_empleada'].strip()
+        if 'date' in data: item.date = parse_date(data['date'])
+        if 'type' in data and data['type'] in EmployeePayment.TYPES: item.type = data['type']
+        if 'amount' in data: item.amount = float(data['amount'])
+        if 'notes' in data: item.notes = data['notes'].strip() or None
         db.session.commit()
         return jsonify({'success': True, 'item': item.to_dict()}), 200
     except Exception as e:
@@ -509,52 +418,41 @@ def manage_payment(item_id):
 
 
 # ─────────────────────────────────────────────
-#  RESUMEN GENERAL (solo admin)
+#  RESUMEN POR EMPLEADA
 # ─────────────────────────────────────────────
 
 @bp.route('/api/employee-records/summary', methods=['GET', 'OPTIONS'])
 @token_required
-@role_required('admin')
 def summary():
-    """Resumen de todos los registros agrupados por empleada"""
     if request.method == 'OPTIONS':
         return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede ver el resumen'}), 403
     try:
-        employees = User.query.filter_by(role='sales', is_active=True).all()
+        # Obtener todos los nombres únicos
+        nombres = set()
+        for model in [EmployeeClothing, EmployeeLoan, EmployeePermission,
+                      EmployeeVacation, EmployeePayment]:
+            for row in db.session.query(model.nombre_empleada).distinct():
+                nombres.add(row[0])
+
         result = []
-        for emp in employees:
-            clothing = EmployeeClothing.query.filter_by(employee_id=emp.id).all()
-            loans = EmployeeLoan.query.filter_by(employee_id=emp.id).all()
-            perms = EmployeePermission.query.filter_by(employee_id=emp.id).all()
-            vacs = EmployeeVacation.query.filter_by(employee_id=emp.id).all()
-            payments = EmployeePayment.query.filter_by(employee_id=emp.id).all()
-
+        for nombre in sorted(nombres):
+            clothing = EmployeeClothing.query.filter_by(nombre_empleada=nombre).all()
+            loans = EmployeeLoan.query.filter_by(nombre_empleada=nombre).all()
+            perms = EmployeePermission.query.filter_by(nombre_empleada=nombre).all()
+            vacs = EmployeeVacation.query.filter_by(nombre_empleada=nombre).all()
+            payments = EmployeePayment.query.filter_by(nombre_empleada=nombre).all()
             result.append({
-                'employee_id': emp.id,
-                'employee_name': emp.name,
-                'employee_email': emp.email,
-                'clothing': {
-                    'count': len(clothing),
-                    'total': sum(c.final_value for c in clothing)
-                },
-                'loans': {
-                    'count': len(loans),
-                    'total': sum(l.amount for l in loans)
-                },
-                'permissions': {
-                    'count': len(perms),
-                    'by_type': {t: sum(1 for p in perms if p.type == t) for t in EmployeePermission.TYPES}
-                },
-                'vacations': {
-                    'count': len(vacs),
-                    'total_days': sum(v.days for v in vacs)
-                },
-                'payments': {
-                    'count': len(payments),
-                    'total': sum(p.amount for p in payments)
-                }
+                'nombre_empleada': nombre,
+                'clothing': {'count': len(clothing), 'total': sum(c.final_value for c in clothing)},
+                'loans': {'count': len(loans), 'total': sum(l.amount for l in loans)},
+                'permissions': {'count': len(perms),
+                                'by_type': {t: sum(1 for p in perms if p.type == t)
+                                            for t in EmployeePermission.TYPES}},
+                'vacations': {'count': len(vacs), 'total_days': sum(v.days for v in vacs)},
+                'payments': {'count': len(payments), 'total': sum(p.amount for p in payments)},
             })
-
         return jsonify({'success': True, 'employees': result}), 200
     except Exception as e:
         logger.error(f"Error en resumen: {e}")
