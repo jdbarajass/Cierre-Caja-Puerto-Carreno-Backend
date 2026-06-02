@@ -252,7 +252,7 @@ def create_app(config_class=Config):
     # Log de inicio
     app.logger.info("=" * 60)
     app.logger.info("Sistema de Cierre de Caja - KOAJ Puerto Carreño")
-    app.logger.info(f"Versión: 2.0.0")
+    app.logger.info(f"Versión: 2.3.0")
     app.logger.info(f"Ambiente: {'Producción' if not app.config['DEBUG'] else 'Desarrollo'}")
     app.logger.info(f"CORS Origins: {allowed_origins}")
     app.logger.info(f"Sirviendo frontend desde: {frontend_dist}")
