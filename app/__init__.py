@@ -264,28 +264,38 @@ def create_app(config_class=Config):
 
 def _migrate_employee_tables(db, app):
     """
-    Detecta si las tablas de empleadas tienen el esquema antiguo (employee_id FK)
-    y las recrea con el nuevo esquema (nombre_empleada texto libre).
-    Se ejecuta una sola vez; después db.create_all() ya no las toca.
+    Migraciones SEGURAS: solo agrega columnas nuevas, NUNCA borra tablas ni datos.
+    Patrón: inspeccionar columnas existentes → ALTER TABLE ADD COLUMN si falta.
+    Agregar aquí cualquier cambio de esquema futuro.
     """
     from sqlalchemy import inspect, text
+
     inspector = inspect(db.engine)
     tables = inspector.get_table_names()
-    needs_migration = False
 
-    if 'employee_clothing' in tables:
-        cols = [c['name'] for c in inspector.get_columns('employee_clothing')]
-        if 'employee_id' in cols:
-            needs_migration = True
+    def add_column_if_missing(conn, table, column, col_type, default=None):
+        """Agrega una columna solo si no existe. NO borra datos."""
+        if table not in tables:
+            return
+        existing = [c['name'] for c in inspector.get_columns(table)]
+        if column in existing:
+            return
+        default_clause = f" DEFAULT '{default}'" if default is not None else ""
+        try:
+            conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}'))
+            app.logger.info(f"Migración: columna '{column}' agregada a '{table}'")
+        except Exception as e:
+            app.logger.warning(f"Migración: no se pudo agregar '{column}' a '{table}': {e}")
 
-    if needs_migration:
-        app.logger.info("Migrando tablas de empleadas al nuevo esquema (nombre_empleada)...")
-        with db.engine.connect() as conn:
-            for table in ['employee_clothing', 'employee_loans', 'employee_permissions',
-                          'employee_vacations', 'employee_payments']:
-                conn.execute(text(f'DROP TABLE IF EXISTS {table}'))
-            conn.commit()
-        app.logger.info("Tablas de empleadas eliminadas; se recrearán con el nuevo esquema.")
+    with db.engine.connect() as conn:
+        # ── Ejemplo de migración futura (referencia): ──────────────────────────
+        # Si en el futuro se agrega un campo 'talla' a employee_clothing:
+        # add_column_if_missing(conn, 'employee_clothing', 'talla', 'VARCHAR(20)')
+        #
+        # Si se agrega 'aprobado_por' a employee_loans:
+        # add_column_if_missing(conn, 'employee_loans', 'aprobado_por', 'VARCHAR(100)')
+        # ──────────────────────────────────────────────────────────────────────
+        conn.commit()
 
 
 def setup_logging(app):
