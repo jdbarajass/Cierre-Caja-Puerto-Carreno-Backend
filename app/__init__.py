@@ -36,6 +36,7 @@ def create_app(config_class=Config):
         EmployeeVacation, EmployeePayment
     )
     from app.models.repurchase import RepurchaseEntry  # Import to ensure table is created
+    from app.models.repurchase_purchase import RepurchasePurchase  # Import to ensure table is created
 
     db.init_app(app)
 

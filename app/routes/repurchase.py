@@ -10,6 +10,7 @@ import logging
 from app.middlewares.auth import token_required, get_current_user
 from app.models.user import db
 from app.models.repurchase import RepurchaseEntry
+from app.models.repurchase_purchase import RepurchasePurchase
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('repurchase', __name__)
@@ -258,3 +259,120 @@ def monthly_summary():
     except Exception as e:
         logger.error(f"Error en resumen mensual recompras: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener resumen'}), 500
+
+
+# ─────────────────────────────────────────────
+#  COMPRAS REALIZADAS POR EL SOCIO
+# ─────────────────────────────────────────────
+
+@bp.route('/api/repurchase/purchases', methods=['GET', 'OPTIONS'])
+@token_required
+def list_purchases():
+    """Lista las compras hechas por el socio, con filtro opcional por mes/año."""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    err = _require_admin()
+    if err:
+        return err
+
+    try:
+        year  = request.args.get('year',  type=int)
+        month = request.args.get('month', type=int)
+
+        q = RepurchasePurchase.query
+        if year and month:
+            start, end = _month_range(year, month)
+            q = q.filter(RepurchasePurchase.date >= start, RepurchasePurchase.date <= end)
+        elif year:
+            q = q.filter(RepurchasePurchase.date >= dt_date(year, 1, 1),
+                         RepurchasePurchase.date <= dt_date(year, 12, 31))
+
+        purchases = q.order_by(RepurchasePurchase.date.asc(), RepurchasePurchase.id.asc()).all()
+        total = sum(p.amount for p in purchases)
+
+        return jsonify({
+            'success': True,
+            'purchases': [p.to_dict() for p in purchases],
+            'total_compras': total,
+            'count': len(purchases)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error listando compras: {e}")
+        return jsonify({'success': False, 'message': 'Error al obtener compras'}), 500
+
+
+@bp.route('/api/repurchase/purchases', methods=['POST', 'OPTIONS'])
+@token_required
+def create_purchase():
+    """Registra una compra realizada por el socio."""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    err = _require_admin()
+    if err:
+        return err
+
+    try:
+        data = request.get_json() or {}
+
+        for f in ['date', 'store', 'amount']:
+            if not data.get(f):
+                return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
+
+        purchase = RepurchasePurchase(
+            date=parse_date(data['date']),
+            store=data['store'].strip(),
+            amount=float(data['amount']),
+            notes=data.get('notes', '').strip() or None,
+            created_by=get_current_user().get('userId')
+        )
+        db.session.add(purchase)
+        db.session.commit()
+        logger.info(f"Compra registrada id={purchase.id}")
+        return jsonify({'success': True, 'purchase': purchase.to_dict()}), 201
+
+    except ValueError as e:
+        return jsonify({'success': False, 'message': f'Dato inválido: {e}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creando compra: {e}")
+        return jsonify({'success': False, 'message': 'Error al crear compra'}), 500
+
+
+@bp.route('/api/repurchase/purchases/<int:purchase_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+@token_required
+def manage_purchase(purchase_id):
+    """Edita o elimina una compra."""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    err = _require_admin()
+    if err:
+        return err
+
+    purchase = RepurchasePurchase.query.get_or_404(purchase_id)
+
+    if request.method == 'DELETE':
+        db.session.delete(purchase)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Compra eliminada'}), 200
+
+    try:
+        data = request.get_json() or {}
+        if 'date' in data and data['date']:
+            purchase.date = parse_date(data['date'])
+        if 'store' in data and data['store']:
+            purchase.store = data['store'].strip()
+        if 'amount' in data:
+            purchase.amount = float(data['amount'])
+        if 'notes' in data:
+            purchase.notes = data['notes'].strip() or None
+        db.session.commit()
+        return jsonify({'success': True, 'purchase': purchase.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error actualizando compra {purchase_id}: {e}")
+        return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
