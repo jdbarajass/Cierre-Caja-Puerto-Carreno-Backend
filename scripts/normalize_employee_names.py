@@ -10,7 +10,6 @@ Ejecutar en modo real: python scripts/normalize_employee_names.py --apply
 """
 import sys
 import os
-import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
@@ -19,30 +18,9 @@ from app.models.user import db
 from app.models.employee_records import (
     EmployeeClothing, EmployeeLoan, EmployeePermission, EmployeeVacation, EmployeePayment
 )
-
-# Mismo criterio (laxo a proposito) usado en el frontend (src/utils/employeeGroups.js)
-# para agrupar variantes/typos historicos como "monika vargas".
-CANONICAL_NAMES = {
-    'monica': 'Mónica Vargas',
-    'rita': 'Rita Infante',
-}
+from app.utils.employee_names import CANONICAL_NAMES, group_key_for
 
 MODELS = [EmployeeClothing, EmployeeLoan, EmployeePermission, EmployeeVacation, EmployeePayment]
-
-
-def normalize(s):
-    s = (s or '').strip().lower()
-    s = unicodedata.normalize('NFD', s)
-    return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
-
-
-def group_key_for(nombre):
-    n = normalize(nombre)
-    if 'monic' in n or 'monik' in n:
-        return 'monica'
-    if 'rita' in n:
-        return 'rita'
-    return None
 
 
 def run(dry_run=True):
