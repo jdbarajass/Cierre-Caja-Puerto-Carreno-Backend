@@ -15,6 +15,7 @@ from app.models.employee_records import (
     EmployeeClothing, EmployeeLoan,
     EmployeePermission, EmployeeVacation, EmployeePayment
 )
+from app.utils.employee_names import CANONICAL_NAMES, group_key_for
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('employee_records', __name__)
@@ -457,3 +458,58 @@ def summary():
     except Exception as e:
         logger.error(f"Error en resumen: {e}")
         return jsonify({'success': False, 'message': 'Error al obtener resumen'}), 500
+
+
+# ─────────────────────────────────────────────
+#  NORMALIZACIÓN DE NOMBRES (una sola vez, mantenimiento)
+# ─────────────────────────────────────────────
+
+@bp.route('/api/employee-records/normalize-names', methods=['POST', 'OPTIONS'])
+@token_required
+def normalize_names():
+    """
+    Unifica variantes/typos historicos de nombre_empleada (ej: "monika vargas")
+    hacia los nombres canonicos ("Mónica Vargas" / "Rita Infante").
+    Por defecto corre en modo dry-run (no guarda). Usar ?apply=true para aplicar.
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+    if not _is_admin():
+        return jsonify({'success': False, 'message': 'Solo admin puede ejecutar esta acción'}), 403
+    try:
+        apply_changes = request.args.get('apply', '').lower() == 'true'
+        models = [EmployeeClothing, EmployeeLoan, EmployeePermission, EmployeeVacation, EmployeePayment]
+
+        changes = []
+        unmatched = set()
+
+        for model in models:
+            rows = model.query.all()
+            for row in rows:
+                key = group_key_for(row.nombre_empleada)
+                if key is None:
+                    unmatched.add(row.nombre_empleada)
+                    continue
+                canonical = CANONICAL_NAMES[key]
+                if row.nombre_empleada != canonical:
+                    changes.append({
+                        'table': model.__tablename__, 'id': row.id,
+                        'from': row.nombre_empleada, 'to': canonical,
+                    })
+                    if apply_changes:
+                        row.nombre_empleada = canonical
+
+        if apply_changes:
+            db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'applied': apply_changes,
+            'changes_count': len(changes),
+            'changes': changes,
+            'unmatched_names': sorted(unmatched),
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error normalizando nombres: {e}")
+        return jsonify({'success': False, 'message': 'Error al normalizar nombres'}), 500
