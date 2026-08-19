@@ -42,7 +42,9 @@ class TestCashCalculator:
         assert total_general == 0
 
     def test_aplicar_ajustes(self):
-        """Test aplicación de ajustes"""
+        """Test aplicación de ajustes (Escenario A: gastos y préstamos ya fueron
+        sacados físicamente del efectivo ANTES de contar, por lo que no se resta
+        nada aquí; ambos parámetros solo se usan para logging)."""
         calculator = CashCalculator()
 
         total_consignar = 100000
@@ -57,30 +59,31 @@ class TestCashCalculator:
             prestamos
         )
 
-        # Los gastos operativos ya fueron sacados físicamente del efectivo
-        # Solo se restan los préstamos: 100000 - 3000 = 97000
-        assert resultado == 97000
+        # No se resta nada: el efectivo contado ya refleja gastos y préstamos
+        assert resultado == 100000
 
     def test_calcular_venta_efectivo_alegra(self):
-        """Test cálculo de venta efectivo"""
+        """Test cálculo de venta efectivo (Escenario A: se suman gastos y
+        préstamos porque Alegra reporta el efectivo ANTES de sacarlos)."""
         calculator = CashCalculator()
 
         total_general = 500000
         excedente = 13500
         total_base = 450000
         gastos_operativos = 5000
+        prestamos = 2000
 
         resultado = calculator.calcular_venta_efectivo_alegra(
             total_general,
             excedente,
             total_base,
-            gastos_operativos
+            gastos_operativos,
+            prestamos
         )
 
-        # El total_general ya tiene los gastos descontados, pero Alegra reporta
-        # el efectivo ANTES de descontar gastos, por lo tanto sumamos los gastos:
-        # 500000 - 13500 - 450000 + 5000 = 41500
-        assert resultado == 41500
+        # Fórmula: TOTAL_GENERAL - EXCEDENTE - BASE + GASTOS_OPERATIVOS + PRESTAMOS
+        # 500000 - 13500 - 450000 + 5000 + 2000 = 43500
+        assert resultado == 43500
 
     def test_procesar_cierre_completo(self):
         """Test procesamiento completo de cierre"""

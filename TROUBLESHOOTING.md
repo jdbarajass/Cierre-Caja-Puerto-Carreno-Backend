@@ -10,6 +10,7 @@ Esta guía documenta todos los problemas comunes al levantar el servidor y cómo
 2. [Problemas de Compatibilidad Python 3.14](#problemas-de-compatibilidad-python-314)
 3. [Configuración de Variables de Entorno](#configuración-de-variables-de-entorno)
 4. [Pasos para Levantar el Servidor Manualmente](#pasos-para-levantar-el-servidor-manualmente)
+5. [pytest falla con "I/O operation on closed file"](#pytest-falla-con-io-operation-on-closed-file)
 
 ---
 
@@ -301,6 +302,27 @@ pip install pydantic --upgrade
 echo "Instalación completada!"
 echo "Para iniciar el servidor ejecuta: python run.py"
 ```
+
+---
+
+## pytest falla con "I/O operation on closed file"
+
+**Error:**
+```
+File "...\_pytest\capture.py", line X, in snap
+    self.tmpfile.seek(0)
+ValueError: I/O operation on closed file.
+1 error in ~22s
+```
+
+**Causa:** Es un problema **del entorno** (Windows + Python 3.14 + captura de stdout/stderr de pytest en ciertos runners/terminales), no del código del proyecto. Se confirmó reproducible incluso en checkouts limpios sin modificar, con distintas versiones de pytest (7.4.3 y 9.0.3) y tanto desde `venv/` como desde el Python global. Siempre ocurre alrededor de los ~22 segundos, lo que sugiere que algo externo al proceso de pytest (el propio terminal/runner) interfiere con el descriptor de archivo usado para la captura.
+
+También hay que tener en cuenta que `tests/test_analytics_endpoints.py` y `tests/test_size_analysis.py` **no son tests automatizados reales**: son scripts de prueba manual pensados para ejecutarse contra un servidor local ya corriendo (`http://localhost:5000`) con credenciales reales, pero sus funciones se llaman `test_*` y por eso pytest las intenta recolectar igual. Si se decide arreglar esto a futuro, lo correcto sería renombrarlos (ej. `manual_check_analytics.py`) para que pytest deje de recolectarlos.
+
+**Solución (mientras tanto):**
+- Ejecutar los tests unitarios puros (`test_cash_calculator.py`, `test_formatters.py`, `test_knapsack_solver.py`) importándolos directamente en un script Python en vez de vía `pytest`, por ejemplo instanciando cada clase `Test*` y llamando sus métodos `test_*` manualmente.
+- Para probar rutas/endpoints, usar `app.test_client()` directamente en un script (como hace `conftest.py`), sin pasar por el runner de pytest.
+- Si en tu máquina pytest sí funciona normalmente, ignora esta sección — es específico de ciertos entornos.
 
 ---
 

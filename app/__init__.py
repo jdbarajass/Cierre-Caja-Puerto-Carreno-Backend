@@ -2,7 +2,7 @@
 Sistema de Cierre de Caja - KOAJ Puerto Carreño
 Flask Application Factory
 """
-from flask import Flask, request, send_from_directory, send_file
+from flask import Flask, request, g, send_from_directory, send_file
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -10,6 +10,7 @@ from flask_talisman import Talisman
 from flasgger import Swagger
 import logging
 import os
+import uuid
 
 from app.config import Config
 from app.exceptions import setup_error_handlers
@@ -27,6 +28,26 @@ def create_app(config_class=Config):
     """
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Validar configuración crítica ANTES de continuar. En producción, un
+    # despliegue con credenciales de Alegra o secretos JWT faltantes/por defecto
+    # debe fallar rápido en vez de arrancar "roto" en silencio.
+    # NOTA: config_class.validate() (sin el "_security") también se usa por
+    # request en cash_closing.py - por eso los checks de secretos viven en
+    # validate_security(), que solo corre aquí, una vez, al arrancar.
+    config_errors = config_class.validate() + config_class.validate_security()
+    if config_errors:
+        for error in config_errors:
+            logging.error(f"Configuración inválida: {error}")
+        if not app.config['DEBUG'] and not app.config.get('TESTING'):
+            raise RuntimeError(
+                "La aplicación no puede arrancar por errores de configuración: "
+                + "; ".join(config_errors)
+            )
+        logging.warning(
+            "Continuando en modo DEBUG/TESTING pese a errores de configuración "
+            "(esto abortaría el arranque en producción)"
+        )
 
     # Initialize SQLAlchemy database
     from app.models.user import db
@@ -79,10 +100,17 @@ def create_app(config_class=Config):
         }
     })
 
+    # Request ID: correlaciona todos los logs de una misma petición y permite
+    # rastrear un fallo puntual reportado por una vendedora en los logs de Render.
+    @app.before_request
+    def assign_request_id():
+        g.request_id = request.headers.get('X-Request-Id') or uuid.uuid4().hex
+
     # Agregar headers CORS manualmente en cada respuesta como backup
     @app.after_request
     def after_request(response):
         """Agregar headers CORS a todas las respuestas como medida de seguridad"""
+        response.headers['X-Request-Id'] = getattr(g, 'request_id', '')
         origin = request.headers.get('Origin')
 
         # Si el origen está en la lista permitida, agregarlo
@@ -155,6 +183,7 @@ def create_app(config_class=Config):
 
     # Configurar logging
     setup_logging(app)
+    setup_sentry(app)
 
     # Registrar blueprints
     from app.routes.cash_closing import bp as cash_bp
@@ -303,21 +332,35 @@ def _migrate_employee_tables(db, app):
 
 
 def setup_logging(app):
-    """Configura el sistema de logging de la aplicación"""
+    """
+    Configura el sistema de logging de la aplicación.
+
+    Formato controlado por la variable de entorno LOG_FORMAT ('json' o 'text').
+    Por defecto: 'json' en producción (más fácil de indexar en Render/Sentry/etc.),
+    'text' en modo DEBUG (más legible en la terminal local).
+    """
     from logging.handlers import RotatingFileHandler
+    from app.utils.logging_utils import JsonFormatter, RequestIdFilter
 
     log_level = logging.DEBUG if app.config['DEBUG'] else logging.INFO
+    log_format = os.getenv('LOG_FORMAT', 'text' if app.config['DEBUG'] else 'json')
 
-    # Formato detallado para logs
-    formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s en %(module)s.%(funcName)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    if log_format == 'json':
+        formatter = JsonFormatter()
+    else:
+        formatter = logging.Formatter(
+            '[%(asctime)s] %(levelname)s en %(module)s.%(funcName)s:%(lineno)d '
+            '[req=%(request_id)s] - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+
+    request_id_filter = RequestIdFilter()
 
     # Handler de consola (siempre activo)
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(log_level)
+    console_handler.addFilter(request_id_filter)
     app.logger.addHandler(console_handler)
 
     # Handler de archivo (solo si NO estamos en Render o similar)
@@ -332,6 +375,7 @@ def setup_logging(app):
             )
             file_handler.setFormatter(formatter)
             file_handler.setLevel(log_level)
+            file_handler.addFilter(request_id_filter)
             app.logger.addHandler(file_handler)
         except Exception as e:
             app.logger.warning(f"No se pudo crear archivo de log: {e}")
@@ -341,3 +385,34 @@ def setup_logging(app):
     # Reducir ruido de otros loggers
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('urllib3').setLevel(logging.WARNING)
+
+
+def setup_sentry(app):
+    """
+    Inicializa Sentry SOLO si se configura la variable de entorno SENTRY_DSN.
+    Si sentry-sdk no está instalado o no hay DSN, no hace nada (no rompe el arranque).
+    """
+    sentry_dsn = os.getenv('SENTRY_DSN')
+    if not sentry_dsn:
+        app.logger.info("SENTRY_DSN no configurado: Sentry deshabilitado")
+        return
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            integrations=[FlaskIntegration()],
+            environment=os.getenv('FLASK_ENV', 'production'),
+            traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.0')),
+            send_default_pii=False,
+        )
+        app.logger.info("Sentry inicializado correctamente")
+    except ImportError:
+        app.logger.warning(
+            "SENTRY_DSN configurado pero 'sentry-sdk' no está instalado. "
+            "Ejecuta: pip install -r requirements.txt"
+        )
+    except Exception as e:
+        app.logger.warning(f"No se pudo inicializar Sentry: {e}")

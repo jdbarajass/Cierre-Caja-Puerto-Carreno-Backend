@@ -90,7 +90,13 @@ class Config:
 
     @classmethod
     def validate(cls):
-        """Valida que la configuración crítica esté presente"""
+        """
+        Valida que la configuración de NEGOCIO crítica esté presente.
+        NOTA: este método también se usa en cada request de /api/sum_payments
+        (app/routes/cash_closing.py) para bloquear el cierre si falta algo -
+        por eso NO debe incluir checks de secretos (ver validate_security()),
+        que solo deben frenar el ARRANQUE del servidor, no cada petición.
+        """
         errors = []
 
         if not cls.ALEGRA_USER:
@@ -104,6 +110,22 @@ class Config:
 
         if cls.UMBRAL_MENUDO <= 0:
             errors.append("UMBRAL_MENUDO debe ser mayor a 0")
+
+        return errors
+
+    @classmethod
+    def validate_security(cls):
+        """
+        Valida que los secretos de seguridad no sigan en su valor por defecto.
+        Se usa SOLO al arrancar la app (app/__init__.py), nunca por request.
+        """
+        errors = []
+
+        if cls.SECRET_KEY == 'dev-secret-key-CHANGE-IN-PRODUCTION':
+            errors.append("SECRET_KEY sigue en su valor por defecto inseguro")
+
+        if cls.JWT_SECRET_KEY == 'dev-jwt-secret-CHANGE-IN-PRODUCTION-min-32-chars':
+            errors.append("JWT_SECRET_KEY sigue en su valor por defecto inseguro")
 
         return errors
 

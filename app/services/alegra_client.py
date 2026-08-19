@@ -1,8 +1,11 @@
 """
 Cliente para la API de Alegra
 """
+import os
 import requests
 from requests.auth import HTTPBasicAuth
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Dict, List
 import logging
 
@@ -18,8 +21,16 @@ from app.utils.formatters import (
     format_cop,
     filter_voided_invoices
 )
+from app.utils.ttl_cache import TTLCache
+from app.utils.timezone import get_colombia_today_string
 
 logger = logging.getLogger(__name__)
+
+# Caché compartida entre todas las instancias del cliente (se crea una por request).
+# Solo se usa para fechas PASADAS: las facturas de un día que ya cerró no cambian,
+# mientras que las del día en curso siguen llegando y nunca deben servirse desde caché.
+_invoices_cache = TTLCache()
+ALEGRA_CACHE_TTL_SECONDS = int(os.getenv('ALEGRA_CACHE_TTL_SECONDS', '600'))
 
 
 class AlegraClient:
@@ -48,6 +59,23 @@ class AlegraClient:
             'Accept': 'application/json'
         })
 
+        # Reintentos automáticos con backoff exponencial para peticiones GET
+        # (idempotentes) ante timeouts, errores de conexión y 5xx/429 de Alegra.
+        # No se reintentan POST/PUT/DELETE para evitar operaciones duplicadas.
+        retry_strategy = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status=3,
+            backoff_factor=1.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "HEAD", "OPTIONS"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+
         logger.info(f"Cliente Alegra inicializado para usuario: {username}")
 
     def get_invoices_by_date(self, date: str) -> List[Dict]:
@@ -68,6 +96,15 @@ class AlegraClient:
             AlegraAuthError: Si las credenciales son inválidas
             AlegraConnectionError: Para otros errores de conexión
         """
+        # Las facturas de un día que ya cerró no cambian: servir desde caché si está disponible.
+        # El día actual NUNCA se cachea porque sigue recibiendo ventas nuevas.
+        is_past_date = date != get_colombia_today_string()
+        if is_past_date:
+            cached = _invoices_cache.get(date)
+            if cached is not None:
+                logger.info(f"[CACHE HIT] Facturas de {date} servidas desde caché ({len(cached)} facturas)")
+                return cached
+
         url = f"{self.base_url}/invoices"
         all_invoices = []
         start = 0  # Empezar desde 0 para no omitir la primera factura
@@ -179,6 +216,10 @@ class AlegraClient:
                     logger.info(f"✓ Página {page}/{pages_needed}: {len(page_invoices)} facturas obtenidas. Total acumulado: {len(all_invoices)}")
 
             logger.info(f"✓ TOTAL: {len(all_invoices)} facturas obtenidas para {date} (esperadas: {total_invoices})")
+
+            if is_past_date:
+                _invoices_cache.set(date, all_invoices, ALEGRA_CACHE_TTL_SECONDS)
+
             return all_invoices
 
         except requests.exceptions.Timeout:

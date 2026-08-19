@@ -3,9 +3,11 @@ Health check endpoint
 """
 from flask import Blueprint, jsonify, current_app
 from flasgger import swag_from
+from sqlalchemy import text
 
 from app.config import Config
 from app.services.alegra_client import AlegraClient
+from app.models.user import db
 
 bp = Blueprint('health', __name__)
 
@@ -32,6 +34,9 @@ def health_check():
             version:
               type: string
               example: 2.0.0
+            database:
+              type: string
+              example: connected
             alegra:
               type: string
               example: connected
@@ -41,6 +46,15 @@ def health_check():
         "service": "cierre-caja-api",
         "version": "2.0.0"
     }
+
+    # Check de base de datos
+    try:
+        db.session.execute(text('SELECT 1'))
+        status["database"] = "connected"
+    except Exception as e:
+        current_app.logger.warning(f"Error en health check de base de datos: {e}")
+        status["database"] = "error"
+        status["status"] = "degraded"
 
     # Check opcional de Alegra (sin bloquear)
     try:
