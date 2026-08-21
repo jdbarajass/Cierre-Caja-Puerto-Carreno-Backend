@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-08-21] - Re-verificación del cambio del 2026-08-19 (sin cambios de código)
+
+### ✅ Re-confirmado localmente, todo sigue pasando
+- 33/33 tests unitarios, 13/13 checks funcionales, sin regresiones. No hubo cambios de código en esta sesión.
+
+### ⚠️ Hallazgo: Render no había desplegado el commit `2678c9d`
+- Dos días después del push del 2026-08-19, `GET https://cierre-caja-api.onrender.com/health` seguía respondiendo el JSON **sin** el campo `"database"` y sin el header `X-Request-Id` — es decir, el código en producción seguía siendo el anterior al commit `2678c9d`, pese a que el push a `main` fue exitoso
+- No se pudo determinar la causa exacta (sin acceso al dashboard/API de Render desde este entorno): puede ser Auto-Deploy desactivado, un build fallido servido en silencio, o el webhook de GitHub desconectado
+- Se agregó una sección nueva a [TROUBLESHOOTING.md](TROUBLESHOOTING.md#cómo-verificar-que-render-desplegó-los-últimos-cambios) con el procedimiento para verificar esto en el futuro antes de asumir que un push ya está en producción
+
+---
+
 ## [2026-08-19] - Arranque seguro, caché/retries hacia Alegra, logging estructurado y health check extendido
 
 ### 🛡️ Validación de configuración al arrancar (`app/config.py`, `app/__init__.py`)

@@ -11,6 +11,7 @@ Esta guía documenta todos los problemas comunes al levantar el servidor y cómo
 3. [Configuración de Variables de Entorno](#configuración-de-variables-de-entorno)
 4. [Pasos para Levantar el Servidor Manualmente](#pasos-para-levantar-el-servidor-manualmente)
 5. [pytest falla con "I/O operation on closed file"](#pytest-falla-con-io-operation-on-closed-file)
+6. [Cómo verificar que Render desplegó los últimos cambios](#cómo-verificar-que-render-desplegó-los-últimos-cambios)
 
 ---
 
@@ -323,6 +324,24 @@ También hay que tener en cuenta que `tests/test_analytics_endpoints.py` y `test
 - Ejecutar los tests unitarios puros (`test_cash_calculator.py`, `test_formatters.py`, `test_knapsack_solver.py`) importándolos directamente en un script Python en vez de vía `pytest`, por ejemplo instanciando cada clase `Test*` y llamando sus métodos `test_*` manualmente.
 - Para probar rutas/endpoints, usar `app.test_client()` directamente en un script (como hace `conftest.py`), sin pasar por el runner de pytest.
 - Si en tu máquina pytest sí funciona normalmente, ignora esta sección — es específico de ciertos entornos.
+
+---
+
+## Cómo verificar que Render desplegó los últimos cambios
+
+**Importante:** un `git push` exitoso a `main` **no garantiza** que Render haya desplegado el cambio. El 2026-08-21 se detectó que el commit `2678c9d` (pusheado el 2026-08-19) seguía sin estar en producción dos días después — Render seguía sirviendo la versión anterior.
+
+**Cómo comprobarlo:** pedir `GET /health` a la URL de producción y revisar si la respuesta refleja el cambio esperado. Ejemplo (a partir del commit `2678c9d`, el JSON debe incluir el campo `"database"` y la respuesta debe traer el header `X-Request-Id`):
+
+```bash
+curl -sI https://cierre-caja-api.onrender.com/health | grep -i x-request-id
+curl -s https://cierre-caja-api.onrender.com/health
+```
+
+Si no aparecen los campos/headers esperados del último commit, el deploy no se aplicó. Revisar en el dashboard de Render:
+1. Que el servicio tenga **Auto-Deploy** activado y apuntando a la rama `main`
+2. La pestaña **Events/Deploys** para ver si el build más reciente falló o quedó pendiente
+3. Si hace falta, disparar un **Manual Deploy** desde el dashboard
 
 ---
 
