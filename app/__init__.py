@@ -59,6 +59,8 @@ def create_app(config_class=Config):
     from app.models.repurchase import RepurchaseEntry  # Import to ensure table is created
     from app.models.repurchase_purchase import RepurchasePurchase  # Import to ensure table is created
     from app.models.notes_tasks import RestockItem, OperationalTask  # Import to ensure tables are created
+    from app.models.cash_closing import CashClosing  # Import to ensure table is created
+    from app.models.account import Account, AccountMovement  # Import to ensure tables are created
 
     db.init_app(app)
 
@@ -68,6 +70,9 @@ def create_app(config_class=Config):
             _migrate_employee_tables(db, app)
             db.create_all()
             app.logger.info("Database tables created/verified successfully")
+
+            from app.routes.accounts import seed_default_accounts
+            seed_default_accounts()
         except Exception as e:
             app.logger.error(f"Error creating database tables: {e}")
 
@@ -198,6 +203,7 @@ def create_app(config_class=Config):
     from app.routes.employee_records import bp as employee_records_bp
     from app.routes.repurchase import bp as repurchase_bp
     from app.routes.notes_tasks import bp as notes_tasks_bp
+    from app.routes.accounts import bp as accounts_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -211,6 +217,7 @@ def create_app(config_class=Config):
     app.register_blueprint(employee_records_bp)  # Control de empleadas
     app.register_blueprint(repurchase_bp)  # Cuentas de recompras
     app.register_blueprint(notes_tasks_bp)  # Notas y pendientes
+    app.register_blueprint(accounts_bp)  # Cuentas (saldo por medio de pago)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

@@ -88,6 +88,11 @@ class Config:
     MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '5'))
     LOCKOUT_TIME_MINUTES = int(os.getenv('LOCKOUT_TIME_MINUTES', '15'))
 
+    # Token compartido con el workflow de GitHub Actions que dispara la
+    # sincronización diaria de Cuentas (POST /api/accounts/sync-daily) a las 9pm.
+    # Si queda vacío, ese endpoint solo acepta JWT de un usuario admin.
+    DAILY_SYNC_TOKEN = os.getenv('DAILY_SYNC_TOKEN', '')
+
     @classmethod
     def validate(cls):
         """

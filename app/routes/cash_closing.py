@@ -21,6 +21,9 @@ from app.exceptions import (
     AlegraConnectionError,
     ConfigurationError
 )
+from sqlalchemy.exc import IntegrityError
+from app.models.user import db
+from app.models.cash_closing import CashClosing
 from app.utils.timezone import (
     get_current_datetime,
     format_datetime_info,
@@ -339,6 +342,68 @@ def sum_payments():
     current_app.logger.info("-" * 80)
     current_app.logger.info(f"Validación del cierre: {validacion_cierre['validation_status'].upper()}")
     current_app.logger.info(f"  {validacion_cierre['mensaje_validacion']}")
+
+    # ========================================
+    # PERSISTIR EL CIERRE (para el módulo de Cuentas)
+    # ========================================
+    # Estrictamente aditivo: si esto falla por cualquier razón, NUNCA debe
+    # afectar la respuesta que ya recibió/recibirá la vendedora - solo se loguea.
+    try:
+        closing_date = cierre_date.date()
+
+        def _apply_closing_fields(closing_row):
+            # Si el cierre de ese día ya fue sincronizado con Cuentas (accounts.py),
+            # NO se sobreescriben los montos ya acreditados: hacerlo perdería el
+            # registro de qué se acreditó realmente (los AccountMovement ya
+            # creados seguirían mostrando el monto viejo). Si la vendedora corrige
+            # un cierre que ya fue sincronizado, la corrección se hace con "Ajuste
+            # manual" en Cuentas, no reenviando el cierre.
+            if closing_row.synced_to_accounts:
+                current_app.logger.warning(
+                    f"El cierre de {closing_date} se reenvió después de haber sido "
+                    f"sincronizado con Cuentas - los montos ya acreditados NO se "
+                    f"sobreescriben, usar Ajuste manual si hace falta corregir."
+                )
+                return
+            closing_row.efectivo = cash_result.get('consignar', {}).get('efectivo_para_consignar_final', 0)
+            closing_row.nequi = metodos_pago_calculados.get('nequi_luz_helena', 0)
+            closing_row.daviplata = metodos_pago_calculados.get('daviplata_jose', 0)
+            closing_row.qr = metodos_pago_calculados.get('qr_julieth', 0)
+            closing_row.addi_datafono = metodos_pago_calculados.get('total_datafono_real', 0)
+
+        current_user = get_current_user()
+        created_by = current_user.get('userId') if current_user else None
+
+        closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+        if closing:
+            _apply_closing_fields(closing)
+            closing.created_by = created_by
+            db.session.commit()
+        else:
+            closing = CashClosing(closing_date=closing_date, created_by=created_by)
+            _apply_closing_fields(closing)
+            db.session.add(closing)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Dos cierres para la misma fecha llegaron casi al mismo tiempo
+                # (doble clic, reintento del frontend) y ambos vieron "no existe
+                # todavía" - el que ganó la carrera ya insertó la fila. En vez de
+                # perder silenciosamente este segundo envío, se aplica como UPDATE
+                # sobre la fila que sí quedó insertada.
+                db.session.rollback()
+                closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+                if closing:
+                    _apply_closing_fields(closing)
+                    closing.created_by = created_by
+                    db.session.commit()
+                else:
+                    raise
+
+        current_app.logger.info(f"Cierre de caja persistido para {closing_date} (id={closing.id})")
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"No se pudo persistir el cierre de caja: {e}", exc_info=True)
 
     # Validación de EFECTIVO (crítica)
     diff_efectivo = validacion_cierre['diferencias']['efectivo']
