@@ -2,6 +2,29 @@
 
 ---
 
+## [2026-09-01] - Conectar Cuentas Recompras con Resumen: los envíos descuentan saldo real
+
+### 💸 `app/routes/repurchase.py`
+- Nuevo mapeo `REPURCHASE_ACCOUNT_MAP` (medio de pago del envío → `payment_key` de la cuenta en Resumen: efectivo→cash, datafono→addi_datafono, qr→qr, daviplata→daviplata, nequi→nequi, bbva→bbva)
+- Nueva función `_sync_entry_account_movements()`: al crear un envío, descuenta automáticamente cada cuenta según el medio de pago usado (crea un `AccountMovement` tipo `repurchase_send`, ligado al envío vía `reference_id=f'repurchase-entry-{id}'`); al editar, revierte los movimientos anteriores y crea los nuevos según los montos actualizados; al eliminar, revierte (repone el saldo). Todo bloqueando las cuentas tocadas (`with_for_update`, orden determinístico por id) para evitar carreras con ajustes/transferencias concurrentes
+- **No retroactivo:** solo los envíos creados desde este cambio (`synced_to_accounts=True`) participan de esta sincronización. Los envíos ya existentes en la base no se tocan, ni siquiera si se editan después — quedan como estaban, sin conectar a ninguna cuenta
+- `valor_no_enviado` (plata aún no enviada) y `sobrante_mes_anterior` (plata que el socio ya tenía) quedan fuera del descuento a propósito: no representan salida de dinero de una cuenta en ese movimiento
+
+### 🏦 `app/routes/accounts.py`
+- Nueva cuenta por defecto **BBVA** (`payment_key='bbva'`, saldo inicial $0) — el campo BBVA de los envíos no tenía cuenta equivalente en Resumen
+- `seed_default_accounts()` ahora agrega cuentas que falten sin volver a tocar las existentes (antes solo sembraba si la tabla estaba completamente vacía) — así la cuenta BBVA se crea también en producción sin afectar los saldos ya acumulados de las otras 6
+
+### 🗄️ Modelos y migración
+- `app/models/repurchase.py`: nueva columna `synced_to_accounts` (Boolean, sin default SQL a propósito — los envíos existentes quedan en NULL/False)
+- `app/models/account.py`: nuevo tipo de movimiento documentado `repurchase_send`
+- `app/__init__.py`: migración seguro (`ALTER TABLE`) para la columna nueva
+
+### ✅ Verificación
+- `python -m py_compile` sin errores
+- Probado end-to-end contra un backend local (SQLite, sin tocar producción): replicando el ejemplo real del usuario — ADDI+DATÁFONO con $8.000.000, se registra un envío con datáfono=$2.000.000 → el saldo de Resumen baja a $6.000.000 automáticamente. Se probó también editar ese envío (subir a $5.000.000 → saldo baja a $3.000.000, revirtiendo primero el movimiento viejo) y eliminarlo (saldo vuelve a $8.000.000)
+
+---
+
 ## [2026-09-01] - Categorizar compras de Cuentas Recompras (ropa vs. gasto operacional)
 
 ### 🏷️ `app/models/repurchase_purchase.py`

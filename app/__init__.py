@@ -338,6 +338,12 @@ def _migrate_employee_tables(db, app):
 
         # Categoría de compra ('ropa' | 'operacional') para Cuentas Recompras (2026-09-01)
         add_column_if_missing(conn, 'repurchase_purchases', 'category', 'VARCHAR(20)', default='ropa')
+
+        # Conexión Cuentas Recompras <-> Resumen (2026-09-01): marca qué envíos
+        # descuentan saldo de cuentas automáticamente. Sin DEFAULT a propósito:
+        # los envíos existentes quedan en NULL (equivalente a False al leerlos
+        # por el ORM), para que la conexión no aplique retroactivamente.
+        add_column_if_missing(conn, 'repurchase_entries', 'synced_to_accounts', 'BOOLEAN')
         conn.commit()
 
 

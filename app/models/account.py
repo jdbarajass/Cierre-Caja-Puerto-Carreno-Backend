@@ -12,6 +12,7 @@ MOVEMENT_TYPES = (
     'transfer_out',
     'transfer_in',
     'cash_closing',
+    'repurchase_send',
 )
 
 

@@ -11,6 +11,7 @@ from app.middlewares.auth import token_required, get_current_user
 from app.models.user import db
 from app.models.repurchase import RepurchaseEntry
 from app.models.repurchase_purchase import RepurchasePurchase
+from app.models.account import Account, AccountMovement
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('repurchase', __name__)
@@ -19,6 +20,95 @@ MONEY_FIELDS = ['efectivo', 'datafono', 'qr', 'daviplata', 'nequi', 'bbva',
                 'valor_no_enviado', 'sobrante_mes_anterior']
 
 PURCHASE_CATEGORIES = ('ropa', 'operacional')
+
+# Campo de envío (RepurchaseEntry) -> payment_key de la cuenta correspondiente
+# en Resumen (Account). El dinero enviado a Jhonatan sale físicamente de estas
+# cuentas, así que se descuenta de ahí automáticamente (ver
+# _sync_entry_account_movements). 'valor_no_enviado' y 'sobrante_mes_anterior'
+# quedan fuera a propósito: el primero todavía no salió de la tienda, y el
+# segundo es plata que Jhonatan ya tenía de antes (no sale de ninguna cuenta
+# en este movimiento).
+REPURCHASE_ACCOUNT_MAP = {
+    'efectivo':  'cash',
+    'datafono':  'addi_datafono',
+    'qr':        'qr',
+    'daviplata': 'daviplata',
+    'nequi':     'nequi',
+    'bbva':      'bbva',
+}
+
+
+def _sync_entry_account_movements(entry, is_delete=False):
+    """
+    Mantiene sincronizados los movimientos de cuentas (Resumen) ligados a un
+    envío de recompra (RepurchaseEntry), identificados por
+    reference_id=f'repurchase-entry-{entry.id}':
+
+    1. Revierte (borra + repone el saldo) los movimientos que ya existían para
+       este envío, si los hay.
+    2. Si is_delete=False, crea movimientos nuevos según los montos ACTUALES
+       del envío (uno por cada medio de pago con monto > 0), descontando el
+       saldo de la cuenta correspondiente.
+
+    Se usa tanto al crear (revertir=no-op, crear=sí) como al editar (revertir
+    lo viejo, crear lo nuevo) y al eliminar (revertir, is_delete=True) un
+    envío. No hace commit - el caller decide cuándo confirmar la transacción,
+    para que el envío y sus movimientos se guarden atómicamente.
+    """
+    reference_id = f'repurchase-entry-{entry.id}'
+    existing = AccountMovement.query.filter_by(reference_id=reference_id).all()
+
+    new_keys = set()
+    if not is_delete:
+        for field, payment_key in REPURCHASE_ACCOUNT_MAP.items():
+            if getattr(entry, field):
+                new_keys.add(payment_key)
+
+    accounts_by_key = {}
+    if new_keys:
+        accounts_by_key = {a.payment_key: a for a in Account.query.filter(
+            Account.payment_key.in_(list(new_keys))
+        ).all()}
+
+    # Bloquea de una vez todas las cuentas tocadas (las de los movimientos
+    # viejos + las de los nuevos), en un único orden determinístico por id,
+    # para no dejar inconsistencias si dos ediciones/cierres concurrentes
+    # tocan las mismas cuentas.
+    all_ids = {m.account_id for m in existing} | {a.id for a in accounts_by_key.values()}
+    locked_by_id = {}
+    if all_ids:
+        locked_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(all_ids))
+                         .with_for_update().order_by(Account.id.asc()).all()}
+
+    for m in existing:
+        account = locked_by_id.get(m.account_id)
+        if account:
+            account.balance -= m.amount  # amount es negativo (salida), así que esto repone el saldo
+        db.session.delete(m)
+
+    if is_delete:
+        return
+
+    user_id = get_current_user().get('userId')
+    for field, payment_key in REPURCHASE_ACCOUNT_MAP.items():
+        amount = getattr(entry, field)
+        if not amount:
+            continue
+        account = accounts_by_key.get(payment_key)
+        if not account:
+            logger.warning(f"Envío recompra: no existe cuenta con payment_key={payment_key}, no se descuenta '{field}'")
+            continue
+        account = locked_by_id.get(account.id, account)
+        movement = AccountMovement(
+            account_id=account.id,
+            type='repurchase_send',
+            amount=-amount,
+            description=f'Envío a socio (recompra): {entry.descripcion}',
+            reference_id=reference_id,
+            created_by=user_id,
+        )
+        account.balance -= amount
+        db.session.add(movement)
 
 
 def _require_admin():
@@ -131,10 +221,13 @@ def create_entry():
             sobrante_mes_anterior=float(data.get('sobrante_mes_anterior', 0)),
             fecha_compra=fecha_compra,
             notes=data.get('notes', '').strip() or None,
-            created_by=get_current_user().get('userId')
+            created_by=get_current_user().get('userId'),
+            synced_to_accounts=True,
         )
 
         db.session.add(entry)
+        db.session.flush()  # asigna entry.id sin comitear, para poder ligar los movimientos
+        _sync_entry_account_movements(entry)
         db.session.commit()
         logger.info(f"Recompra creada id={entry.id}")
         return jsonify({'success': True, 'entry': entry.to_dict()}), 201
@@ -180,6 +273,13 @@ def update_entry(entry_id):
         if 'notes' in data:
             entry.notes = data['notes'].strip() or None
 
+        # Solo los envíos que ya nacieron conectados a Resumen (synced_to_accounts)
+        # se resincronizan al editar. Los envíos históricos (de antes de esta
+        # conexión) se dejan intactos, sin empezar a descontar cuentas de golpe
+        # solo porque se les corrigió un dato.
+        if entry.synced_to_accounts:
+            _sync_entry_account_movements(entry)
+
         db.session.commit()
         return jsonify({'success': True, 'entry': entry.to_dict()}), 200
 
@@ -204,9 +304,17 @@ def delete_entry(entry_id):
         return err
 
     entry = RepurchaseEntry.query.get_or_404(entry_id)
-    db.session.delete(entry)
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+
+    try:
+        if entry.synced_to_accounts:
+            _sync_entry_account_movements(entry, is_delete=True)
+        db.session.delete(entry)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Registro eliminado'}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error eliminando recompra {entry_id}: {e}")
+        return jsonify({'success': False, 'message': 'Error al eliminar'}), 500
 
 
 # ─────────────────────────────────────────────

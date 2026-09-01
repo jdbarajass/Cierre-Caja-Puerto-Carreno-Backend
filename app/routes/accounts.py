@@ -33,17 +33,25 @@ DEFAULT_ACCOUNTS = [
     {'payment_key': 'qr', 'name': 'QR BANCOLOMBIA', 'color': 'orange', 'sort_order': 4},
     {'payment_key': 'addi_datafono', 'name': 'ADDI + DATÁFONO (Tarjetas)', 'color': 'blue', 'sort_order': 5},
     {'payment_key': 'sistecredito', 'name': 'SisteCrédito', 'color': 'teal', 'sort_order': 6},
+    {'payment_key': 'bbva', 'name': 'BBVA', 'color': 'indigo', 'sort_order': 7},
 ]
 
 
 def seed_default_accounts():
-    """Inserta las cuentas por defecto si la tabla está vacía. Idempotente."""
-    if Account.query.count() > 0:
+    """
+    Inserta las cuentas por defecto que falten. Idempotente y no destructivo:
+    nunca borra ni modifica cuentas existentes (ni su saldo), solo agrega las
+    que falten - así se pueden sumar cuentas nuevas (ej. BBVA) en despliegues
+    futuros sin afectar las que ya están en producción con saldo real.
+    """
+    existing_keys = {a.payment_key for a in Account.query.all()}
+    missing = [data for data in DEFAULT_ACCOUNTS if data['payment_key'] not in existing_keys]
+    if not missing:
         return
-    for data in DEFAULT_ACCOUNTS:
+    for data in missing:
         db.session.add(Account(balance=0, active=True, **data))
     db.session.commit()
-    logger.info(f"Cuentas por defecto creadas: {len(DEFAULT_ACCOUNTS)}")
+    logger.info(f"Cuentas por defecto creadas: {[m['name'] for m in missing]}")
 
 
 def sync_token_or_admin_required(f):

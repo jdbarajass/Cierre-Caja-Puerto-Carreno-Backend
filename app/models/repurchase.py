@@ -36,6 +36,13 @@ class RepurchaseEntry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # True solo para envíos creados a partir de 2026-09-01, cuando se conectó
+    # Cuentas Recompras con Resumen: solo esos descuentan/reponen saldo de
+    # cuentas automáticamente al crear/editar/eliminar (ver _sync_entry_
+    # account_movements en app/routes/repurchase.py). Los envíos anteriores
+    # quedan sin tocar (nunca se sincronizaron, ni retroactivamente).
+    synced_to_accounts = db.Column(db.Boolean, default=False, nullable=True)
+
     creator = db.relationship('User', foreign_keys=[created_by], lazy='joined')
 
     @property
@@ -71,6 +78,7 @@ class RepurchaseEntry(db.Model):
             'fee_4mil': self.fee_4mil,
             'valor_sobrante': self.valor_sobrante,
             'notes': self.notes,
+            'synced_to_accounts': bool(self.synced_to_accounts),
             'created_by_name': self.creator.name if self.creator else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
