@@ -43,6 +43,11 @@ class RepurchaseEntry(db.Model):
     # quedan sin tocar (nunca se sincronizaron, ni retroactivamente).
     synced_to_accounts = db.Column(db.Boolean, default=False, nullable=True)
 
+    # Si el usuario sobrescribe manualmente la comisión (porque el banco cobró
+    # distinto ese día), se guarda aquí. NULL = seguir calculando 4‰ automático
+    # sobre total_enviado (comportamiento de siempre).
+    fee_override = db.Column(db.Float, nullable=True)
+
     creator = db.relationship('User', foreign_keys=[created_by], lazy='joined')
 
     @property
@@ -52,7 +57,9 @@ class RepurchaseEntry(db.Model):
 
     @property
     def fee_4mil(self):
-        """Comisión 4 por mil sobre el total enviado."""
+        """Comisión sobre el total enviado: 4 por mil automático, salvo que se haya sobrescrito manualmente."""
+        if self.fee_override is not None:
+            return self.fee_override
         return round(self.total_enviado * 4 / 1000)
 
     @property
@@ -76,6 +83,7 @@ class RepurchaseEntry(db.Model):
             'fecha_compra': self.fecha_compra.isoformat() if self.fecha_compra else None,
             'total_enviado': self.total_enviado,
             'fee_4mil': self.fee_4mil,
+            'fee_override': self.fee_override,
             'valor_sobrante': self.valor_sobrante,
             'notes': self.notes,
             'synced_to_accounts': bool(self.synced_to_accounts),

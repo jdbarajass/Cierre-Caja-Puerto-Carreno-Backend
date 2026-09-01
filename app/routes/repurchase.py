@@ -168,8 +168,10 @@ def list_entries():
             'total_enviado':     sum(e.total_enviado for e in entries),
             'sobrante_acumulado':sum(e.sobrante_mes_anterior for e in entries),
         }
-        # Comisión 4‰ sobre el total enviado
-        totals['fee_4mil']      = round(totals['total_enviado'] * 4 / 1000)
+        # Comisión: suma de la comisión YA RESUELTA de cada envío (fee_4mil ya
+        # respeta fee_override cuando el usuario la sobrescribió a mano) - no
+        # se recalcula el 4‰ desde el total agregado, para no ignorar overrides.
+        totals['fee_4mil']      = sum(e.fee_4mil for e in entries)
         totals['valor_sobrante']= totals['total_enviado'] - totals['fee_4mil']
 
         return jsonify({
@@ -208,6 +210,8 @@ def create_entry():
         if data.get('fecha_compra'):
             fecha_compra = parse_date(data['fecha_compra'])
 
+        fee_override = data.get('fee_override')
+
         entry = RepurchaseEntry(
             date=parse_date(data['date']),
             descripcion=data.get('descripcion', '').strip() or 'Recompra Jhonatan',
@@ -223,6 +227,7 @@ def create_entry():
             notes=data.get('notes', '').strip() or None,
             created_by=get_current_user().get('userId'),
             synced_to_accounts=True,
+            fee_override=float(fee_override) if fee_override is not None else None,
         )
 
         db.session.add(entry)
@@ -269,6 +274,10 @@ def update_entry(entry_id):
         for field in MONEY_FIELDS:
             if field in data:
                 setattr(entry, field, float(data[field]))
+
+        if 'fee_override' in data:
+            fee_override = data['fee_override']
+            entry.fee_override = float(fee_override) if fee_override is not None else None
 
         if 'notes' in data:
             entry.notes = data['notes'].strip() or None
@@ -345,7 +354,7 @@ def monthly_summary():
                     'efectivo': 0, 'datafono': 0, 'qr': 0,
                     'daviplata': 0, 'nequi': 0, 'bbva': 0,
                     'total_enviado': 0, 'sobrante_mes_anterior': 0,
-                    'valor_no_enviado': 0, 'count': 0
+                    'valor_no_enviado': 0, 'fee_4mil': 0, 'count': 0
                 }
             m = months[key]
             m['efectivo']            += e.efectivo
@@ -357,11 +366,12 @@ def monthly_summary():
             m['total_enviado']       += e.total_enviado
             m['sobrante_mes_anterior'] += e.sobrante_mes_anterior
             m['valor_no_enviado']    = e.valor_no_enviado
+            # fee_4mil ya respeta fee_override cuando el envío lo tiene sobrescrito
+            m['fee_4mil']            += e.fee_4mil
             m['count']               += 1
 
-        # Calcular fee 4‰ y sobrante por mes
+        # Sobrante (neto) por mes, con el fee ya acumulado arriba
         for m in months.values():
-            m['fee_4mil']       = round(m['total_enviado'] * 4 / 1000)
             m['valor_sobrante'] = m['total_enviado'] - m['fee_4mil']
 
         return jsonify({'success': True, 'months': list(months.values())}), 200

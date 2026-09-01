@@ -344,6 +344,10 @@ def _migrate_employee_tables(db, app):
         # los envíos existentes quedan en NULL (equivalente a False al leerlos
         # por el ORM), para que la conexión no aplique retroactivamente.
         add_column_if_missing(conn, 'repurchase_entries', 'synced_to_accounts', 'BOOLEAN')
+
+        # Comisión editable por envío (2026-09-01): NULL = sigue calculando el
+        # 4‰ automático de siempre; un número = el usuario lo sobrescribió.
+        add_column_if_missing(conn, 'repurchase_entries', 'fee_override', 'FLOAT')
         conn.commit()
 
 

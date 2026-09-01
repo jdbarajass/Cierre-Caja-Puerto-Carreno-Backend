@@ -2,6 +2,25 @@
 
 ---
 
+## [2026-09-01] - Comisión editable por envío; quitar "valor no enviado" de la UI
+
+### 💰 Comisión editable (`app/models/repurchase.py`, `app/routes/repurchase.py`)
+- Nueva columna `RepurchaseEntry.fee_override` (Float, nullable): si está seteada, `fee_4mil` la usa en vez de calcular el 4‰ automático sobre `total_enviado`. `to_dict()` la expone.
+- `create_entry`/`update_entry` aceptan `fee_override` en el payload (número o `null` para volver al cálculo automático)
+- `list_entries`: el total de comisión del mes ahora es la **suma de `fee_4mil` de cada envío** (respeta los overrides) en vez de recalcular 4‰ sobre el total agregado
+- `monthly_summary`: mismo ajuste, acumula `fee_4mil` por envío en vez de recalcular por mes
+
+### 🗑️ `valor_no_enviado` sigue existiendo en el modelo/DB (sin cambios) pero se quitó de la interfaz del frontend — ver [CHANGELOG del frontend](../Cierre-Caja-Puerto-Carreno-Frontend/CHANGELOG.md). No se tocó el backend para este campo: no participaba de ningún cálculo, así que dejar de enviarlo desde el formulario no requiere ningún cambio aquí (el default sigue siendo 0).
+
+### 🗄️ Migración
+- `app/__init__.py`: nueva columna `repurchase_entries.fee_override` (`ALTER TABLE`, sin DEFAULT — NULL = comisión automática, comportamiento idéntico al de siempre para todos los envíos existentes)
+
+### ✅ Verificación
+- `python -m py_compile` sin errores
+- Probado end-to-end contra backend local: envío de $1.000.000 en efectivo muestra $4.000 de comisión automática (4‰); al sobrescribirla a $10.000 y guardar, la tabla y el pie de página ("Total Facturas") reflejan $10.000 / $990.000 neto correctamente, con un ícono ✎ indicando que la comisión fue editada a mano
+
+---
+
 ## [2026-09-01] - Conectar Cuentas Recompras con Resumen: los envíos descuentan saldo real
 
 ### 💸 `app/routes/repurchase.py`
