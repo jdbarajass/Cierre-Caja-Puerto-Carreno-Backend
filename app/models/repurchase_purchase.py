@@ -13,6 +13,9 @@ class RepurchasePurchase(db.Model):
     date = db.Column(db.Date, nullable=False, index=True)
     store = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    # 'ropa' (compra de mercancía, se soporta con factura) u 'operacional'
+    # (gasolina, bolsas, cajas de cartón, etc.)
+    category = db.Column(db.String(20), nullable=False, default='ropa')
     notes = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -26,6 +29,7 @@ class RepurchasePurchase(db.Model):
             'date': self.date.isoformat() if self.date else None,
             'store': self.store,
             'amount': self.amount,
+            'category': self.category,
             'notes': self.notes,
             'created_by_name': self.creator.name if self.creator else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

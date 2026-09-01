@@ -2,6 +2,28 @@
 
 ---
 
+## [2026-09-01] - Categorizar compras de Cuentas Recompras (ropa vs. gasto operacional)
+
+### 🏷️ `app/models/repurchase_purchase.py`
+- Nueva columna `category` en `RepurchasePurchase` (`VARCHAR(20)`, default `'ropa'`). Valores válidos: `'ropa'` (compra de mercancía, se soporta con factura) u `'operacional'` (gasolina, bolsas, cajas de cartón, etc.)
+- Incluida en `to_dict()`
+
+### 🔧 `app/__init__.py`
+- Migración segura (mismo patrón `ALTER TABLE ADD COLUMN` ya usado en el proyecto) para agregar `category` a `repurchase_purchases` sin borrar datos existentes — filas antiguas quedan como `'ropa'` por defecto
+
+### 🔀 `app/routes/repurchase.py`
+- `POST /api/repurchase/purchases` y `PUT /api/repurchase/purchases/<id>` validan y persisten `category` (rechaza valores fuera de `('ropa', 'operacional')` con 400)
+- `GET /api/repurchase/purchases` ahora devuelve `total_ropa` y `total_operacional` además de `total_compras`, para que el frontend muestre subtotales por categoría
+
+### Por qué
+El socio que hace las recompras de ropa (Jhonatan) también incurre en gastos operacionales (gasolina, bolsas, cajas) con el mismo dinero enviado. El balance ya restaba cualquier "compra" registrada — esto solo agrega la distinción para poder ver cuánto se fue en mercancía vs. en gastos operacionales, sin cambiar la matemática del balance (`recibido - compras`, sin importar la categoría).
+
+### ✅ Verificación
+- `python -m py_compile` sin errores en los 3 archivos tocados
+- Probado end-to-end contra un backend local (SQLite local, sin tocar producción/Render): migración de columna confirmada en logs de arranque, creación de compra con `category='operacional'` y `category='ropa'` (default), subtotales y balance recalculados correctamente en la UI tras cada guardado
+
+---
+
 ## [2026-08-21] - Re-verificación del cambio del 2026-08-19 (sin cambios de código)
 
 ### ✅ Re-confirmado localmente, todo sigue pasando

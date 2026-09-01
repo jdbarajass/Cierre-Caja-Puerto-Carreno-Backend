@@ -335,6 +335,9 @@ def _migrate_employee_tables(db, app):
         # Si se agrega 'aprobado_por' a employee_loans:
         # add_column_if_missing(conn, 'employee_loans', 'aprobado_por', 'VARCHAR(100)')
         # ──────────────────────────────────────────────────────────────────────
+
+        # Categoría de compra ('ropa' | 'operacional') para Cuentas Recompras (2026-09-01)
+        add_column_if_missing(conn, 'repurchase_purchases', 'category', 'VARCHAR(20)', default='ropa')
         conn.commit()
 
 

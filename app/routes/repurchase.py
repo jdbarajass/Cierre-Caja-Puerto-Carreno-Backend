@@ -18,6 +18,8 @@ bp = Blueprint('repurchase', __name__)
 MONEY_FIELDS = ['efectivo', 'datafono', 'qr', 'daviplata', 'nequi', 'bbva',
                 'valor_no_enviado', 'sobrante_mes_anterior']
 
+PURCHASE_CATEGORIES = ('ropa', 'operacional')
+
 
 def _require_admin():
     role = get_current_user().get('role')
@@ -290,11 +292,15 @@ def list_purchases():
 
         purchases = q.order_by(RepurchasePurchase.date.asc(), RepurchasePurchase.id.asc()).all()
         total = sum(p.amount for p in purchases)
+        total_ropa = sum(p.amount for p in purchases if p.category == 'ropa')
+        total_operacional = sum(p.amount for p in purchases if p.category == 'operacional')
 
         return jsonify({
             'success': True,
             'purchases': [p.to_dict() for p in purchases],
             'total_compras': total,
+            'total_ropa': total_ropa,
+            'total_operacional': total_operacional,
             'count': len(purchases)
         }), 200
 
@@ -321,10 +327,15 @@ def create_purchase():
             if not data.get(f):
                 return jsonify({'success': False, 'message': f'Campo requerido: {f}'}), 400
 
+        category = data.get('category', 'ropa')
+        if category not in PURCHASE_CATEGORIES:
+            return jsonify({'success': False, 'message': f'category debe ser una de: {PURCHASE_CATEGORIES}'}), 400
+
         purchase = RepurchasePurchase(
             date=parse_date(data['date']),
             store=data['store'].strip(),
             amount=float(data['amount']),
+            category=category,
             notes=data.get('notes', '').strip() or None,
             created_by=get_current_user().get('userId')
         )
@@ -367,6 +378,10 @@ def manage_purchase(purchase_id):
             purchase.store = data['store'].strip()
         if 'amount' in data:
             purchase.amount = float(data['amount'])
+        if 'category' in data:
+            if data['category'] not in PURCHASE_CATEGORIES:
+                return jsonify({'success': False, 'message': f'category debe ser una de: {PURCHASE_CATEGORIES}'}), 400
+            purchase.category = data['category']
         if 'notes' in data:
             purchase.notes = data['notes'].strip() or None
         db.session.commit()
