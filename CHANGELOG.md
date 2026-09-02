@@ -2,6 +2,21 @@
 
 ---
 
+## [2026-09-02] - Fix: import roto en metas de ventas; timeout de Gunicorn insuficiente para inventario completo
+
+### 🐛 `app/routes/cash_closing.py`
+- `/api/sales_comparison_yoy` (usado por "Metas de Ventas" en Totales de Ventas) fallaba con 500 en el 100% de los casos: `from app.utils.formatting import format_cop` referenciaba un módulo inexistente (el módulo real es `app.utils.formatters`, como ya se importaba correctamente unas líneas más abajo en el mismo archivo). Typo corregido. Confirmado en producción antes del fix: `{"details": "No module named 'app.utils.formatting'", "error": "Error inesperado al procesar la solicitud"}`.
+
+### ⏱️ `Procfile`
+- El botón "Consultar Inventario" (`GET /api/direct/inventory/value-report?limit=3000`) pagina secuencialmente contra Alegra (200 items por página) y la propia UI advierte "puede tardar entre 1 y 3 minutos" — pero Gunicorn tenía `--timeout 120`, por debajo de lo que la app promete. Reproducido en producción: a los 120.7s exactos el worker es matado y el cliente recibe un 500 HTML crudo (no el error JSON controlado de Flask). Se subió `--timeout 120` → `--timeout 240` para dar margen sobre los 3 minutos anunciados. No resuelve la causa de fondo (la paginación secuencial contra Alegra), solo evita que la petición se corte a mitad de camino; documentado en `MEJORAS_PENDIENTES.md` como candidato a paralelizar más adelante.
+
+### ✅ Verificación
+- `python -m py_compile` sin errores en `cash_closing.py`
+- Fix de `format_cop` verificado por inspección: `app/utils/formatters.py` sí exporta `format_cop` (se usa igual en la línea 860 del mismo archivo)
+- Cambio de timeout es de una sola línea en `Procfile`, sin lógica que probar; se verificará en producción tras el deploy manual en Render
+
+**Deploy:** requiere Manual Deploy en Render (este servicio no tiene auto-deploy activo).
+
 ## [2026-09-01] - Comisión editable por envío; quitar "valor no enviado" de la UI
 
 ### 💰 Comisión editable (`app/models/repurchase.py`, `app/routes/repurchase.py`)

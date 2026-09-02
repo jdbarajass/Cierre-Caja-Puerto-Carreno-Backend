@@ -44,6 +44,24 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 
 ---
 
+## 3. Paralelizar la paginación de inventario contra Alegra
+
+**Qué cambiar:**
+- `AlegraDirectClient.get_inventory_value_report_paginated()` (`app/services/alegra_direct_client.py`) trae el inventario completo (hasta 3000 items) en páginas secuenciales de 200 items, una llamada HTTP a Alegra tras otra. Con el catálogo completo de la tienda, esto puede tomar más de 2 minutos.
+- El 2026-09-02 se subió el timeout de Gunicorn de 120s a 240s (`Procfile`) como parche para que la petición no se corte a mitad de camino, pero la causa de fondo (paginación 100% secuencial) sigue igual.
+- Alternativas a evaluar: paralelizar las páginas con `concurrent.futures`/`asyncio` (cuidado con el rate limit de Alegra, que es la razón por la que ya se usa `page_size=200` en vez de un límite mayor — ver comentario "para evitar error 503" en el código), o cachear el resultado completo por `to_date` con el mismo `ttl_cache.py` que ya existe para `alegra_client.py` (el inventario de un día pasado no cambia).
+
+**Efectos de hacer este cambio:**
+- Mientras esta consulta está en curso (con solo `--workers 2` en el Procfile), el resto del sistema (cierres de caja, login) queda con un solo worker libre para atender a todos los demás usuarios — en horario de tienda esto podría notarse
+- Cualquier paralelización debe respetar el límite de tasa de Alegra (ya causó errores 503 antes con páginas más grandes)
+
+**Beneficios:**
+- Elimina el riesgo de que "Consultar Inventario" falle con un error crudo del servidor si el catálogo crece
+- Libera antes los 2 workers de Gunicorn para el resto de usuarios del sistema
+
+---
+
 ## Notas
 - Documento creado el 2026-08-24 a partir de la auditoría técnica y las mejoras ya implementadas el 2026-08-19 (ver [CHANGELOG.md](CHANGELOG.md))
+- Ítem 3 agregado el 2026-09-02 tras reproducir en producción un timeout de Gunicorn en "Consultar Inventario" durante una revisión de la sección Estadísticas
 - Ver también la lista de mejoras pendientes del frontend en `MEJORAS_PENDIENTES.md` del repo `Cierre-Caja-Puerto-Carreno-Frontend`

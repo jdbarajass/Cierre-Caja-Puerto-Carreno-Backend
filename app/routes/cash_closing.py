@@ -644,7 +644,7 @@ def get_sales_comparison_yoy():
         else:
             month_percentage_change = 100.0 if current_month_total > 0 else 0.0
 
-        from app.utils.formatting import format_cop
+        from app.utils.formatters import format_cop
 
         monthly_comparison = {
             'current': {
