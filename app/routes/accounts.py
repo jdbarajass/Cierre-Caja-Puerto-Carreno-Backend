@@ -21,6 +21,7 @@ from app.config import Config
 from app.utils.timezone import get_colombia_now, parse_colombia_date
 from app.services.alegra_client import AlegraClient
 from app.exceptions import AlegraConnectionError
+from app.routes.cash_closing import _get_or_init_pending_closings_tracking_start
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('accounts', __name__)
@@ -535,6 +536,18 @@ def sync_status():
 
     today = get_colombia_now().date()
 
+    # Mismo ancla que el aviso de "cierre pendiente" (ver cash_closing.py):
+    # la "Última sincronización" mostrada en pantalla solo considera cierres
+    # de ESTE día en adelante (el día en que se activó esta pantalla), no
+    # historial viejo. A pedido del usuario: una diferencia con Alegra de un
+    # cierre de antes de que existiera esta pantalla (ej. -$132.620 de un día
+    # ya pasado) no debe seguir apareciendo indefinidamente como "lo último" -
+    # se prefiere esperar a que haya un cierre nuevo desde hoy en adelante.
+    # OJO: esto solo afecta qué se MUESTRA aquí - el acreditado a las cuentas
+    # de cierres atrasados de antes del ancla sigue funcionando igual
+    # (ver sync_daily / pending_count más abajo, que no se filtran por esto).
+    tracking_start = _get_or_init_pending_closings_tracking_start(today)
+
     # Ordenado por closing_date (el día del cierre), NO por synced_at (cuándo
     # se ejecutó la sincronización): si un cierre atrasado (ej. del día 6) se
     # sincroniza DESPUÉS que uno más reciente (ej. el del día 7, sincronizado
@@ -542,7 +555,8 @@ def sync_status():
     # más reciente ya sincronizado", no "cuál fue la última vez que se tocó
     # algo" - de lo contrario el día más viejo tapa al más nuevo en pantalla.
     last_synced = CashClosing.query.filter(
-        CashClosing.synced_to_accounts == True  # noqa: E712
+        CashClosing.synced_to_accounts == True,  # noqa: E712
+        CashClosing.closing_date >= tracking_start
     ).order_by(CashClosing.closing_date.desc(), CashClosing.synced_at.desc()).first()
 
     pending_count = CashClosing.query.filter(
