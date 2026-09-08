@@ -5,6 +5,7 @@ Acceso: solo admin (igual que Cuentas Recompras).
 """
 import uuid
 import hmac
+import json
 import logging
 from functools import wraps
 from datetime import datetime
@@ -13,8 +14,9 @@ from flask import Blueprint, request, jsonify, g
 
 from app.middlewares.auth import token_required, role_required, get_current_user
 from app.models.user import db
-from app.models.account import Account, AccountMovement
+from app.models.account import Account, AccountMovement, _iso_utc
 from app.models.cash_closing import CashClosing
+from app.models.app_setting import AppSetting
 from app.config import Config
 from app.utils.timezone import get_colombia_now, parse_colombia_date
 from app.services.alegra_client import AlegraClient
@@ -22,6 +24,10 @@ from app.exceptions import AlegraConnectionError
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('accounts', __name__)
+
+# Clave en app_settings donde queda registrada la última corrida fallida del
+# cron de sincronización diaria (ver report_sync_failure / sync_status).
+SYNC_FAILURE_SETTING_KEY = 'last_sync_failure'
 
 # Cuentas por defecto (payment_key -> nombre/color), sembradas una sola vez si la
 # tabla está vacía. El campo de cierre de caja que acredita cada una se resuelve
@@ -311,133 +317,282 @@ def transfer():
 #  SINCRONIZACIÓN DIARIA (job de las 9pm / botón "Sincronizar ahora")
 # ─────────────────────────────────────────────
 
+def _clear_sync_failure_alert():
+    """
+    Borra la alerta de "el cron de sincronización falló" (ver
+    report_sync_failure) - se llama en cualquier corrida exitosa de
+    sync_daily, incluso si no había nada pendiente que sincronizar, porque
+    llegar hasta aquí ya prueba que el backend y la base de datos responden
+    bien. Nunca debe tumbar la respuesta de éxito si falla.
+    """
+    try:
+        AppSetting.query.filter_by(key=SYNC_FAILURE_SETTING_KEY).delete()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.warning(f"sync_daily: no se pudo limpiar la alerta de fallo previa: {e}")
+
+
+def _claim_and_credit_closing(closing, user_id):
+    """
+    "Reclama" un cierre (UPDATE atómico condicionado a synced_to_accounts=False)
+    y, si lo gana, acredita las cuentas y verifica contra Alegra.
+
+    El claim atómico evita que dos peticiones concurrentes (ej. el cron de las
+    9pm y un click en "Sincronizar ahora" al mismo tiempo, o un reintento del
+    workflow de GitHub Actions) acrediten el mismo cierre dos veces.
+
+    Devuelve un dict con el resultado de este cierre puntual. Nunca lanza por
+    fallas de Alegra (esas solo se loguean) - si lanza, es por un error real
+    de base de datos y el caller debe hacer rollback.
+    """
+    date_str = closing.closing_date.isoformat()
+
+    claim_time = datetime.utcnow()
+    rows_claimed = CashClosing.query.filter_by(
+        id=closing.id, synced_to_accounts=False
+    ).update({'synced_to_accounts': True, 'synced_at': claim_time}, synchronize_session=False)
+    db.session.commit()
+
+    if rows_claimed == 0:
+        db.session.refresh(closing)
+        return {
+            'date': date_str,
+            'already_synced': True,
+            'credited': [],
+            'synced_at': closing.to_dict()['synced_at']
+        }
+
+    # Mapeo cuenta <- campo del cierre (usa los mismos campos que ya llena
+    # la vendedora en el cierre de caja diario)
+    credit_map = [
+        ('cash', closing.efectivo),
+        ('nequi', closing.nequi),
+        ('daviplata', closing.daviplata),
+        ('qr', closing.qr),
+        ('addi_datafono', closing.addi_datafono),
+    ]
+
+    accounts_by_key = {a.payment_key: a for a in Account.query.filter(
+        Account.payment_key.in_([k for k, _ in credit_map])
+    ).all()}
+
+    credited = []
+    for payment_key, amount in credit_map:
+        if not amount:
+            continue
+        account = accounts_by_key.get(payment_key)
+        if not account:
+            logger.warning(f"sync_daily: no existe cuenta con payment_key={payment_key}, se omite")
+            continue
+
+        movement = AccountMovement(
+            account_id=account.id,
+            type='cash_closing',
+            amount=amount,
+            description=f'Cierre de caja {date_str}',
+            cash_closing_id=closing.id,
+            created_by=user_id
+        )
+        account.balance += amount
+        db.session.add(movement)
+        credited.append({'account': account.name, 'amount': amount, 'date': date_str})
+
+    # Verificación contra Alegra (no bloquea, solo informa)
+    discrepancy = None
+    try:
+        client = AlegraClient(Config.ALEGRA_USER, Config.ALEGRA_PASS, Config.ALEGRA_API_BASE_URL, Config.ALEGRA_TIMEOUT)
+        alegra_summary = client.get_sales_summary(date_str)
+        results = alegra_summary.get('results', {})
+
+        alegra_cash = results.get('cash', {}).get('total', 0)
+        alegra_transfer = results.get('transfer', {}).get('total', 0)
+        alegra_cards = results.get('debit-card', {}).get('total', 0) + results.get('credit-card', {}).get('total', 0)
+
+        closing.alegra_total_efectivo = alegra_cash
+        closing.alegra_total_transferencia = alegra_transfer
+        closing.alegra_total_tarjeta = alegra_cards
+
+        # Comparación: efectivo del cierre vs efectivo Alegra, y
+        # (nequi+daviplata+qr+addi_datafono) del cierre vs (transfer+tarjetas) de Alegra
+        registrado_efectivo = closing.efectivo
+        registrado_digital = closing.nequi + closing.daviplata + closing.qr + closing.addi_datafono
+        alegra_digital = alegra_transfer + alegra_cards
+
+        discrepancy = (registrado_efectivo - alegra_cash) + (registrado_digital - alegra_digital)
+        closing.alegra_discrepancy = discrepancy
+        closing.alegra_checked = True
+
+    except AlegraConnectionError as e:
+        logger.warning(f"sync_daily: no se pudo verificar contra Alegra para {date_str}: {e}")
+    except Exception as e:
+        logger.warning(f"sync_daily: error inesperado verificando Alegra para {date_str}: {e}")
+
+    # Reflejar en el objeto en memoria lo que el UPDATE atómico de arriba ya
+    # dejó en la base de datos (query.update() no refresca la instancia ORM).
+    closing.synced_to_accounts = True
+    closing.synced_at = claim_time
+
+    db.session.commit()
+
+    logger.info(f"sync_daily completado para {date_str}: {credited}, discrepancia={discrepancy}")
+
+    return {
+        'date': date_str,
+        'already_synced': False,
+        'credited': credited,
+        'alegra_discrepancy': discrepancy,
+        'cash_closing': closing.to_dict()
+    }
+
+
 @bp.route('/api/accounts/sync-daily', methods=['POST', 'OPTIONS'])
 @sync_token_or_admin_required
 def sync_daily():
+    """
+    Sin `date` en el body: sincroniza TODOS los cierres pendientes
+    (synced_to_accounts=False) hasta hoy inclusive, del más antiguo al más
+    reciente - así un cierre atrasado (ej. el de ayer, hecho hoy porque no se
+    alcanzó a hacer a tiempo) se sincroniza junto con el de hoy en el mismo
+    click/corrida del cron, sin necesitar un botón o fecha aparte.
+
+    Con `date`: sincroniza únicamente ese día puntual (comportamiento anterior,
+    útil para llamadas directas a la API contra una fecha específica).
+    """
     if request.method == 'OPTIONS':
         return '', 204
 
     try:
         data = request.get_json(silent=True) or {}
         date_str = data.get('date')
-        if not date_str:
-            date_str = get_colombia_now().strftime('%Y-%m-%d')
-
-        closing_date = parse_colombia_date(date_str).date()
-
-        closing = CashClosing.query.filter_by(closing_date=closing_date).first()
-        if not closing:
-            return jsonify({
-                'success': False,
-                'message': f'No hay cierre de caja registrado para {date_str}'
-            }), 404
-
-        # "Claim" atómico: un UPDATE condicionado a synced_to_accounts=False solo
-        # puede tener éxito para UNA de dos peticiones concurrentes (ej. el cron
-        # de las 9pm y un click en "Sincronizar ahora" al mismo tiempo, o un
-        # reintento del workflow de GitHub Actions) - evita acreditar el mismo
-        # cierre dos veces. rows_claimed==0 significa que ya estaba sincronizado
-        # (por esta u otra petición concurrente que ganó la carrera).
-        claim_time = datetime.utcnow()
-        rows_claimed = CashClosing.query.filter_by(
-            id=closing.id, synced_to_accounts=False
-        ).update({'synced_to_accounts': True, 'synced_at': claim_time}, synchronize_session=False)
-        db.session.commit()
-
-        if rows_claimed == 0:
-            db.session.refresh(closing)
-            return jsonify({
-                'success': True,
-                'message': 'Este cierre ya fue sincronizado anteriormente, no se duplica.',
-                'synced_at': closing.to_dict()['synced_at'],
-                'cash_closing': closing.to_dict()
-            }), 200
-
-        # Mapeo cuenta <- campo del cierre (ver plan: usa los mismos campos que
-        # ya llena la vendedora en el cierre de caja diario)
-        credit_map = [
-            ('cash', closing.efectivo),
-            ('nequi', closing.nequi),
-            ('daviplata', closing.daviplata),
-            ('qr', closing.qr),
-            ('addi_datafono', closing.addi_datafono),
-        ]
-
-        accounts_by_key = {a.payment_key: a for a in Account.query.filter(
-            Account.payment_key.in_([k for k, _ in credit_map])
-        ).all()}
-
-        credited = []
         user_id = get_current_user().get('userId') if get_current_user() else None
 
-        for payment_key, amount in credit_map:
-            if not amount:
-                continue
-            account = accounts_by_key.get(payment_key)
-            if not account:
-                logger.warning(f"sync_daily: no existe cuenta con payment_key={payment_key}, se omite")
-                continue
+        if date_str:
+            closing_date = parse_colombia_date(date_str).date()
+            closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+            if not closing:
+                return jsonify({
+                    'success': False,
+                    'message': f'No hay cierre de caja registrado para {date_str}'
+                }), 404
+            targets = [closing]
+        else:
+            today = get_colombia_now().date()
+            targets = CashClosing.query.filter(
+                CashClosing.synced_to_accounts == False,  # noqa: E712
+                CashClosing.closing_date <= today
+            ).order_by(CashClosing.closing_date.asc()).all()
 
-            movement = AccountMovement(
-                account_id=account.id,
-                type='cash_closing',
-                amount=amount,
-                description=f'Cierre de caja {date_str}',
-                cash_closing_id=closing.id,
-                created_by=user_id
-            )
-            account.balance += amount
-            db.session.add(movement)
-            credited.append({'account': account.name, 'amount': amount})
+            if not targets:
+                _clear_sync_failure_alert()
+                return jsonify({
+                    'success': True,
+                    'message': 'No hay cierres pendientes de sincronizar.',
+                    'results': [],
+                    'credited': []
+                }), 200
 
-        # Verificación contra Alegra (no bloquea, solo informa)
-        discrepancy = None
-        try:
-            client = AlegraClient(Config.ALEGRA_USER, Config.ALEGRA_PASS, Config.ALEGRA_API_BASE_URL, Config.ALEGRA_TIMEOUT)
-            alegra_summary = client.get_sales_summary(date_str)
-            results = alegra_summary.get('results', {})
+        results = [_claim_and_credit_closing(closing, user_id) for closing in targets]
+        all_credited = [c for r in results for c in r.get('credited', [])]
+        newly_synced_dates = [r['date'] for r in results if not r['already_synced']]
 
-            alegra_cash = results.get('cash', {}).get('total', 0)
-            alegra_transfer = results.get('transfer', {}).get('total', 0)
-            alegra_cards = results.get('debit-card', {}).get('total', 0) + results.get('credit-card', {}).get('total', 0)
+        if newly_synced_dates:
+            message = f"Sincronizado: {', '.join(newly_synced_dates)}" if len(newly_synced_dates) > 1 else None
+        else:
+            message = 'Este cierre ya fue sincronizado anteriormente, no se duplica.' if len(results) == 1 else 'Todos los cierres del rango ya estaban sincronizados, no se duplican.'
 
-            closing.alegra_total_efectivo = alegra_cash
-            closing.alegra_total_transferencia = alegra_transfer
-            closing.alegra_total_tarjeta = alegra_cards
-
-            # Comparación: efectivo del cierre vs efectivo Alegra, y
-            # (nequi+daviplata+qr+addi_datafono) del cierre vs (transfer+tarjetas) de Alegra
-            registrado_efectivo = closing.efectivo
-            registrado_digital = closing.nequi + closing.daviplata + closing.qr + closing.addi_datafono
-            alegra_digital = alegra_transfer + alegra_cards
-
-            discrepancy = (registrado_efectivo - alegra_cash) + (registrado_digital - alegra_digital)
-            closing.alegra_discrepancy = discrepancy
-            closing.alegra_checked = True
-
-        except AlegraConnectionError as e:
-            logger.warning(f"sync_daily: no se pudo verificar contra Alegra para {date_str}: {e}")
-        except Exception as e:
-            logger.warning(f"sync_daily: error inesperado verificando Alegra para {date_str}: {e}")
-
-        # Reflejar en el objeto en memoria lo que el UPDATE atómico de arriba ya
-        # dejó en la base de datos (query.update() no refresca la instancia ORM).
-        closing.synced_to_accounts = True
-        closing.synced_at = claim_time
-
-        db.session.commit()
-
-        logger.info(f"sync_daily completado para {date_str}: {credited}, discrepancia={discrepancy}")
+        # Esta corrida terminó bien: si había una alerta de fallo de una
+        # corrida anterior (ver report_sync_failure), ya no aplica.
+        _clear_sync_failure_alert()
 
         return jsonify({
             'success': True,
-            'date': date_str,
-            'credited': credited,
-            'alegra_discrepancy': discrepancy,
-            'cash_closing': closing.to_dict()
+            'message': message,
+            'results': results,
+            'credited': all_credited,
+            'synced_dates': newly_synced_dates,
+            # Compatibilidad con llamadas que aún esperan la forma de un solo cierre
+            **({'date': results[0]['date'], 'alegra_discrepancy': results[0].get('alegra_discrepancy'), 'cash_closing': results[0].get('cash_closing')} if len(results) == 1 else {})
         }), 200
 
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error en sync_daily: {e}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error al sincronizar las cuentas'}), 500
+
+
+# ─────────────────────────────────────────────
+#  ESTADO DE LA SINCRONIZACIÓN (última corrida, discrepancia con Alegra,
+#  cuántos cierres siguen pendientes y si hay una alerta de fallo activa)
+# ─────────────────────────────────────────────
+
+@bp.route('/api/accounts/sync-status', methods=['GET', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def sync_status():
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    today = get_colombia_now().date()
+
+    last_synced = CashClosing.query.filter(
+        CashClosing.synced_to_accounts == True  # noqa: E712
+    ).order_by(CashClosing.synced_at.desc()).first()
+
+    pending_count = CashClosing.query.filter(
+        CashClosing.synced_to_accounts == False,  # noqa: E712
+        CashClosing.closing_date <= today
+    ).count()
+
+    last_failure = None
+    failure_setting = AppSetting.query.get(SYNC_FAILURE_SETTING_KEY)
+    if failure_setting and failure_setting.value:
+        try:
+            last_failure = json.loads(failure_setting.value)
+        except (ValueError, TypeError):
+            last_failure = None
+
+    return jsonify({
+        'success': True,
+        'last_synced_date': last_synced.closing_date.isoformat() if last_synced else None,
+        'last_synced_at': _iso_utc(last_synced.synced_at) if last_synced else None,
+        'last_discrepancy': last_synced.alegra_discrepancy if last_synced else None,
+        'pending_count': pending_count,
+        'last_failure': last_failure
+    }), 200
+
+
+# ─────────────────────────────────────────────
+#  ALERTA DE FALLO DEL CRON (workflow de GitHub Actions - ver
+#  .github/workflows/daily-accounts-sync.yml, paso "if: failure()")
+# ─────────────────────────────────────────────
+
+@bp.route('/api/accounts/sync-failure', methods=['POST', 'OPTIONS'])
+@sync_token_or_admin_required
+def report_sync_failure():
+    """
+    El workflow de GitHub Actions llama este endpoint cuando el paso de
+    sincronización automática (POST /api/accounts/sync-daily) falla después
+    de sus reintentos, para que el fallo quede visible en el sistema en vez
+    de perderse en un log de CI que nadie revisa. Se limpia solo en la
+    siguiente sincronización exitosa (ver sync_daily).
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or 'La sincronización automática de cuentas falló.').strip()[:500]
+
+        payload = json.dumps({'at': _iso_utc(datetime.utcnow()), 'message': message})
+        setting = AppSetting(key=SYNC_FAILURE_SETTING_KEY, value=payload, updated_at=datetime.utcnow())
+        db.session.merge(setting)
+        db.session.commit()
+
+        logger.error(f"Fallo de sincronización reportado por el workflow externo: {message}")
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error registrando alerta de fallo de sync: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': 'Error al registrar el fallo'}), 500

@@ -2,6 +2,40 @@
 
 ---
 
+## [2026-09-08] - Aviso de cierres pendientes; sincronización automática cubre días atrasados; estado y alertas de sincronización
+
+A raíz de una pregunta del usuario sobre qué pasa si no se hace el cierre de caja un día y se hace atrasado al día siguiente: se confirmó que ni el botón "Sincronizar ahora" ni el cron de las 9pm sincronizaban nada que no fuera la fecha de **hoy**, así que un cierre atrasado nunca se acreditaba a las cuentas. Esta entrada corrige eso y agrega visibilidad sobre el estado de la sincronización.
+
+### 🗄️ `app/models/app_setting.py` (nuevo)
+- Tabla genérica clave/valor (`app_settings`) para banderas que el sistema necesita recordar entre reinicios sin ameritar su propia tabla. Se crea sola en el próximo arranque vía `db.create_all()` (registrada en `app/__init__.py`), sin necesitar `ALTER TABLE` manual.
+
+### 🔔 `app/routes/cash_closing.py` — `GET /api/cash_closing/pending-dates`
+- Nuevo endpoint (roles admin/sales) que devuelve las fechas pasadas sin cierre de caja registrado, para alimentar el aviso fijo del dashboard.
+- **Ancla de "empezar desde hoy"** (`_get_or_init_pending_closings_tracking_start`, usa `app_settings`): la primera vez que se consulta este endpoint (en la práctica, el día del deploy) se guarda esa fecha como punto de partida y **nunca se mueve hacia atrás**. Sin esto, una tienda que ya viene usando el sistema hace meses (con cierres a veces llevados a mano, o días sueltos sin registrar antes de que existiera este aviso) habría visto aparecer de golpe todo ese historial como "pendiente" el día que se activa la función. Verificado con una BD sembrada con huecos históricos reales (mayo-julio): la primera consulta devuelve `missing_dates: []`.
+- Tope adicional de 30 días hacia atrás (`PENDING_LOOKBACK_DAYS`) como salvaguarda, aunque en la práctica el ancla de arriba es la que manda casi siempre.
+
+### 🔄 `app/routes/accounts.py` — `POST /api/accounts/sync-daily` reescrito
+- **Antes:** sin `date` en el body, sincronizaba únicamente el cierre de **hoy**. Un cierre atrasado (ej. el de ayer, hecho hoy porque no se alcanzó a tiempo) nunca se sincronizaba automáticamente — ni el botón ni el cron lo cubrían jamás.
+- **Ahora:** sin `date`, sincroniza **todos** los cierres con `synced_to_accounts=False` hasta hoy inclusive, del más antiguo al más reciente, en una sola llamada. Con `date` explícito se mantiene el comportamiento anterior (sincronizar solo ese día puntual), para llamadas directas a la API contra una fecha específica.
+- Lógica de acreditado extraída a `_claim_and_credit_closing(closing, user_id)` (reutilizada tanto para el modo "una fecha" como "todas las pendientes"), conservando el mismo "claim" atómico (`UPDATE ... WHERE synced_to_accounts=False`) que evita doble acreditado ante llamadas concurrentes (cron + clic manual, reintentos de GitHub Actions, etc.).
+- El cron (`.github/workflows/daily-accounts-sync.yml`) ya llama sin `date`, así que este cambio lo beneficia automáticamente sin tocar el workflow para esa parte.
+
+### 📊 `app/routes/accounts.py` — `GET /api/accounts/sync-status` (nuevo, solo admin)
+- Devuelve `last_synced_date`, `last_synced_at`, `last_discrepancy` (del cierre sincronizado más recientemente), `pending_count` (cuántos cierres existen pero siguen sin sincronizar) y `last_failure` (ver abajo). Alimenta la línea de estado junto al botón "Sincronizar ahora" en Cuentas.
+
+### 🚨 `app/routes/accounts.py` — `POST /api/accounts/sync-failure` (nuevo) + `.github/workflows/daily-accounts-sync.yml`
+- El workflow de GitHub Actions ahora tiene un segundo paso (`if: failure()`) que llama a este endpoint cuando el cron falla después de sus 3 reintentos — así el fallo queda visible en el sistema (banner rojo en Cuentas) en vez de perderse en un log de CI que nadie revisa a diario. Reutiliza el mismo `X-Sync-Token` que ya existía, sin secrets nuevos.
+- La alerta se limpia sola en la siguiente `sync_daily` exitosa (`_clear_sync_failure_alert()`), **incluso si no había nada pendiente que sincronizar** — llegar hasta ahí ya prueba que el backend y la base de datos responden bien. Bug real encontrado y corregido durante las pruebas: la primera versión solo limpiaba la alerta en la rama "sí había algo que sincronizar", dejando la alerta pegada para siempre si alguien hacía clic en "Sincronizar ahora" sin que hubiera nada pendiente.
+
+### ✅ Verificación
+- `python -m py_compile` sin errores en los 4 archivos tocados.
+- Pruebas funcionales con `app.test_client()` + SQLite temporal (sin tocar producción): ancla de `pending-dates` fijándose en la primera llamada y no listando historial viejo con huecos; `sync-daily` sincronizando 3 días pendientes (2 atrasados + hoy) en una sola llamada y sumando el monto correcto; segunda llamada sin duplicar saldo; `sync-status` reflejando última sincronización y discrepancia; `sync-failure` registrando la alerta y `sync-daily` limpiándola después, incluso sin cierres pendientes.
+- Bug real encontrado y corregido antes de dar por buena la implementación: faltaba `from datetime import datetime` a nivel de módulo en `cash_closing.py`, causando `NameError` en la primera llamada real a `pending-dates` (no se detectó con `ast.parse`, solo al ejecutar el endpoint).
+
+**Deploy:** requiere Manual Deploy en Render (este servicio no tiene auto-deploy activo) — la tabla `app_settings` se crea sola al arrancar, sin pasos manuales en la base de datos.
+
+---
+
 ## [2026-09-02] - Fix: import roto en metas de ventas; timeout de Gunicorn insuficiente para inventario completo
 
 ### 🐛 `app/routes/cash_closing.py`

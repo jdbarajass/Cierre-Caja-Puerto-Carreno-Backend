@@ -61,6 +61,7 @@ def create_app(config_class=Config):
     from app.models.notes_tasks import RestockItem, OperationalTask  # Import to ensure tables are created
     from app.models.cash_closing import CashClosing  # Import to ensure table is created
     from app.models.account import Account, AccountMovement  # Import to ensure tables are created
+    from app.models.app_setting import AppSetting  # Import to ensure table is created
 
     db.init_app(app)
 

@@ -1,8 +1,10 @@
 name: Daily Accounts Sync
 
 # Dispara la sincronización diaria del módulo Cuentas (POST /api/accounts/sync-daily):
-# acredita EFECTIVO/NEQUI/DAVIPLATA/QR/ADDI+DATÁFONO con el cierre de caja del día
-# y lo compara contra el total reportado por Alegra.
+# acredita EFECTIVO/NEQUI/DAVIPLATA/QR/ADDI+DATÁFONO con TODOS los cierres de
+# caja pendientes de sincronizar hasta hoy (no solo el de hoy - si algún día
+# quedó sin sincronizar, ej. un cierre atrasado, también se acredita aquí) y
+# lo compara contra el total reportado por Alegra.
 #
 # 9:00pm hora Colombia (America/Bogota, UTC-5) == 02:00 UTC del día siguiente.
 # Requiere el secret DAILY_SYNC_TOKEN (Settings > Secrets and variables > Actions),
@@ -27,3 +29,20 @@ jobs:
             -H "X-Sync-Token: ${SYNC_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{}'
+
+      # Si el paso de arriba falla incluso después de sus 3 reintentos (ej.
+      # Render caído, backend en cold-start más de 120s, token vencido), este
+      # paso solo corre por el "if: failure()" y avisa dentro del sistema -
+      # así el problema queda visible para el admin en vez de perderse en un
+      # log de GitHub Actions que nadie revisa a diario.
+      - name: Reportar fallo de sincronización al sistema
+        if: failure()
+        env:
+          SYNC_TOKEN: ${{ secrets.DAILY_SYNC_TOKEN }}
+        run: |
+          curl --show-error --max-time 30 \
+            -X POST "https://cierre-caja-api.onrender.com/api/accounts/sync-failure" \
+            -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"message": "El cron de sincronización diaria (9pm Colombia) falló después de 3 reintentos. Revisa Render y sincroniza manualmente desde Cuentas."}' \
+            || echo "No se pudo reportar el fallo al sistema (revisar Render/DAILY_SYNC_TOKEN manualmente)"

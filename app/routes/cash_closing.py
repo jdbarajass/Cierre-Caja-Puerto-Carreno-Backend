@@ -1,6 +1,7 @@
 """
 Endpoint de cierre de caja
 """
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app
 from pydantic import ValidationError as PydanticValidationError
 from flasgger import swag_from
@@ -24,6 +25,7 @@ from app.exceptions import (
 from sqlalchemy.exc import IntegrityError
 from app.models.user import db
 from app.models.cash_closing import CashClosing
+from app.models.app_setting import AppSetting
 from app.utils.timezone import (
     get_current_datetime,
     format_datetime_info,
@@ -424,6 +426,83 @@ def sum_payments():
     current_app.logger.info("=" * 80)
 
     return jsonify(response), 200
+
+
+PENDING_CLOSINGS_TRACKING_SETTING_KEY = 'pending_closings_tracking_start_date'
+
+
+def _get_or_init_pending_closings_tracking_start(today):
+    """
+    Ancla desde qué fecha el aviso de "cierre pendiente" empieza a marcar
+    días como faltantes. Se fija SOLA la primera vez que alguien consulta
+    este endpoint (en la práctica, el día que este aviso queda desplegado en
+    producción) y de ahí en adelante nunca se mueve hacia atrás.
+
+    Sin esto, una tienda que ya viene usando el sistema hace meses (con
+    cierres llevados a veces a mano, o simplemente con días sueltos sin
+    registrar antes de que existiera este aviso) vería aparecer de golpe
+    todo ese historial como "pendiente" el día que se activa la función -
+    la idea es que el aviso solo vigile hacia adelante desde que se activó.
+    """
+    setting = AppSetting.query.get(PENDING_CLOSINGS_TRACKING_SETTING_KEY)
+    if setting and setting.value:
+        try:
+            return datetime.strptime(setting.value, '%Y-%m-%d').date()
+        except ValueError:
+            pass  # Valor corrupto/inesperado - se reinicia abajo como si no existiera
+
+    setting = AppSetting(
+        key=PENDING_CLOSINGS_TRACKING_SETTING_KEY,
+        value=today.isoformat(),
+        updated_at=datetime.utcnow()
+    )
+    db.session.merge(setting)
+    db.session.commit()
+    return today
+
+
+@bp.route('/cash_closing/pending-dates', methods=['GET', 'OPTIONS'])
+@token_required
+@role_required_any(['admin', 'sales'])
+def pending_closing_dates():
+    """
+    Devuelve las fechas pasadas (antes de hoy, hora Colombia) para las que
+    NO existe un cierre de caja registrado - alimenta el aviso recordatorio
+    fijo del dashboard ("no se hizo el cierre del día X").
+
+    Nunca mira más atrás del día en que se activó este aviso por primera vez
+    (ver _get_or_init_pending_closings_tracking_start) ni más de
+    PENDING_LOOKBACK_DAYS días, lo que sea más reciente.
+    ---
+    tags:
+      - Cierre de Caja
+    responses:
+      200:
+        description: Lista de fechas (YYYY-MM-DD, ascendente) sin cierre registrado
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    PENDING_LOOKBACK_DAYS = 30
+
+    today = get_colombia_now().date()
+    tracking_start = _get_or_init_pending_closings_tracking_start(today)
+    start = max(tracking_start, today - timedelta(days=PENDING_LOOKBACK_DAYS))
+
+    existing_dates = {
+        row[0] for row in db.session.query(CashClosing.closing_date)
+        .filter(CashClosing.closing_date >= start, CashClosing.closing_date < today)
+        .all()
+    }
+
+    missing_dates = []
+    d = start
+    while d < today:
+        if d not in existing_dates:
+            missing_dates.append(d.isoformat())
+        d += timedelta(days=1)
+
+    return jsonify({'success': True, 'missing_dates': missing_dates}), 200
 
 
 @bp.route('/monthly_sales', methods=['GET', 'OPTIONS'])
