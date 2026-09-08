@@ -535,9 +535,15 @@ def sync_status():
 
     today = get_colombia_now().date()
 
+    # Ordenado por closing_date (el día del cierre), NO por synced_at (cuándo
+    # se ejecutó la sincronización): si un cierre atrasado (ej. del día 6) se
+    # sincroniza DESPUÉS que uno más reciente (ej. el del día 7, sincronizado
+    # anoche por el cron), lo que se quiere mostrar aquí es "cuál es el día
+    # más reciente ya sincronizado", no "cuál fue la última vez que se tocó
+    # algo" - de lo contrario el día más viejo tapa al más nuevo en pantalla.
     last_synced = CashClosing.query.filter(
         CashClosing.synced_to_accounts == True  # noqa: E712
-    ).order_by(CashClosing.synced_at.desc()).first()
+    ).order_by(CashClosing.closing_date.desc(), CashClosing.synced_at.desc()).first()
 
     pending_count = CashClosing.query.filter(
         CashClosing.synced_to_accounts == False,  # noqa: E712
