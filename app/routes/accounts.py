@@ -19,8 +19,6 @@ from app.models.cash_closing import CashClosing
 from app.models.app_setting import AppSetting
 from app.config import Config
 from app.utils.timezone import get_colombia_now, parse_colombia_date
-from app.services.alegra_client import AlegraClient
-from app.exceptions import AlegraConnectionError
 from app.routes.cash_closing import _get_or_init_pending_closings_tracking_start
 
 logger = logging.getLogger(__name__)
@@ -337,15 +335,15 @@ def _clear_sync_failure_alert():
 def _claim_and_credit_closing(closing, user_id):
     """
     "Reclama" un cierre (UPDATE atómico condicionado a synced_to_accounts=False)
-    y, si lo gana, acredita las cuentas y verifica contra Alegra.
+    y, si lo gana, acredita las cuentas. La comparación con Alegra ya se
+    calculó al momento del cierre (ver cash_closing.py) - aquí solo se
+    reutiliza, no se vuelve a consultar Alegra.
 
     El claim atómico evita que dos peticiones concurrentes (ej. el cron de las
     9pm y un click en "Sincronizar ahora" al mismo tiempo, o un reintento del
     workflow de GitHub Actions) acrediten el mismo cierre dos veces.
 
-    Devuelve un dict con el resultado de este cierre puntual. Nunca lanza por
-    fallas de Alegra (esas solo se loguean) - si lanza, es por un error real
-    de base de datos y el caller debe hacer rollback.
+    Devuelve un dict con el resultado de este cierre puntual.
     """
     date_str = closing.closing_date.isoformat()
 
@@ -399,35 +397,20 @@ def _claim_and_credit_closing(closing, user_id):
         db.session.add(movement)
         credited.append({'account': account.name, 'amount': amount, 'date': date_str})
 
-    # Verificación contra Alegra (no bloquea, solo informa)
-    discrepancy = None
-    try:
-        client = AlegraClient(Config.ALEGRA_USER, Config.ALEGRA_PASS, Config.ALEGRA_API_BASE_URL, Config.ALEGRA_TIMEOUT)
-        alegra_summary = client.get_sales_summary(date_str)
-        results = alegra_summary.get('results', {})
-
-        alegra_cash = results.get('cash', {}).get('total', 0)
-        alegra_transfer = results.get('transfer', {}).get('total', 0)
-        alegra_cards = results.get('debit-card', {}).get('total', 0) + results.get('credit-card', {}).get('total', 0)
-
-        closing.alegra_total_efectivo = alegra_cash
-        closing.alegra_total_transferencia = alegra_transfer
-        closing.alegra_total_tarjeta = alegra_cards
-
-        # Comparación: efectivo del cierre vs efectivo Alegra, y
-        # (nequi+daviplata+qr+addi_datafono) del cierre vs (transfer+tarjetas) de Alegra
-        registrado_efectivo = closing.efectivo
-        registrado_digital = closing.nequi + closing.daviplata + closing.qr + closing.addi_datafono
-        alegra_digital = alegra_transfer + alegra_cards
-
-        discrepancy = (registrado_efectivo - alegra_cash) + (registrado_digital - alegra_digital)
-        closing.alegra_discrepancy = discrepancy
-        closing.alegra_checked = True
-
-    except AlegraConnectionError as e:
-        logger.warning(f"sync_daily: no se pudo verificar contra Alegra para {date_str}: {e}")
-    except Exception as e:
-        logger.warning(f"sync_daily: error inesperado verificando Alegra para {date_str}: {e}")
+    # La comparación con Alegra (con los ajustes de excedentes/gastos/
+    # préstamos/desfases - la misma que decide si el cierre sale "exitoso")
+    # ya se calculó y guardó en cash_closing.py al momento del cierre, no se
+    # vuelve a consultar Alegra aquí.
+    #
+    # Bug real reportado por el usuario y corregido: esta función SÍ volvía a
+    # golpear la API de Alegra y recalculaba la discrepancia con una fórmula
+    # más simple (comparaba efectivo_para_consignar_final, YA ajustado,
+    # directo contra el efectivo crudo de Alegra, sin sumar excedentes ni
+    # restar gastos/préstamos) - dos fuentes de verdad calculando cosas
+    # distintas, así que un cierre "exitoso" (sin diferencia real) terminaba
+    # mostrando una "Diferencia con Alegra" grande en Cuentas. Ahora
+    # simplemente se reutiliza el valor ya correcto.
+    discrepancy = closing.alegra_discrepancy
 
     # Reflejar en el objeto en memoria lo que el UPDATE atómico de arriba ya
     # dejó en la base de datos (query.update() no refresca la instancia ORM).

@@ -2,6 +2,31 @@
 
 ---
 
+## [2026-09-09] (continuación) - Fix: "Diferencia con Alegra" en Cuentas usaba una fórmula distinta a la del cierre
+
+Tras desplegar el fix de zona horaria (ver entrada anterior, mismo día), el usuario hizo el cierre del 8, vio "¡Cierre Exitoso! Los montos registrados coinciden con los datos de Alegra", pero en Cuentas la pantalla de sincronización mostraba "Diferencia con Alegra: $253.200" para ese mismo cierre. Investigado: son dos fórmulas distintas.
+
+### 🐛 La causa
+- `validar_cierre()` (`cash_calculator.py`), la que decide si el cierre sale "exitoso", compara `Alegra efectivo + Excedente efectivo - Gastos operativos - Préstamos + Desfases` contra el total a consignar — los ajustes existen porque Alegra reporta el efectivo de venta ANTES de sacar excedentes/gastos/préstamos.
+- La comparación de `accounts.py` (`_claim_and_credit_closing`, ejecutada al sincronizar) volvía a golpear la API de Alegra por su cuenta y comparaba `efectivo_para_consignar_final` (YA con esos ajustes aplicados) directo contra el efectivo crudo de Alegra, **sin sumar el excedente ni restar gastos/préstamos**. Un cierre con un excedente/gasto de $X mostraba una "diferencia" de $X en Cuentas aunque el cierre hubiera validado perfecto.
+- Reproducido con un caso sintético idéntico al reportado (excedente de $253.200, cierre válido): la fórmula vieja daba exactamente $253.200 de diferencia; la correcta da $0.
+
+### 🔧 `app/routes/cash_closing.py` — `_apply_closing_fields()`
+- Ahora guarda en el `CashClosing` la comparación con Alegra que **ya se calculó** al momento del cierre (`validacion_cierre`, con todos los ajustes), en vez de dejar que `accounts.py` la recalcule después con una fórmula distinta: `alegra_total_efectivo`, `alegra_total_transferencia`, `alegra_total_tarjeta`, `alegra_discrepancy` (= `suma_efectivo_ajustada - efectivo_para_consignar`, la misma resta que decide si el cierre validó), `alegra_checked = True`.
+
+### 🔧 `app/routes/accounts.py` — `_claim_and_credit_closing()`
+- Eliminada la segunda consulta a Alegra y el recálculo de discrepancia durante la sincronización — ahora simplemente reutiliza `closing.alegra_discrepancy`, ya correcto desde que se guardó el cierre. Efecto secundario positivo: una llamada menos a la API de Alegra por cada sincronización, y un punto menos de falla (ya no hay un `try/except AlegraConnectionError` en este paso). Imports de `AlegraClient`/`AlegraConnectionError` removidos por quedar sin uso en este archivo.
+- **Nota para cierres históricos ya sincronizados** (antes de este fix): su `alegra_discrepancy` guardado quedó calculado con la fórmula vieja (potencialmente incorrecto si esos días tuvieron excedentes/gastos/préstamos). No es recalculable automáticamente porque el cierre no guarda esos valores por separado (solo el total final ya ajustado) — si hace falta auditar un día específico, hay que revisarlo a mano. Los cierres nuevos, de aquí en adelante, ya quedan correctos desde el momento en que se guardan.
+
+### ✅ Verificación
+- `python -c "import ast; ..."` sin errores en los 2 archivos.
+- La app arranca correctamente (99 rutas registradas) tras remover los imports sin uso.
+- Prueba dedicada llamando directamente a `validar_cierre()` con el escenario exacto reportado (Alegra $1.000.000 en efectivo, excedente $253.200, cierre válido): confirma `cierre_validado=True`, la fórmula vieja da $253.200 de "diferencia" inexistente, la nueva da $0.
+
+**Deploy:** requiere Manual Deploy en Render — sin migración de datos adicional (los cierres nuevos se guardan correctos desde que se suben estos cambios; los históricos quedan con el valor viejo, sin corrección automática por lo explicado arriba).
+
+---
+
 ## [2026-09-09] - Fix crítico: bug de zona horaria en `parse_colombia_date` corría 1 día toda fecha de cierre + corrección de datos históricos
 
 El usuario reportó que hizo el cierre del 8 de septiembre, vio "¡Cierre Exitoso!", pero el aviso de "cierre pendiente" seguía diciendo que faltaba. Investigado a fondo: no fue un error del usuario, es un bug real que lleva casi un año en el código.

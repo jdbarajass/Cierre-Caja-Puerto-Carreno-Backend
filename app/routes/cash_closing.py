@@ -373,6 +373,23 @@ def sum_payments():
             closing_row.qr = metodos_pago_calculados.get('qr_julieth', 0)
             closing_row.addi_datafono = metodos_pago_calculados.get('total_datafono_real', 0)
 
+            # Guarda la comparación con Alegra que YA se calculó arriba (con
+            # los ajustes de excedentes/gastos/préstamos/desfases - la misma
+            # que decide si el cierre sale "exitoso"), en vez de que
+            # accounts.py la vuelva a calcular después con una fórmula más
+            # simple que no aplica esos ajustes. Bug real reportado por el
+            # usuario: un cierre "exitoso" (diferencia ~0 aquí) mostraba una
+            # "Diferencia con Alegra" grande en Cuentas, porque sync_daily
+            # comparaba efectivo_para_consignar_final (YA ajustado) contra el
+            # efectivo crudo de Alegra (SIN ajustar), sin sumar excedentes ni
+            # restar gastos/préstamos.
+            efectivo_diff = validacion_cierre['diferencias']['efectivo']
+            closing_row.alegra_total_efectivo = efectivo_diff['efectivo_alegra']
+            closing_row.alegra_total_transferencia = validacion_cierre['diferencias']['transferencias']['alegra']
+            closing_row.alegra_total_tarjeta = validacion_cierre['diferencias']['datafono']['alegra']
+            closing_row.alegra_discrepancy = efectivo_diff['suma_efectivo_ajustada'] - efectivo_diff['efectivo_para_consignar']
+            closing_row.alegra_checked = True
+
         current_user = get_current_user()
         created_by = current_user.get('userId') if current_user else None
 
