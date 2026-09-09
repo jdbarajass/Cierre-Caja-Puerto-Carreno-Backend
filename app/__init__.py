@@ -74,6 +74,8 @@ def create_app(config_class=Config):
 
             from app.routes.accounts import seed_default_accounts
             seed_default_accounts()
+
+            _fix_historical_closing_dates_timezone_bug(db, app)
         except Exception as e:
             app.logger.error(f"Error creating database tables: {e}")
 
@@ -301,6 +303,61 @@ def create_app(config_class=Config):
     app.logger.info("=" * 60)
 
     return app
+
+
+def _fix_historical_closing_dates_timezone_bug(db, app):
+    """
+    Corrección de datos, UNA SOLA VEZ (no un cambio de esquema): desde que se
+    creó `parse_colombia_date()` (2025-11-16), un cierre para una fecha simple
+    como "2026-09-08" se guardaba con `closing_date` un día ANTES en cualquier
+    servidor que no corra en hora de Colombia - y Render corre en UTC. El bug
+    ya se corrigió en app/utils/timezone.py; esto repara los cierres que ya
+    existían en la base ANTES de ese fix.
+
+    Los MONTOS de esos cierres siempre fueron correctos (la comparación con
+    Alegra usa el string de fecha crudo, no pasa por la función con el bug) -
+    solo la etiqueta `closing_date` estaba corrida. Se le suma 1 día a cada
+    cierre que ya existía.
+
+    Se procesa del más reciente al más antiguo (closing_date DESC), con un
+    flush por fila: como `closing_date` es única, sumar 1 día en cualquier
+    otro orden puede chocar momentáneamente con el cierre del día siguiente
+    (ej. 06→07 mientras el 07 original sigue sin tocar). Yendo de más
+    reciente a más antiguo, la fecha destino siempre queda libre antes de
+    escribirla.
+
+    Guardada en app_settings con una bandera para que NUNCA se repita, ni
+    siquiera en el próximo reinicio - los cierres creados con el código ya
+    corregido no deben tocarse.
+    """
+    from datetime import timedelta, datetime as dt_module
+    from app.models.app_setting import AppSetting
+    from app.models.cash_closing import CashClosing
+
+    MIGRATION_KEY = 'closing_date_timezone_offset_fix_applied'
+
+    if AppSetting.query.get(MIGRATION_KEY):
+        return
+
+    closings = CashClosing.query.order_by(CashClosing.closing_date.desc()).all()
+    for closing in closings:
+        old_date = closing.closing_date
+        closing.closing_date = old_date + timedelta(days=1)
+        db.session.flush()
+
+    db.session.add(AppSetting(
+        key=MIGRATION_KEY,
+        value=f'applied_to_{len(closings)}_rows',
+        updated_at=dt_module.utcnow()
+    ))
+    db.session.commit()
+
+    if closings:
+        app.logger.warning(
+            f"Migración única aplicada: se corrigió la fecha (+1 día) de "
+            f"{len(closings)} cierre(s) histórico(s) - bug de zona horaria "
+            f"de parse_colombia_date (activo desde 2025-11-16, corregido ahora)"
+        )
 
 
 def _migrate_employee_tables(db, app):

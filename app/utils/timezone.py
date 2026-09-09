@@ -45,9 +45,22 @@ def parse_colombia_date(date_string):
     try:
         # Intentar parsear como ISO 8601 primero
         dt = parser.isoparse(date_string)
-        # Convertir a zona horaria de Colombia
+        if dt.tzinfo is None:
+            # Sin offset explícito (ej. "2026-09-08" o "2026-09-08T00:00:00"):
+            # se asume que YA representa hora de Colombia, nunca la hora
+            # local del SERVIDOR. datetime.astimezone() sobre un datetime
+            # naive asume la zona horaria del sistema operativo - en Render
+            # (contenedores Linux, sin TZ configurada) eso es UTC, así que
+            # convertir de "UTC" a Colombia (-5h) recorría la fecha un día
+            # hacia atrás para CUALQUIER cierre de caja (bug real encontrado
+            # en producción el 2026-09-09: un cierre para "2026-09-08" se
+            # guardaba con closing_date=2026-09-07). Bug presente desde que
+            # se creó esta función (commit 4461655, 2025-11-16).
+            return COLOMBIA_TZ.localize(dt)
+        # Si el string SÍ trae un offset explícito (ej. "...T10:00:00-05:00"),
+        # ahí sí corresponde convertir desde esa zona conocida a Colombia.
         return dt.astimezone(COLOMBIA_TZ)
-    except:
+    except Exception:
         # Si falla, intentar como formato simple YYYY-MM-DD
         dt = datetime.strptime(date_string, '%Y-%m-%d')
         # Localizar a zona horaria de Colombia

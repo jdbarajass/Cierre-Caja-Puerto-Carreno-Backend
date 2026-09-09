@@ -2,6 +2,31 @@
 
 ---
 
+## [2026-09-09] - Fix crítico: bug de zona horaria en `parse_colombia_date` corría 1 día toda fecha de cierre + corrección de datos históricos
+
+El usuario reportó que hizo el cierre del 8 de septiembre, vio "¡Cierre Exitoso!", pero el aviso de "cierre pendiente" seguía diciendo que faltaba. Investigado a fondo: no fue un error del usuario, es un bug real que lleva casi un año en el código.
+
+### 🐛 `app/utils/timezone.py` — `parse_colombia_date()`
+- **La causa raíz:** para una fecha simple sin hora (ej. `"2026-09-08"`, exactamente lo que manda el frontend), `parser.isoparse()` devuelve un `datetime` **naive** (sin zona horaria). Llamarle `.astimezone(COLOMBIA_TZ)` a un datetime naive hace que Python asuma que representa la hora **local del servidor** — y Render corre sus contenedores en **UTC**, no en hora de Colombia. Resultado: convertir "medianoche asumida como UTC" a Colombia (UTC-5) da las 7pm del día ANTERIOR, y `.date()` sobre eso devuelve un día menos.
+- Reproducido y confirmado exactamente: `parse_colombia_date("2026-09-08")` en un servidor con hora de sistema en UTC devolvía `closing_date = 2026-09-07`.
+- **Bug presente desde el commit `4461655` (2025-11-16)** — existe desde que se creó esta función, casi un año antes de este fix.
+- **Qué SÍ estuvo bien todo este tiempo:** los montos del cierre y la comparación con Alegra (`client.get_sales_summary(str(cash_request.date))`, línea 252 de `cash_closing.py`) usan el string de fecha crudo, nunca pasan por esta función — así que ningún cierre calculó mal su dinero. Solo la ETIQUETA `closing_date` guardada en la tabla `cash_closings` (usada por `pending-dates`, `sync-daily`, `sync-status` y el filtro de fecha de `list_movements`) quedaba corrida un día.
+- **Fix:** si el datetime parseado es naive (sin offset explícito), ahora se localiza directamente como hora de Colombia (`COLOMBIA_TZ.localize(dt)`) en vez de convertirse desde una zona ambigua. Si el string SÍ trae un offset explícito, se sigue convirtiendo normalmente. Verificado que ya no depende en absoluto de la zona horaria del sistema operativo.
+- Afecta (y corrige de una sola vez, por ser la misma función compartida) los 4 puntos donde se usaba: `cash_closing.py` (persistencia del cierre y preconsulta), `accounts.py` (`list_movements` por rango de fechas, `sync-daily` con fecha explícita).
+
+### 🗄️ `app/__init__.py` — `_fix_historical_closing_dates_timezone_bug()` (nueva migración de datos, una sola vez)
+- Como el bug existe desde antes de que se creara el módulo Cuentas (28 de agosto), **todo** cierre guardado hasta ahora tiene `closing_date` corrida 1 día hacia atrás respecto al día real que seleccionó la vendedora. A pedido del usuario, se corrige automáticamente en el próximo arranque: suma 1 día a cada `CashClosing` que ya existía antes de este deploy.
+- **Riesgo real identificado y resuelto:** como `closing_date` es única, sumar 1 día en cualquier orden puede chocar momentáneamente con el cierre del día siguiente (ej. el 6 se convierte en 7 mientras el 7 original todavía no se ha tocado → violación de la restricción única). Se procesa en orden **descendente** (`closing_date DESC`) con un `flush()` por fila, así la fecha destino siempre queda libre antes de escribirla. Verificado con 3 cierres en días **consecutivos** (el caso de riesgo exacto): sin errores.
+- Guardada con una bandera en `app_settings` (`closing_date_timezone_offset_fix_applied`) para que **nunca se repita**, ni en el próximo reinicio ni en ningún deploy futuro — los cierres creados con el código ya corregido no se tocan.
+
+### ✅ Verificación
+- `parse_colombia_date("2026-09-08")` ya no depende de la zona horaria del sistema (confirmado simulando explícitamente un sistema en UTC, como Render).
+- Migración probada con `app.test_client()`/`create_app()` real contra SQLite temporal: 3 cierres en fechas consecutivas (7, 8, 9 de septiembre) corregidos correctamente a (8, 9, 10) en la primera corrida, sin violar la restricción única; una segunda llamada a `create_app()` confirma que no se vuelve a aplicar.
+
+**Deploy:** requiere Manual Deploy en Render — la migración de datos corre sola en el próximo arranque, no requiere ningún paso manual en la base de datos. **Importante para el usuario:** después de este deploy, el cierre del 8 de septiembre (que quedó guardado como 7) debe aparecer corregido a la fecha real automáticamente.
+
+---
+
 ## [2026-09-08] - Aviso de cierres pendientes; sincronización automática cubre días atrasados; estado y alertas de sincronización
 
 A raíz de una pregunta del usuario sobre qué pasa si no se hace el cierre de caja un día y se hace atrasado al día siguiente: se confirmó que ni el botón "Sincronizar ahora" ni el cron de las 9pm sincronizaban nada que no fuera la fecha de **hoy**, así que un cierre atrasado nunca se acreditaba a las cuentas. Esta entrada corrige eso y agrega visibilidad sobre el estado de la sincronización.
