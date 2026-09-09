@@ -67,6 +67,18 @@ class RepurchaseEntry(db.Model):
         """Total enviado menos la comisión 4‰."""
         return self.total_enviado - self.fee_4mil
 
+    @property
+    def total_a_descontar(self):
+        """
+        Lo que realmente debe salir de las cuentas de la tienda por este envío:
+        lo enviado MÁS la comisión (la comisión la asume la tienda, no el
+        socio - a Jhonatan le debe llegar el total_enviado completo, sin
+        descontarle la comisión). Ver _sync_entry_account_movements en
+        app/routes/repurchase.py, que reparte esto proporcionalmente entre
+        los medios de pago usados en el envío.
+        """
+        return self.total_enviado + self.fee_4mil
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -85,6 +97,7 @@ class RepurchaseEntry(db.Model):
             'fee_4mil': self.fee_4mil,
             'fee_override': self.fee_override,
             'valor_sobrante': self.valor_sobrante,
+            'total_a_descontar': self.total_a_descontar,
             'notes': self.notes,
             'synced_to_accounts': bool(self.synced_to_accounts),
             'created_by_name': self.creator.name if self.creator else None,

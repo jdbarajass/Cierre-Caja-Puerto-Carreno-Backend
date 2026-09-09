@@ -89,7 +89,24 @@ def _sync_entry_account_movements(entry, is_delete=False):
     if is_delete:
         return
 
+    # La comisión (4‰, o la que se haya sobrescrito a mano) la asume la
+    # tienda, no el socio: a Jhonatan le debe llegar el monto completo que se
+    # digitó por cada medio, así que lo que sale de CADA cuenta es ese monto
+    # MÁS su parte proporcional de la comisión. Se reparte proporcionalmente
+    # entre los medios usados en el envío (si todo salió de un solo medio,
+    # toda la comisión sale de ese medio). El resto de redondeo (si al
+    # repartir en varios medios sobran/faltan uno o dos pesos) se le asigna
+    # al último medio procesado, para que la suma de lo descontado cuadre
+    # exacto con total_a_descontar.
     user_id = get_current_user().get('userId')
+    total_enviado = entry.total_enviado
+    fee_total = entry.fee_4mil
+    fee_asignada = 0
+
+    # Solo los medios con monto Y cuenta existente participan del reparto de
+    # la comisión - así el índice de "es el último" (para asignarle el resto
+    # exacto del redondeo) es sobre los que realmente se van a procesar.
+    medios_a_procesar = []
     for field, payment_key in REPURCHASE_ACCOUNT_MAP.items():
         amount = getattr(entry, field)
         if not amount:
@@ -98,16 +115,30 @@ def _sync_entry_account_movements(entry, is_delete=False):
         if not account:
             logger.warning(f"Envío recompra: no existe cuenta con payment_key={payment_key}, no se descuenta '{field}'")
             continue
+        medios_a_procesar.append((field, account))
+
+    for idx, (field, account) in enumerate(medios_a_procesar):
+        amount = getattr(entry, field)
         account = locked_by_id.get(account.id, account)
+
+        es_ultimo = (idx == len(medios_a_procesar) - 1)
+        if es_ultimo:
+            fee_share = fee_total - fee_asignada  # el resto exacto, sin error de redondeo
+        else:
+            fee_share = round(fee_total * amount / total_enviado) if total_enviado else 0
+        fee_asignada += fee_share
+
+        total_a_descontar = amount + fee_share
         movement = AccountMovement(
             account_id=account.id,
             type='repurchase_send',
-            amount=-amount,
-            description=f'Envío a socio (recompra): {entry.descripcion}',
+            amount=-total_a_descontar,
+            description=f'Envío a socio (recompra): {entry.descripcion}'
+                        + (f' (incluye {fee_share:,.0f} de comisión)'.replace(',', '.') if fee_share else ''),
             reference_id=reference_id,
             created_by=user_id,
         )
-        account.balance -= amount
+        account.balance -= total_a_descontar
         db.session.add(movement)
 
 

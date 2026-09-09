@@ -2,6 +2,28 @@
 
 ---
 
+## [2026-09-09] (continuación 2) - Cuentas Recompras: la comisión no se estaba descontando de ninguna cuenta
+
+El usuario detectó, revisando un envío real ($189.800 por QR), que el "Valor neto" mostrado (comisión ya restada) no correspondía a lo que realmente pasa: a Jhonatan le llega el monto completo que se digita, y la comisión la debería asumir la tienda descontándola de la cuenta de origen — no del socio.
+
+### 🐛 La causa
+- `_sync_entry_account_movements()` descontaba de cada cuenta (efectivo/QR/etc.) exactamente el monto digitado, **sin sumarle la comisión**. La comisión (4‰) se calculaba y se mostraba en pantalla, pero nunca salía de ninguna cuenta real - dinero "invisible" que el banco sí cobra pero el sistema nunca registraba como salida.
+- El balance de Jhonatan (`recibido = total_enviado + sobrante_acumulado`) ya usaba el monto completo (sin restar comisión) - esa parte ya estaba bien, coincidiendo con lo que el usuario espera.
+
+### 🔧 `app/routes/repurchase.py` — `_sync_entry_account_movements()`
+- Ahora descuenta de cada cuenta el monto enviado **más su parte proporcional de la comisión** del envío. Si todo el envío sale de un solo medio (el caso típico), toda la comisión sale de esa cuenta. Si un envío se reparte entre varios medios, la comisión se reparte proporcionalmente, con el resto exacto del redondeo asignado al último medio procesado (para que la suma cuadre exacto, sin perder ni sobrar un peso).
+- Ejemplo real verificado: QR=$189.800, comisión 4‰=$759 → antes se descontaban $189.800 de QR; ahora se descuentan $190.559 (correcto).
+
+### 🗄️ `app/models/repurchase.py`
+- Nueva propiedad `total_a_descontar` = `total_enviado + fee_4mil` (lo que realmente sale de las cuentas), expuesta en `to_dict()`. `valor_sobrante` (enviado − comisión) se deja intacta en el modelo por compatibilidad, pero ya no se usa en el frontend para mostrar el "valor neto" de cada envío.
+
+### ✅ Verificación
+- Prueba funcional contra `app.test_client()` + SQLite temporal: envío de $189.800 solo por QR → cuenta QR descontada exactamente $190.559. Envío repartido en 2 medios (efectivo $100.000 + QR $89.800, mismo total) → comisión repartida $400/$359, suma exacta $190.559 entre ambas cuentas, sin error de redondeo.
+- Probado end-to-end con Playwright contra un backend local (nunca producción): guardar el envío real de $189.800 por QR desde la UI dejó la cuenta QR en **-$190.559** y el "Balance disponible (Jhonatan)" en **$189.800** - exactamente el comportamiento esperado.
+- **No es retroactivo**: los envíos ya sincronizados antes de este fix no se recalculan ni se les descuenta la comisión faltante con efecto retroactivo - solo los envíos nuevos (creados/editados desde este cambio) aplican la comisión correctamente.
+
+**Deploy:** requiere Manual Deploy en Render — sin migración de datos (cambio de comportamiento hacia adelante únicamente).
+
 ## [2026-09-09] (continuación) - Fix: "Diferencia con Alegra" en Cuentas usaba una fórmula distinta a la del cierre
 
 Tras desplegar el fix de zona horaria (ver entrada anterior, mismo día), el usuario hizo el cierre del 8, vio "¡Cierre Exitoso! Los montos registrados coinciden con los datos de Alegra", pero en Cuentas la pantalla de sincronización mostraba "Diferencia con Alegra: $253.200" para ese mismo cierre. Investigado: son dos fórmulas distintas.
