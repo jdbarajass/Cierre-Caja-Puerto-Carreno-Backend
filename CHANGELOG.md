@@ -2,6 +2,22 @@
 
 ---
 
+## [2026-09-10] - Nueva cuenta AHORRO en Resumen
+
+El usuario pidió agregar una tarjeta de "Ahorro" (saldo real actual: $4.360.000) a Cuentas → Resumen, con la misma flexibilidad de las demás cuentas: poder sumarle/restarle dinero manualmente, y poder transferirle desde cualquier otra cuenta (ej. una parte de las ganancias de fin de mes) o sacarle plata hacia otra cuenta.
+
+### 🏦 `app/routes/accounts.py`
+- Nueva cuenta por defecto **AHORRO** (`payment_key='ahorro'`, color `emerald`, `sort_order=8`) en `DEFAULT_ACCOUNTS`. Como `seed_default_accounts()` ya es idempotente y no destructivo (solo agrega cuentas que falten, igual que cuando se agregó BBVA), esta se crea sola en el próximo arranque sin tocar el saldo de ninguna cuenta existente.
+- **No fue necesario tocar ningún otro endpoint**: "Ajuste manual de saldo" y "Transferir entre cuentas" ya operan de forma genérica sobre cualquier `account_id` — en cuanto la cuenta existe, ambos flujos funcionan con ella automáticamente.
+
+### ✅ Verificación
+- Prueba funcional contra `app.test_client()` + SQLite temporal: la cuenta AHORRO se siembra sola (arranca en $0, sin afectar el saldo $0 de las demás en una BD nueva); un ajuste manual de entrada por $4.360.000 la deja en $4.360.000; una transferencia de $500.000 desde QR hacia AHORRO deja QR en $500.000 y AHORRO en $4.860.000.
+- Probado también visualmente con Playwright contra un backend local: la tarjeta aparece en el grid de Resumen y en ambos selects de "Transferir entre cuentas".
+
+**Deploy:** requiere Manual Deploy en Render — la cuenta se crea sola al arrancar, arranca en $0. **El usuario debe hacer un "Ajuste manual → Entrada → $4.360.000" una sola vez** después del deploy para reflejar el saldo real actual (a propósito no se hardcodeó ese monto en el código: `seed_default_accounts()` es una función genérica de estructura, no de datos reales).
+
+---
+
 ## [2026-09-09] (continuación 2) - Cuentas Recompras: la comisión no se estaba descontando de ninguna cuenta
 
 El usuario detectó, revisando un envío real ($189.800 por QR), que el "Valor neto" mostrado (comisión ya restada) no correspondía a lo que realmente pasa: a Jhonatan le llega el monto completo que se digita, y la comisión la debería asumir la tienda descontándola de la cuenta de origen — no del socio.

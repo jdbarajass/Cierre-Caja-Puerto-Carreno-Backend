@@ -39,6 +39,7 @@ DEFAULT_ACCOUNTS = [
     {'payment_key': 'addi_datafono', 'name': 'ADDI + DATÁFONO (Tarjetas)', 'color': 'blue', 'sort_order': 5},
     {'payment_key': 'sistecredito', 'name': 'SisteCrédito', 'color': 'teal', 'sort_order': 6},
     {'payment_key': 'bbva', 'name': 'BBVA', 'color': 'indigo', 'sort_order': 7},
+    {'payment_key': 'ahorro', 'name': 'AHORRO', 'color': 'emerald', 'sort_order': 8},
 ]
 
 
