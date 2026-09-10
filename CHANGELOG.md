@@ -2,6 +2,21 @@
 
 ---
 
+## [2026-09-10] (continuación) - "Saldo total" ya no mezcla el Ahorro con la plata disponible para recomprar
+
+El usuario notó que, al agregar la cuenta AHORRO (ver entrada anterior, mismo día), el "Saldo total (real)" la sumaba junto con las demás - dando la impresión de que hay más plata disponible para recomprar de la que realmente hay, con el riesgo de terminar gastando sin querer el ahorro.
+
+### 🏦 `app/routes/accounts.py` — `GET /api/accounts`
+- Nueva constante `ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL = {'ahorro'}`. `total_balance` ya no suma las cuentas de esa lista - el ahorro se sigue viendo en su propia tarjeta y sigue disponible para ajustes/transferencias, simplemente no participa del total "disponible para recomprar".
+
+### ✅ Verificación
+- Prueba funcional: QR con $1.000.000 y AHORRO con $4.360.000 → `total_balance` devuelve $1.000.000 (sin el ahorro).
+- Verificado también visualmente contra un backend local: "Saldo total (real)" y "Total Recompras" (ver CHANGELOG del frontend) muestran $1.000.000, sin mezclar el $4.360.000 de Ahorro.
+
+**Deploy:** requiere Manual Deploy en Render — sin migración de datos, es solo un cambio de qué se suma en la respuesta del endpoint.
+
+---
+
 ## [2026-09-10] - Nueva cuenta AHORRO en Resumen
 
 El usuario pidió agregar una tarjeta de "Ahorro" (saldo real actual: $4.360.000) a Cuentas → Resumen, con la misma flexibilidad de las demás cuentas: poder sumarle/restarle dinero manualmente, y poder transferirle desde cualquier otra cuenta (ej. una parte de las ganancias de fin de mes) o sacarle plata hacia otra cuenta.

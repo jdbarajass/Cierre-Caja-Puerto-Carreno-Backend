@@ -42,6 +42,11 @@ DEFAULT_ACCOUNTS = [
     {'payment_key': 'ahorro', 'name': 'AHORRO', 'color': 'emerald', 'sort_order': 8},
 ]
 
+# Cuentas que NO cuentan para el total "disponible para recompras" (Resumen):
+# el ahorro es plata aparte, no se toca para financiar recompras - mezclarla
+# en el total hacía parecer que había más disponible de lo que realmente hay.
+ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL = {'ahorro'}
+
 
 def seed_default_accounts():
     """
@@ -99,7 +104,10 @@ def list_accounts():
         return '', 204
 
     accounts = Account.query.filter_by(active=True).order_by(Account.sort_order.asc()).all()
-    total_balance = sum(a.balance for a in accounts)
+    # No incluye cuentas como AHORRO - ver ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
+    total_balance = sum(
+        a.balance for a in accounts if a.payment_key not in ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
+    )
 
     return jsonify({
         'success': True,
