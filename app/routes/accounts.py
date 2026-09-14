@@ -322,6 +322,44 @@ def transfer():
 
 
 # ─────────────────────────────────────────────
+#  NOTA DE FECHA "HASTA CUÁNDO SE CONTEMPLA" EL SALDO (ej. ADDI + DATÁFONO,
+#  que paga días después de la transacción - permite corroborar si ya tocaría
+#  revisar/actualizar el saldo). Puramente informativo, no toca balance.
+# ─────────────────────────────────────────────
+
+@bp.route('/api/accounts/<int:account_id>/contemplated-until', methods=['PATCH', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def update_contemplated_until(account_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    try:
+        data = request.get_json() or {}
+        date_str = (data.get('contemplated_until') or '').strip() or None
+
+        account = Account.query.get(account_id)
+        if not account:
+            return jsonify({'success': False, 'message': 'Cuenta no encontrada'}), 404
+
+        if date_str:
+            try:
+                account.contemplated_until = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'success': False, 'message': 'Fecha inválida, use formato YYYY-MM-DD'}), 400
+        else:
+            account.contemplated_until = None
+
+        db.session.commit()
+        return jsonify({'success': True, 'account': account.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error actualizando contemplated_until: {e}")
+        return jsonify({'success': False, 'message': 'Error al guardar la fecha'}), 500
+
+
+# ─────────────────────────────────────────────
 #  SINCRONIZACIÓN DIARIA (job de las 9pm / botón "Sincronizar ahora")
 # ─────────────────────────────────────────────
 

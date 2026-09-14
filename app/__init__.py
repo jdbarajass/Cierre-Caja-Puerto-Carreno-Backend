@@ -406,6 +406,10 @@ def _migrate_employee_tables(db, app):
         # Comisión editable por envío (2026-09-01): NULL = sigue calculando el
         # 4‰ automático de siempre; un número = el usuario lo sobrescribió.
         add_column_if_missing(conn, 'repurchase_entries', 'fee_override', 'FLOAT')
+
+        # Fecha "hasta cuándo se contempla" el saldo de una cuenta (2026-09-14):
+        # nota manual editable, ej. ADDI + DATÁFONO, sin impacto en cálculos.
+        add_column_if_missing(conn, 'accounts', 'contemplated_until', 'DATE')
         conn.commit()
 
 

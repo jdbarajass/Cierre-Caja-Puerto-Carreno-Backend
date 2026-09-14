@@ -38,6 +38,11 @@ class Account(db.Model):
     balance = db.Column(db.Float, default=0, nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
     sort_order = db.Column(db.Integer, default=0, nullable=False)
+    # Nota manual, editable desde la UI: hasta qué fecha el usuario contempla
+    # que el saldo mostrado ya debería estar consignado (ej. ADDI paga días
+    # después de la transacción). No afecta ningún cálculo - solo ayuda a
+    # corroborar si ya tocaría revisar/actualizar el saldo.
+    contemplated_until = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -50,6 +55,7 @@ class Account(db.Model):
             'balance': self.balance,
             'active': self.active,
             'sort_order': self.sort_order,
+            'contemplated_until': self.contemplated_until.isoformat() if self.contemplated_until else None,
             'created_at': _iso_utc(self.created_at),
             'updated_at': _iso_utc(self.updated_at),
         }

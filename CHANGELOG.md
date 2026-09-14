@@ -2,6 +2,28 @@
 
 ---
 
+## [2026-09-14] - Fecha "Contempla saldo hasta" editable en cuentas (ej. ADDI + DATÁFONO)
+
+El usuario explicó que ADDI (pasarela de tarjetas) paga días después de la transacción, así que el saldo mostrado en "ADDI + DATÁFONO (Tarjetas)" (Gestión → Cuentas → Resumen) solo es válido hasta cierta fecha que él conoce manualmente. Pidió poder anotar/editar esa fecha directamente en la tarjeta, para corroborar si ya le tocaba revisar que Addi hubiera consignado.
+
+### 🗄️ `app/models/account.py`
+- Nueva columna `Account.contemplated_until` (Date, nullable) — nota manual, sin impacto en `balance` ni en ningún cálculo. Expuesta en `to_dict()` como ISO `'YYYY-MM-DD'` o `null`.
+
+### 🔧 `app/__init__.py`
+- Migración segura `add_column_if_missing(conn, 'accounts', 'contemplated_until', 'DATE')` agregada a `_migrate_employee_tables()` (mismo patrón ALTER TABLE usado en migraciones anteriores).
+
+### 🏦 `app/routes/accounts.py`
+- Nuevo endpoint `PATCH /api/accounts/<id>/contemplated-until` (admin only). Acepta `{"contemplated_until": "YYYY-MM-DD"}` para fijar la fecha, o cadena vacía/`null` para limpiarla. Devuelve 400 si el formato es inválido y 404 si la cuenta no existe.
+- Implementado de forma genérica a nivel de modelo/endpoint (cualquier cuenta podría usarlo); la UI por ahora solo lo expone en la tarjeta de ADDI + DATÁFONO, que es donde se pidió.
+
+### ✅ Verificación
+- Prueba funcional aislada con SQLite temporal + `app.test_client()`: login admin, `GET /api/accounts` (estado inicial `null`), `PATCH` fijando una fecha (persiste y no altera `balance`), fecha inválida → 400, cuenta inexistente → 404, `PATCH` con cadena vacía limpia el campo.
+- Probado también end-to-end con Playwright contra un backend local (nunca producción): se fijó la fecha en la tarjeta desde la UI real, se confirmó visualmente en captura de pantalla, y se recargó la página confirmando que el valor persiste desde el backend (no es solo estado local del navegador).
+
+**Deploy:** requiere Manual Deploy en Render — es solo una columna nueva (sin DEFAULT, filas existentes quedan en `NULL`) y un endpoint nuevo, sin cambios de comportamiento en lo existente.
+
+---
+
 ## [2026-09-10] (continuación) - "Saldo total" ya no mezcla el Ahorro con la plata disponible para recomprar
 
 El usuario notó que, al agregar la cuenta AHORRO (ver entrada anterior, mismo día), el "Saldo total (real)" la sumaba junto con las demás - dando la impresión de que hay más plata disponible para recomprar de la que realmente hay, con el riesgo de terminar gastando sin querer el ahorro.
