@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-01] (continuación) - Multi-tienda, Fase 5: comparativo entre tiendas
+
+- `GET /api/stores/comparison?start_date&end_date` (solo admin; por defecto el mes en curso; máx. 92 días; fechas futuras se recortan a hoy). Por cada tienda devuelve:
+  - `sales`: total, facturas, ticket promedio, anuladas, medios de pago y serie diaria. Usa **exactamente** el mismo cálculo que Ventas Mensuales: `AlegraClient.get_monthly_sales_summary` se partió en "traer facturas" + `build_sales_summary(facturas, ...)` sin cambiar su respuesta. Las consultas a Alegra de cada tienda corren **en paralelo** (hilos solo con el cliente HTTP, sin base de datos). Si una tienda no tiene Alegra configurado o Alegra falla, esa tienda viene con `available: false` + motivo y el resto sale igual.
+  - `operations` (base de datos, no depende de Alegra): cierres registrados vs días del periodo, cierres con diferencia y diferencia acumulada vs Alegra, enviado/comprado en recompras y saldo disponible hoy en cuentas (sin Ahorro, igual que Cuentas → Resumen).
+- Tests: +3 (ventas/operación por tienda con Alegra simulado, ambas tiendas configuradas, permisos y validación de rango). **56/56 pasan.**
+
+---
+
 ## [2026-10-01] (continuación) - Multi-tienda, Fase 4: cron de las 9pm por tienda
 
 - `.github/workflows/daily-accounts-sync.yml`: matriz `store: [carreno, primavera]` con `fail-fast: false`. Cada tienda corre su propio `POST /api/accounts/sync-daily` con `X-Store`; si una falla, la otra igual se sincroniza y `sync-failure` registra la alerta **solo** en la tienda que falló (clave de `app_settings` por tienda). Para sumar una tienda nueva basta con agregar su código a la matriz.

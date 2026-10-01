@@ -650,7 +650,15 @@ class AlegraClient:
         """
         # Obtener todas las facturas del mes
         all_invoices = self.get_all_invoices_in_range(start_date, end_date)
+        return self.build_sales_summary(all_invoices, start_date, end_date)
 
+    def build_sales_summary(self, all_invoices: List[Dict], start_date: str, end_date: str) -> Dict:
+        """
+        Resumen de ventas (total, facturas, medios de pago, anuladas) a partir
+        de facturas YA obtenidas. Separado de get_monthly_sales_summary para
+        que otros reportes (ej. comparativo de tiendas) reutilicen exactamente
+        el mismo cálculo sin volver a consultar Alegra.
+        """
         # Filtrar facturas anuladas ANTES de calcular totales
         filter_result = filter_voided_invoices(all_invoices)
         invoices = filter_result['active_invoices']

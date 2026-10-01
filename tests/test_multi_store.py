@@ -348,3 +348,65 @@ def test_cron_sincroniza_y_reporta_fallos_por_tienda(client, admin_headers, monk
 
     # Token inválido: sigue protegido
     assert client.post('/api/accounts/sync-daily', headers={'X-Sync-Token': 'malo', 'X-Store': 'carreno'}).status_code == 401
+
+
+# ─── Fase 5: comparativo entre tiendas ───────────────────────────────────────
+
+def _fake_invoices(self, start, end):
+    """Facturas simuladas según la cuenta de Alegra (= según la tienda)."""
+    if self.username == 'carreno@test.com':
+        return [
+            {'date': '2026-09-01', 'total': 100000, 'status': 'open',
+             'payments': [{'amount': 100000, 'paymentMethod': 'cash'}]},
+            {'date': '2026-09-02', 'total': 50000, 'status': 'open',
+             'payments': [{'amount': 50000, 'paymentMethod': 'transfer'}]},
+            {'date': '2026-09-02', 'total': 999999, 'status': 'void', 'payments': []},
+        ]
+    return [{'date': '2026-09-02', 'total': 30000, 'status': 'open',
+             'payments': [{'amount': 30000, 'paymentMethod': 'cash'}]}]
+
+
+def test_comparativo_ventas_y_operacion_por_tienda(client, admin_headers, monkeypatch):
+    monkeypatch.setattr(AlegraClient, 'get_all_invoices_in_range', _fake_invoices)
+    client.post('/api/repurchase', headers=admin_headers('primavera'), json={'date': '2026-09-02', 'efectivo': 200000})
+
+    resp = client.get('/api/stores/comparison?start_date=2026-09-01&end_date=2026-09-03', headers=admin_headers())
+    assert resp.status_code == 200, resp.get_json()
+    data = resp.get_json()
+    assert data['date_range'] == {'start': '2026-09-01', 'end': '2026-09-03'}
+    by_code = {s['code']: s for s in data['stores']}
+
+    carreno = by_code['carreno']['sales']
+    assert carreno['available'] is True
+    assert carreno['total'] == 150000            # la anulada no cuenta
+    assert carreno['invoices'] == 2
+    assert carreno['average_ticket'] == 75000
+    assert carreno['voided_invoices'] == 1
+    assert [d['total'] for d in carreno['daily']] == [100000, 50000, 0]
+    assert carreno['payment_methods']['cash']['total'] == 100000
+
+    # Primavera sin cuenta de Alegra: ventas no disponibles, operación sí
+    primavera = by_code['primavera']
+    assert primavera['sales']['available'] is False
+    assert 'Primavera' in primavera['sales']['error']
+    assert primavera['operations']['repurchase_sent'] == 200000
+    assert by_code['carreno']['operations']['repurchase_sent'] == 0
+    assert primavera['operations']['period_days'] == 3
+
+
+def test_comparativo_con_ambas_tiendas_configuradas(client, admin_headers, monkeypatch):
+    monkeypatch.setattr(AlegraClient, 'get_all_invoices_in_range', _fake_invoices)
+    monkeypatch.setenv('ALEGRA_USER_PRIMAVERA', 'primavera@test.com')
+    monkeypatch.setenv('ALEGRA_PASS_PRIMAVERA', 'tok-primavera')
+    data = client.get('/api/stores/comparison?start_date=2026-09-01&end_date=2026-09-02',
+                      headers=admin_headers()).get_json()
+    totals = {s['code']: s['sales']['total'] for s in data['stores']}
+    assert totals == {'carreno': 150000, 'primavera': 30000}
+
+
+def test_comparativo_solo_admin_y_rango_valido(client, admin_headers, sales_headers):
+    assert client.get('/api/stores/comparison', headers=sales_headers()).status_code == 403
+    assert client.get('/api/stores/comparison?start_date=2026-09-10&end_date=2026-09-01',
+                      headers=admin_headers()).status_code == 400
+    assert client.get('/api/stores/comparison?start_date=2026-01-01&end_date=2026-09-01',
+                      headers=admin_headers()).status_code == 400
