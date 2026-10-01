@@ -10,6 +10,7 @@ from datetime import datetime
 
 from app.middlewares.auth import token_required, role_required, get_current_user
 from app.models.user import db, User
+from app.stores import DEFAULT_STORE, STORES, is_valid_store, normalize_store_code
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +65,7 @@ def list_users():
 
     try:
         users = User.query.all()
-        users_data = [{
-            'id': u.id,
-            'email': u.email,
-            'name': u.name,
-            'role': u.role,
-            'is_active': u.is_active,
-            'created_at': u.created_at.isoformat() if u.created_at else None
-        } for u in users]
+        users_data = [u.to_dict() for u in users]
 
         return jsonify({
             'success': True,
@@ -122,14 +116,7 @@ def get_user(user_id):
 
         return jsonify({
             'success': True,
-            'user': {
-                'id': user.id,
-                'email': user.email,
-                'name': user.name,
-                'role': user.role,
-                'is_active': user.is_active,
-                'created_at': user.created_at.isoformat() if user.created_at else None
-            }
+            'user': user.to_dict()
         }), 200
 
     except Exception as e:
@@ -171,7 +158,11 @@ def create_user():
               type: string
             role:
               type: string
-              enum: [admin, sales]
+              enum: [admin, sales, partner]
+            store_code:
+              type: string
+              enum: [carreno, primavera]
+              description: Tienda asignada (por defecto carreno)
     responses:
       201:
         description: Usuario creado exitosamente
@@ -228,6 +219,15 @@ def create_user():
                 'message': 'Rol invalido. Debe ser admin, sales o partner'
             }), 400
 
+        # Tienda asignada (multi-tienda). Opcional: por defecto Carreño. Para
+        # el admin no limita nada (opera todas), pero se guarda igual.
+        store_code = normalize_store_code(data.get('store_code')) or DEFAULT_STORE
+        if not is_valid_store(store_code):
+            return jsonify({
+                'success': False,
+                'message': f'Tienda invalida. Debe ser una de: {", ".join(STORES)}'
+            }), 400
+
         # Verificar si el email ya existe
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
@@ -248,6 +248,7 @@ def create_user():
             password_hash=password_hash,
             name=name,
             role=role,
+            store_code=store_code,
             is_active=True
         )
 
@@ -263,13 +264,7 @@ def create_user():
         return jsonify({
             'success': True,
             'message': 'Usuario creado exitosamente',
-            'user': {
-                'id': new_user.id,
-                'email': new_user.email,
-                'name': new_user.name,
-                'role': new_user.role,
-                'is_active': new_user.is_active
-            }
+            'user': new_user.to_dict()
         }), 201
 
     except Exception as e:
@@ -308,6 +303,9 @@ def update_user(user_id):
               type: string
             role:
               type: string
+            store_code:
+              type: string
+              enum: [carreno, primavera]
             is_active:
               type: boolean
     responses:
@@ -367,6 +365,17 @@ def update_user(user_id):
                 }), 400
             user.role = role
 
+        if 'store_code' in data and data['store_code']:
+            store_code = normalize_store_code(data['store_code'])
+            if not is_valid_store(store_code):
+                return jsonify({
+                    'success': False,
+                    'message': f'Tienda invalida. Debe ser una de: {", ".join(STORES)}'
+                }), 400
+            # El cambio aplica cuando el usuario vuelva a iniciar sesión (la
+            # tienda viaja en el token, igual que el rol).
+            user.store_code = store_code
+
         if 'is_active' in data:
             user.is_active = bool(data['is_active'])
 
@@ -381,13 +390,7 @@ def update_user(user_id):
         return jsonify({
             'success': True,
             'message': 'Usuario actualizado exitosamente',
-            'user': {
-                'id': user.id,
-                'email': user.email,
-                'name': user.name,
-                'role': user.role,
-                'is_active': user.is_active
-            }
+            'user': user.to_dict()
         }), 200
 
     except Exception as e:

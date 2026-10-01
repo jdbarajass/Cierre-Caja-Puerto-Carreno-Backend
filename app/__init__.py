@@ -127,9 +127,11 @@ def create_app(config_class=Config):
     # después, en token_required. Ver app/stores.py.
     @app.before_request
     def assign_store():
-        from app.stores import resolve_request_store, InvalidStoreError
+        from app.stores import resolve_request_store, InvalidStoreError, DEFAULT_STORE
         try:
-            g.store_code = resolve_request_store()
+            requested = resolve_request_store()
+            g.store_explicit = requested is not None
+            g.store_code = requested or DEFAULT_STORE
         except InvalidStoreError as e:
             return {'success': False, 'message': str(e)}, 400
 
@@ -395,6 +397,11 @@ STORE_SCOPED_TABLES = (
     'restock_items', 'operational_tasks',
 )
 
+# Tablas que reciben la columna store_code: las de datos por tienda + users
+# (tienda asignada al usuario; no usa StoreScopedMixin porque NO se filtra
+# por la tienda del request - los usuarios son compartidos).
+TABLES_WITH_STORE_COLUMN = STORE_SCOPED_TABLES + ('users',)
+
 # Columnas que antes eran únicas por sí solas y ahora son únicas POR TIENDA
 # (los nuevos índices únicos compuestos están declarados en cada modelo).
 LEGACY_SINGLE_COLUMN_UNIQUES = {
@@ -412,8 +419,8 @@ def _migrate_multi_store(db, app):
     Migración multi-tienda (2026-10-01), idempotente y NO destructiva:
 
     1. Agrega `store_code` (NOT NULL, DEFAULT 'carreno') a cada tabla de
-       STORE_SCOPED_TABLES que no la tenga: todos los datos existentes quedan
-       asignados a Carreño, que es la única tienda que existía.
+       TABLES_WITH_STORE_COLUMN que no la tenga: todos los datos y usuarios
+       existentes quedan asignados a Carreño, la única tienda que existía.
     2. Quita la unicidad GLOBAL de cash_closings.closing_date y de
        accounts.name/payment_key (cada tienda tiene su cierre del día y sus
        propias cuentas EFECTIVO, NEQUI, ...).
@@ -436,7 +443,7 @@ def _migrate_multi_store(db, app):
             existing_tables = set(inspect(conn).get_table_names())
             changes = []
 
-            for table_name in STORE_SCOPED_TABLES:
+            for table_name in TABLES_WITH_STORE_COLUMN:
                 if table_name not in existing_tables:
                     continue  # tabla nueva: db.create_all() la crea ya con el esquema nuevo
                 table = db.metadata.tables[table_name]

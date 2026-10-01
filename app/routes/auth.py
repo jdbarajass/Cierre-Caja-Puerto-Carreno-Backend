@@ -27,6 +27,13 @@ def validate_password(password: str) -> bool:
     return 8 <= len(password) <= 128
 
 
+
+def _user_stores(user):
+    """Tiendas que puede operar el usuario, para el selector del frontend."""
+    from app.stores import get_store_info, stores_for_user
+    return [get_store_info(code) for code in stores_for_user(user)]
+
+
 @bp.route('/login', methods=['POST', 'OPTIONS'])
 def login():
     """
@@ -181,7 +188,8 @@ def login():
         token = JWTService.generate_token(
             user_id=user.id,
             email=user.email,
-            role=user.role
+            role=user.role,
+            store_code=user.store_code
         )
 
         logger.info(
@@ -197,7 +205,9 @@ def login():
                 'id': user.id,
                 'email': user.email,
                 'name': user.name,
-                'role': user.role
+                'role': user.role,
+                'store_code': user.store_code,
+                'stores': _user_stores(user.to_dict())
             }
         }), 200)
 
@@ -301,7 +311,8 @@ def verify_token():
 
     @token_required
     def _verify():
-        user = get_current_user()
+        user = dict(get_current_user())
+        user['stores'] = _user_stores(user)
         return jsonify({
             'success': True,
             'message': 'Token valido',

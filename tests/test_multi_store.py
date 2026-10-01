@@ -29,10 +29,14 @@ def app(tmp_path, monkeypatch):
     return create_app(MultiStoreTestConfig)
 
 
-def _token(app, user_id, role):
+def _token(app, user_id, role, store_code=None):
     from app.services.jwt_service import JWTService
     with app.app_context():
-        return JWTService.generate_token(user_id, f'{role}{user_id}@test.com', role)
+        return JWTService.generate_token(user_id, f'{role}{user_id}@test.com', role, store_code)
+
+
+def _headers(token, store=None):
+    return {'Authorization': f'Bearer {token}', **({'X-Store': store} if store else {})}
 
 
 @pytest.fixture
@@ -233,3 +237,78 @@ def test_cache_de_facturas_no_se_cruza_entre_cuentas_de_alegra():
     _invoices_cache.set(a._invoices_cache_key('2026-09-01'), ['factura-carreno'], 60)
     assert _invoices_cache.get(b._invoices_cache_key('2026-09-01')) is None
     assert _invoices_cache.get(a._invoices_cache_key('2026-09-01')) == ['factura-carreno']
+
+
+# ─── Fase 2: usuarios con tienda asignada ────────────────────────────────────
+
+def test_vendedora_de_primavera_opera_solo_primavera(app, client, admin_headers):
+    token = _token(app, 3, 'sales', 'primavera')
+    client.post('/api/notes-tasks/restock', headers=admin_headers('primavera'), json={'item': 'Item Primavera'})
+
+    # Sin header: su propia tienda (no Carreño), ej. frontend viejo en caché
+    items = client.get('/api/notes-tasks/restock', headers=_headers(token)).get_json()['items']
+    assert [i['item'] for i in items] == ['Item Primavera']
+    assert client.get('/api/notes-tasks/restock', headers=_headers(token, 'primavera')).status_code == 200
+    assert client.get('/api/notes-tasks/restock', headers=_headers(token, 'carreno')).status_code == 403
+
+    stores = client.get('/api/stores', headers=_headers(token)).get_json()
+    assert [s['code'] for s in stores['stores']] == ['primavera']
+    assert stores['current_store'] == 'primavera'
+
+
+def test_token_viejo_sin_tienda_es_de_carreno(app, client):
+    import jwt
+    from datetime import datetime, timedelta
+    with app.app_context():
+        old_token = jwt.encode({
+            'userId': 9, 'email': 'vieja@test.com', 'role': 'sales',
+            'iat': datetime.utcnow(), 'exp': datetime.utcnow() + timedelta(hours=1)
+        }, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    assert client.get('/api/stores', headers=_headers(old_token)).get_json()['current_store'] == 'carreno'
+    assert client.get('/api/notes-tasks/restock', headers=_headers(old_token, 'primavera')).status_code == 403
+
+
+def test_verify_no_se_rompe_con_header_de_otra_tienda(app, client):
+    token = _token(app, 3, 'sales', 'primavera')
+    resp = client.get('/auth/verify', headers=_headers(token, 'carreno'))
+    assert resp.status_code == 200
+    user = resp.get_json()['user']
+    assert user['store_code'] == 'primavera'
+    assert [s['code'] for s in user['stores']] == ['primavera']
+
+
+def test_crud_usuarios_con_tienda(client, admin_headers):
+    base = {'email': 'laura@test.com', 'password': 'Clave123', 'name': 'Laura', 'role': 'sales'}
+
+    bad = client.post('/api/users', headers=admin_headers(), json={**base, 'store_code': 'bogota'})
+    assert bad.status_code == 400
+
+    created = client.post('/api/users', headers=admin_headers(), json={**base, 'store_code': 'Primavera'})
+    assert created.status_code == 201, created.get_json()
+    user = created.get_json()['user']
+    assert user['store_code'] == 'primavera'
+
+    sin_tienda = client.post('/api/users', headers=admin_headers(), json={**base, 'email': 'otra@test.com'})
+    assert sin_tienda.get_json()['user']['store_code'] == 'carreno'
+
+    updated = client.put(f"/api/users/{user['id']}", headers=admin_headers(), json={'store_code': 'carreno'})
+    assert updated.get_json()['user']['store_code'] == 'carreno'
+    assert client.put(f"/api/users/{user['id']}", headers=admin_headers(), json={'store_code': 'x'}).status_code == 400
+
+    listed = client.get('/api/users', headers=admin_headers()).get_json()['users']
+    assert {u['email']: u['store_code'] for u in listed} == {'laura@test.com': 'carreno', 'otra@test.com': 'carreno'}
+
+
+def test_login_devuelve_tienda_y_la_mete_en_el_token(app, client, admin_headers):
+    client.post('/api/users', headers=admin_headers(), json={
+        'email': 'vende@test.com', 'password': 'Clave123', 'name': 'Vende', 'role': 'sales', 'store_code': 'primavera'
+    })
+    resp = client.post('/auth/login', json={'email': 'vende@test.com', 'password': 'Clave123'})
+    assert resp.status_code == 200, resp.get_json()
+    body = resp.get_json()
+    assert body['user']['store_code'] == 'primavera'
+    assert [s['code'] for s in body['user']['stores']] == ['primavera']
+
+    from app.services.jwt_service import JWTService
+    with app.app_context():
+        assert JWTService.verify_token(body['token'])['storeCode'] == 'primavera'

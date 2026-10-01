@@ -16,6 +16,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), default='user')
+    # Multi-tienda: tienda que opera el usuario (ver app/stores.py). El admin
+    # opera todas sin importar este valor.
+    store_code = db.Column(db.String(20), nullable=False, default='carreno', server_default='carreno')
     is_active = db.Column(db.Boolean, default=True, index=True)
     failed_login_attempts = db.Column(db.Integer, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
@@ -32,6 +35,7 @@ class User(db.Model):
             'email': self.email,
             'name': self.name,
             'role': self.role,
+            'store_code': self.store_code,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

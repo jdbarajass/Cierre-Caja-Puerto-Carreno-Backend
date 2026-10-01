@@ -13,7 +13,7 @@ class JWTService:
     """Servicio para generar y validar tokens JWT"""
 
     @staticmethod
-    def generate_token(user_id: int, email: str, role: str) -> str:
+    def generate_token(user_id: int, email: str, role: str, store_code: str = None) -> str:
         """
         Genera un token JWT para el usuario
 
@@ -21,6 +21,7 @@ class JWTService:
             user_id: ID del usuario
             email: Email del usuario
             role: Rol del usuario
+            store_code: Tienda asignada al usuario (multi-tienda, ver app/stores.py)
 
         Returns:
             Token JWT como string
@@ -34,6 +35,7 @@ class JWTService:
                 'userId': user_id,
                 'email': email,
                 'role': role,
+                'storeCode': store_code,
                 'iat': datetime.utcnow(),
                 'exp': datetime.utcnow() + timedelta(hours=expiration_hours)
             }

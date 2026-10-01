@@ -16,6 +16,12 @@ def get_current_user():
     return getattr(g, 'current_user', None)
 
 
+# Endpoints que no leen datos de ninguna tienda: no se les valida X-Store, así
+# un header viejo/ajeno (ej. selección guardada de otra sesión) no rompe la
+# verificación de sesión ni la carga del selector de tiendas.
+STORE_AGNOSTIC_ENDPOINTS = {'auth.verify_token', 'stores.list_user_stores'}
+
+
 def _check_store_access(user):
     """
     Verifica que el usuario pueda operar sobre la tienda pedida en el request
@@ -24,7 +30,16 @@ def _check_store_access(user):
 
     Las reglas de quién opera qué tienda viven en app.stores.stores_for_user.
     """
-    from app.stores import get_current_store, user_can_access_store
+    from app.stores import get_current_store, stores_for_user, user_can_access_store
+
+    # Sin X-Store: se opera la tienda del propio usuario (no Carreño a la
+    # fuerza) - ej. una vendedora de Primavera con un frontend viejo en caché.
+    if not getattr(g, 'store_explicit', False):
+        g.store_code = stores_for_user(user)[0]
+        return None
+
+    if request.endpoint in STORE_AGNOSTIC_ENDPOINTS:
+        return None
 
     store_code = get_current_store()
     if user_can_access_store(user, store_code):
@@ -86,10 +101,14 @@ def token_required(f):
             payload = JWTService.verify_token(token)
 
             # Guardar la información del usuario en el contexto
+            from app.stores import DEFAULT_STORE
             g.current_user = {
                 'userId': payload.get('userId'),
                 'email': payload.get('email'),
-                'role': payload.get('role')
+                'role': payload.get('role'),
+                # Tokens emitidos antes del multi-tienda no traen la tienda:
+                # esos usuarios eran todos de Carreño.
+                'store_code': payload.get('storeCode') or DEFAULT_STORE,
             }
 
             logger.debug(f"Token válido para usuario: {payload.get('email')}")

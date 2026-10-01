@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-10-01] (continuación) - Multi-tienda, Fase 2: usuarios con tienda asignada
+
+- `users.store_code` (nuevo, default `carreno`; la migración multi-tienda lo agrega y deja a todos los usuarios existentes en Carreño).
+- Reglas (`app/stores.py: stores_for_user`): el **admin** opera todas las tiendas; cualquier otro rol (`sales`, `partner`) **solo su tienda asignada**.
+- La tienda viaja en el JWT (`storeCode`), igual que el rol: un cambio de tienda de un usuario aplica cuando vuelve a iniciar sesión. Tokens anteriores sin `storeCode` = Carreño.
+- **Sin header `X-Store`, la tienda activa es la del propio usuario** (antes: siempre Carreño). Así una vendedora de Primavera con un frontend viejo en caché ve Primavera, no un 403.
+- `/auth/login` y `/auth/verify` devuelven `store_code` y `stores` (tiendas que puede operar). `/auth/verify` y `/api/stores` no validan `X-Store`, para que un header viejo no cierre la sesión.
+- `/api/users` (listar/obtener/crear/editar): campo `store_code` (validado, 400 si no existe; opcional al crear → Carreño). Las respuestas usan `User.to_dict()`.
+- Tests: +5 en `tests/test_multi_store.py` (vendedora de Primavera, token viejo, verify con header ajeno, CRUD con tienda, login). **52/52 pasan.** Migración re-probada en Postgres 16 con 2 workers en paralelo.
+
+---
+
 ## [2026-10-01] - Multi-tienda, Fase 1: backend listo para KOAJ Primavera
 
 Se abre una segunda tienda, **KOAJ Primavera**, con la misma lógica que Carreño pero con datos **100% independientes** (cierres, cuentas, recompras, empleadas, notas/tareas y ventas/inventario de su propia cuenta de Alegra). Comparten plataforma, usuarios y Códigos KOAJ. Esta fase deja el backend multi-tienda **sin cambiar nada visible**: sin header `X-Store` todo funciona exactamente como Carreño.

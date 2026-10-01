@@ -9,10 +9,11 @@ Alegra.
 
 Cómo se elige la tienda de un request:
   - El frontend manda el header `X-Store: <código>` (ej. 'primavera').
-  - Sin header (o sin request, ej. al arrancar) se usa DEFAULT_STORE
-    ('carreno'), así cualquier cliente que todavía no conozca el multi-tienda
-    (frontend viejo en caché, workflow de GitHub Actions) sigue operando sobre
-    Carreño exactamente como antes.
+  - Sin header, con usuario logueado: la tienda asignada al usuario (el admin,
+    que opera todas, cae en la primera: Carreño). Así un frontend viejo en
+    caché sigue funcionando para todos.
+  - Sin header ni usuario (ej. workflow de GitHub Actions con X-Sync-Token, o
+    fuera de un request): DEFAULT_STORE ('carreno').
   - El permiso del usuario sobre esa tienda se valida en token_required
     (app/middlewares/auth.py), que es donde ya se conoce al usuario.
 
@@ -106,12 +107,15 @@ def get_base_objetivo(code):
 
 def resolve_request_store():
     """
-    Lee la tienda pedida por el request (header X-Store; query param ?store=
-    como respaldo para descargas por URL). Sin valor -> DEFAULT_STORE.
-    Lanza InvalidStoreError si el código no existe.
+    Lee la tienda pedida EXPLÍCITAMENTE por el request (header X-Store; query
+    param ?store= como respaldo para descargas por URL). Devuelve None si el
+    request no pide ninguna: en ese caso token_required usa la tienda del
+    propio usuario. Lanza InvalidStoreError si el código no existe.
     """
     raw = request.headers.get(STORE_HEADER) or request.args.get('store')
-    code = normalize_store_code(raw) or DEFAULT_STORE
+    code = normalize_store_code(raw)
+    if not code:
+        return None
     if not is_valid_store(code):
         raise InvalidStoreError(f"Tienda desconocida: '{raw}'")
     return code
@@ -119,12 +123,14 @@ def resolve_request_store():
 
 def stores_for_user(user):
     """
-    Códigos de las tiendas que puede operar el usuario (dict de g.current_user).
-    Por ahora: el admin opera todas; el resto, solo la tienda por defecto.
+    Códigos de las tiendas que puede operar el usuario (dict de g.current_user
+    o User.to_dict()): el admin opera todas; cualquier otro rol (sales,
+    partner), solo la tienda que tiene asignada.
     """
     if user and user.get('role') == 'admin':
         return list(STORES)
-    return [DEFAULT_STORE]
+    store_code = (user or {}).get('store_code')
+    return [store_code if is_valid_store(store_code) else DEFAULT_STORE]
 
 
 def user_can_access_store(user, code):
