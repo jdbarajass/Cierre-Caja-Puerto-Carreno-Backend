@@ -640,6 +640,9 @@ class AlegraDirectClient:
     # ------------------------------------------------------------------
 
     REPORT_PAGE_SIZE = 2000
+    # Tope de páginas por consulta: si Alegra ignorara `start` y devolviera
+    # siempre la misma página, el ciclo no puede quedar pidiendo sin fin.
+    MAX_PAGES = 50
 
     def _get_report_rows(self, endpoint: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -649,16 +652,21 @@ class AlegraDirectClient:
         """
         rows: List[Dict[str, Any]] = []
         start = 0
-        while True:
+        for _ in range(self.MAX_PAGES):
             response = self._make_request(endpoint, {**params, 'limit': self.REPORT_PAGE_SIZE, 'start': start})
             if isinstance(response, list):
                 return response
             page = response.get('data') or []
+            if rows and page and page[0] == rows[0]:
+                logger.warning(f"{endpoint}: Alegra repitió la primera página; se usan {len(rows)} filas")
+                return rows
             rows.extend(page)
             total = (response.get('metadata') or {}).get('total')
             if not page or total is None or len(rows) >= int(total):
                 return rows
             start += len(page)
+        logger.warning(f"{endpoint}: se alcanzó el tope de {self.MAX_PAGES} páginas")
+        return rows
 
     def get_sales_by_client(self, from_date: str, to_date: str, seller_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -680,14 +688,19 @@ class AlegraDirectClient:
     def get_sellers(self) -> List[Dict[str, Any]]:
         """Todas las vendedoras (activas e inactivas): id, name, identification, status."""
         sellers: List[Dict[str, Any]] = []
+        seen = set()
         start = 0
-        while True:
+        for _ in range(self.MAX_PAGES):
             page = self._make_request('/sellers', {'start': start, 'limit': 30})
             page = page if isinstance(page, list) else page.get('data') or []
-            sellers.extend(page)
-            if len(page) < 30:
+            new = [s for s in page if str(s.get('id')) not in seen]
+            seen.update(str(s.get('id')) for s in new)
+            sellers.extend(new)
+            # Página corta = última; página sin vendedoras nuevas = Alegra ignoró `start`.
+            if len(page) < 30 or not new:
                 return sellers
             start += 30
+        return sellers
 
     def get_contact(self, contact_id: str) -> Dict[str, Any]:
         """Contacto de Alegra (teléfonos en phonePrimary / phoneSecondary / mobile)."""

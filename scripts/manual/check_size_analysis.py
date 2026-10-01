@@ -1,6 +1,8 @@
 """
 Script de prueba para los nuevos endpoints de análisis por talla
-Prueba los 3 nuevos endpoints y el reporte completo actualizado
+Prueba los 3 nuevos endpoints y el reporte completo actualizado.
+Script MANUAL (no es un test de pytest): python scripts/manual/check_size_analysis.py
+Credenciales: ver scripts/manual/_credentials.py
 """
 import requests
 import json
@@ -8,22 +10,21 @@ from datetime import datetime
 import sys
 import io
 
+from _credentials import api_url, login_payload
+
 # Configurar salida UTF-8 para Windows
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Configuración
-BASE_URL = "http://10.28.168.57:5000"
+BASE_URL = api_url()
 LOGIN_URL = f"{BASE_URL}/auth/login"
 SIZE_ANALYSIS_URL = f"{BASE_URL}/api/products/analysis/sizes"
 CATEGORY_SIZE_URL = f"{BASE_URL}/api/products/analysis/category-sizes"
 DEPARTMENT_SIZE_URL = f"{BASE_URL}/api/products/analysis/department-sizes"
 COMPLETE_ANALYSIS_URL = f"{BASE_URL}/api/products/analysis"
 
-# Credenciales
-USERNAME = "ventaspuertocarreno@gmail.com"
-PASSWORD = "VentasCarreno2025.*"
 
 def print_separator(title):
     """Imprime separador visual"""
@@ -35,10 +36,7 @@ def login():
     """Obtiene token de autenticación"""
     print_separator("1. AUTENTICACIÓN")
 
-    response = requests.post(LOGIN_URL, json={
-        "email": USERNAME,
-        "password": PASSWORD
-    })
+    response = requests.post(LOGIN_URL, json=login_payload())
 
     if response.status_code == 200:
         data = response.json()

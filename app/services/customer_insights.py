@@ -352,19 +352,32 @@ class CustomerInsightsService:
         return data
 
     def _contact_info(self, client_id: str) -> Dict[str, Any]:
-        def load():
-            info = {'phone': None, 'whatsapp': None, 'last_purchase': None}
-            try:
-                phone = contact_phone(self.client.get_contact(client_id) or {})
-                info.update({'phone': phone, 'whatsapp': whatsapp_number(phone)})
-            except Exception as e:
-                logger.warning(f'[{self.store}] Contacto {client_id}: {e}')
-            try:
-                info['last_purchase'] = self.client.get_last_invoice_date(client_id)
-            except Exception as e:
-                logger.warning(f'[{self.store}] Última compra de {client_id}: {e}')
-            return info
-        return _cached(f'{self.store}:contact:{client_id}', CONTACT_TTL, load)
+        """
+        Teléfono y última compra de una clienta. Solo se guarda en caché si
+        las dos consultas salieron bien: un error pasajero de Alegra (ej.
+        demasiadas consultas seguidas) no debe dejarla "sin celular" 12 h.
+        """
+        key = f'{self.store}:contact:{client_id}'
+        cached = _cache.get(key)
+        if cached is not None:
+            return cached
+
+        info = {'phone': None, 'whatsapp': None, 'last_purchase': None}
+        complete = True
+        try:
+            phone = contact_phone(self.client.get_contact(client_id) or {})
+            info.update({'phone': phone, 'whatsapp': whatsapp_number(phone)})
+        except Exception as e:
+            complete = False
+            logger.warning(f'[{self.store}] Contacto {client_id}: {e}')
+        try:
+            info['last_purchase'] = self.client.get_last_invoice_date(client_id)
+        except Exception as e:
+            complete = False
+            logger.warning(f'[{self.store}] Última compra de {client_id}: {e}')
+        if complete:
+            _cache.set(key, info, CONTACT_TTL)
+        return info
 
     def inactive(self, days: int, lookback_days: int = INACTIVE_LOOKBACK_DAYS,
                  enrich_limit: int = INACTIVE_ENRICH_LIMIT) -> Dict[str, Any]:

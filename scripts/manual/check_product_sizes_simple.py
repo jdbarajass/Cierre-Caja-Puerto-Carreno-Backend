@@ -1,17 +1,18 @@
 """
-Script simple para verificar que los endpoints funcionan
+Script de prueba MANUAL de los endpoints de análisis por talla (no es un test de pytest).
+Ejecutar con el servidor corriendo: python scripts/manual/check_product_sizes_simple.py
+Credenciales: ver scripts/manual/_credentials.py
 """
 import requests
 import json
 
-BASE_URL = "http://10.28.168.57:5000"
+from _credentials import api_url, login_payload
+
+BASE_URL = api_url()
 
 # 1. Login
 print("1. Login...")
-response = requests.post(f"{BASE_URL}/auth/login", json={
-    "email": "ventaspuertocarreno@gmail.com",
-    "password": "VentasCarreno2025.*"
-})
+response = requests.post(f"{BASE_URL}/auth/login", json=login_payload())
 if response.status_code == 200:
     token = response.json().get('token')
     print(f"   OK - Token obtenido")

@@ -5,6 +5,8 @@ las reales de /reports/sales-by-client y sales-by-seller (no hay red).
 """
 
 
+from datetime import date
+
 import pytest
 import requests
 
@@ -256,3 +258,41 @@ def test_ultima_compra_ignora_factura_de_otro_cliente(monkeypatch):
     monkeypatch.setattr(AlegraDirectClient, '_make_request',
                         lambda self, e, p=None: [{'date': '2026-08-24', 'client': {'id': '353'}}])
     assert AlegraDirectClient('u', 't').get_last_invoice_date('353') == '2026-08-24'
+
+
+def test_paginacion_no_queda_en_ciclo_si_alegra_ignora_start(monkeypatch):
+    # Reporte: Alegra devuelve siempre la misma página aunque diga que hay más.
+    same = {'data': [{'idLocal': '1'}, {'idLocal': '2'}], 'metadata': {'total': 9999}}
+    calls = []
+    monkeypatch.setattr(AlegraDirectClient, '_make_request', lambda self, e, p=None: calls.append(p) or same)
+    rows = AlegraDirectClient('u', 't').get_sales_by_client('2026-01-01', '2026-09-30')
+    assert [r['idLocal'] for r in rows] == ['1', '2'] and len(calls) == 2
+
+    # Vendedoras: 30 por página, siempre las mismas.
+    thirty = [{'id': str(i), 'name': f'V{i}'} for i in range(30)]
+    calls.clear()
+    monkeypatch.setattr(AlegraDirectClient, '_make_request', lambda self, e, p=None: calls.append(p) or thirty)
+    sellers = AlegraDirectClient('u', 't').get_sellers()
+    assert len(sellers) == 30 and len(calls) == 2
+
+
+def test_contacto_con_error_no_se_guarda_en_cache():
+    ci.clear_cache()
+    attempts = {'n': 0}
+
+    class FlakyClient:
+        def get_contact(self, cid):
+            attempts['n'] += 1
+            if attempts['n'] == 1:
+                raise requests.exceptions.HTTPError('429 Too Many Requests')
+            return {'mobile': '3214868471'}
+
+        def get_last_invoice_date(self, cid):
+            return '2026-05-10'
+
+    service = ci.CustomerInsightsService(FlakyClient(), 'carreno', date(2026, 10, 1))
+    assert service._contact_info('353')['whatsapp'] is None       # falló: no se guarda
+    assert service._contact_info('353')['whatsapp'] == '573214868471'  # reintenta y ahora sí
+    service._contact_info('353')
+    assert attempts['n'] == 2                                       # la buena sí quedó en caché
+    ci.clear_cache()

@@ -2,6 +2,19 @@
 
 ---
 
+## [2026-10-01] (continuación) - Fase 2 del dashboard de clientes: revisión y limpieza
+
+**Correcciones encontradas al revisar el código nuevo:**
+- Clientas inactivas: si Alegra fallaba al traer el teléfono o la última compra de una clienta (ej. por demasiadas consultas seguidas), quedaba guardada "sin celular" 12 h. Ahora solo se guarda en caché cuando las dos consultas salen bien; si no, se reintenta en la siguiente carga.
+- `AlegraDirectClient`: tope de 50 páginas en los reportes y en `get_sellers`, y corte si Alegra repite la misma página. Antes, si Alegra ignorara `start`, el ciclo podía quedar pidiendo páginas sin fin.
+
+**Limpieza de pruebas:**
+- `tests/test_analytics_endpoints.py`, `test_endpoints_simple.py` y `test_size_analysis.py` → `scripts/manual/check_*.py`. Eran scripts manuales contra un servidor real, no tests. `test_size_analysis.py` reemplazaba `sys.stdout` al importarse: **era la causa del "I/O operation on closed file"** que rompía la corrida completa de pytest (ver TROUBLESHOOTING.md).
+- Se quitaron del código de esos scripts el correo y la contraseña reales que tenían escritos; ahora se piden por variables de entorno o por consola (`scripts/manual/_credentials.py`).
+- `pytest -q` (suite completa, sin elegir archivos) vuelve a funcionar: **70/70 pasan** (+2 tests de las correcciones).
+
+**Notas de producción (no cambian código):** el Procfile da 240 s por petición (el frontend espera 120 s). La caché es en memoria **por worker** (hay 2) y se pierde cuando Render reinicia o duerme la instancia: la primera carga después de eso vuelve a consultar Alegra.
+
 ## [2026-10-01] (continuación) - Dashboard de clientes con reportes agregados de Alegra
 
 - **Verificado con las credenciales reales**: `/api/v1/reports/sales-by-client`, `sales-by-seller` y `sales-by-item` aceptan Basic (correo:token); `reports-api.alegra.com/api/v2` NO (401). `limit=2000` trae todos los clientes del año en una llamada; Alegra solo ordena bien con `order_field=total`, así que el backend ordena por su cuenta.

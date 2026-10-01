@@ -35,8 +35,8 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 
 **Efectos de hacer este cambio:**
 - No modifica código de producción, solo agrega archivos de test nuevos — riesgo bajo
-- Hay que resolver primero (o rodear) el problema de `pytest` en este entorno local específico (ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md#pytest-falla-con-io-operation-on-closed-file)) — probablemente no ocurra en un runner de CI como GitHub Actions, que sería el lugar ideal para correr estos tests automáticamente en cada push/PR
-- También conviene renombrar `tests/test_analytics_endpoints.py` y `tests/test_size_analysis.py` (son scripts de prueba manual contra un servidor real, no tests automatizados) a algo como `manual_check_*.py`, para que pytest deje de intentar recolectarlos como si fueran tests
+- El problema de `pytest` en local ya está resuelto (ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md#pytest-falla-con-io-operation-on-closed-file)); un runner de CI como GitHub Actions sería el lugar ideal para correr los tests automáticamente en cada push/PR
+- ~~Renombrar los scripts de prueba manual que pytest recolectaba~~ **Hecho 2026-10-01**: movidos a `scripts/manual/check_*.py`; eran la causa del error de pytest (ver TROUBLESHOOTING.md)
 
 **Beneficios:**
 - El módulo más crítico del negocio (autenticación de usuarios y conexión con Alegra) hoy no tiene ninguna red de seguridad automatizada — un cambio futuro podría romper el login o la integración contable sin que nadie se entere hasta que una vendedora reporte el problema

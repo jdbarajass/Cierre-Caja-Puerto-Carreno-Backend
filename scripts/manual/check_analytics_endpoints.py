@@ -1,13 +1,16 @@
 """
-Script de prueba para los endpoints de analytics
-Ejecutar después de iniciar el servidor: python run.py
+Script de prueba MANUAL para los endpoints de analytics (no es un test de pytest).
+Ejecutar con el servidor corriendo: python scripts/manual/check_analytics_endpoints.py
+Credenciales: ver scripts/manual/_credentials.py
 """
 import requests
 import json
 from datetime import datetime, timedelta
 
+from _credentials import api_url, login_payload
+
 # Configuración
-BASE_URL = "http://localhost:5000"
+BASE_URL = api_url()
 # Reemplazar con tu token JWT real después de login
 TOKEN = "YOUR_JWT_TOKEN_HERE"
 
@@ -29,10 +32,7 @@ def test_login():
     print_section("1. OBTENIENDO TOKEN DE AUTENTICACIÓN")
 
     url = f"{BASE_URL}/auth/login"
-    payload = {
-        "username": "admin",  # Reemplazar con usuario real
-        "password": "password"  # Reemplazar con contraseña real
-    }
+    payload = login_payload()
 
     try:
         response = requests.post(url, json=payload)
@@ -362,7 +362,7 @@ def main():
     token = test_login()
 
     if not token:
-        print("\n⚠️  No se pudo obtener el token. Actualiza las credenciales en el script.")
+        print("\n⚠️  No se pudo obtener el token. Revisa las credenciales (KOAJ_TEST_EMAIL / KOAJ_TEST_PASSWORD).")
         print("    O usa un token existente modificando la variable TOKEN al inicio del script.")
         return
 

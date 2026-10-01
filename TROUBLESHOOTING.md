@@ -308,24 +308,18 @@ echo "Para iniciar el servidor ejecuta: python run.py"
 
 ## pytest falla con "I/O operation on closed file"
 
-**Error:**
+**RESUELTO (2026-10-01).** Al correr `pytest` sin elegir archivos salía:
+
 ```
-File "...\_pytest\capture.py", line X, in snap
-    self.tmpfile.seek(0)
 ValueError: I/O operation on closed file.
 1 error in ~22s
 ```
 
-**Causa:** Es un problema **del entorno** (Windows + Python 3.14 + captura de stdout/stderr de pytest en ciertos runners/terminales), no del código del proyecto. Se confirmó reproducible incluso en checkouts limpios sin modificar, con distintas versiones de pytest (7.4.3 y 9.0.3) y tanto desde `venv/` como desde el Python global. Siempre ocurre alrededor de los ~22 segundos, lo que sugiere que algo externo al proceso de pytest (el propio terminal/runner) interfiere con el descriptor de archivo usado para la captura.
+**Causa real:** no era el entorno. `tests/test_size_analysis.py` era un script de prueba manual que, **al importarse**, reemplazaba `sys.stdout`/`sys.stderr` por un `TextIOWrapper` (para imprimir UTF-8 en Windows). Pytest lo recolectaba por llamarse `test_*.py`, y al cambiarle la salida rompía su captura. Junto con `test_analytics_endpoints.py` y `test_endpoints_simple.py` (también scripts manuales contra un servidor real, uno con credenciales escritas en el código) ensuciaban el resultado.
 
-También hay que tener en cuenta que `tests/test_analytics_endpoints.py` y `tests/test_size_analysis.py` **no son tests automatizados reales**: son scripts de prueba manual pensados para ejecutarse contra un servidor local ya corriendo (`http://localhost:5000`) con credenciales reales, pero sus funciones se llaman `test_*` y por eso pytest las intenta recolectar igual. Si se decide arreglar esto a futuro, lo correcto sería renombrarlos (ej. `manual_check_analytics.py`) para que pytest deje de recolectarlos.
+**Solución aplicada:** los tres se movieron a `scripts/manual/` (`check_size_analysis.py`, `check_analytics_endpoints.py`, `check_product_sizes_simple.py`). Ya no son recolectados por pytest y piden las credenciales por variables de entorno o por consola (`scripts/manual/_credentials.py`). Ahora `venv/Scripts/python.exe -m pytest -q` corre la suite completa limpia.
 
-**Solución (mientras tanto):**
-- Ejecutar los tests unitarios puros (`test_cash_calculator.py`, `test_formatters.py`, `test_knapsack_solver.py`) importándolos directamente en un script Python en vez de vía `pytest`, por ejemplo instanciando cada clase `Test*` y llamando sus métodos `test_*` manualmente.
-- Para probar rutas/endpoints, usar `app.test_client()` directamente en un script (como hace `conftest.py`), sin pasar por el runner de pytest.
-- Si en tu máquina pytest sí funciona normalmente, ignora esta sección — es específico de ciertos entornos.
-
----
+**Regla:** en `tests/` solo van tests automáticos que no necesitan red ni servidor. Un script que llama a un servidor real va en `scripts/manual/` y no se llama `test_*.py`.
 
 ## Cómo verificar que Render desplegó los últimos cambios
 
