@@ -741,8 +741,8 @@ async function renderSizeChart(date, token) {
 
 ### Credenciales de Prueba
 ```
-Email: ventaspuertocarreno@gmail.com
-Password: VentasCarreno2025.*
+Email: <correo de un usuario de la plataforma>
+Password: <su contraseña>
 ```
 
 ### Fechas de Prueba con Datos
@@ -755,7 +755,7 @@ Password: VentasCarreno2025.*
 # 1. Login
 curl -X POST http://10.28.168.57:5000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"ventaspuertocarreno@gmail.com","password":"VentasCarreno2025.*"}'
+  -d '{"email":"usuario@ejemplo.com","password":"TuContraseña123*"}'
 
 # 2. Obtener análisis por talla (reemplaza <TOKEN> con el token del paso 1)
 curl -X GET "http://10.28.168.57:5000/api/products/analysis/sizes?date=2025-11-28" \

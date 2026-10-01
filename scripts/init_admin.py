@@ -2,7 +2,11 @@
 """
 Script para inicializar el usuario administrador
 Ejecutar: python scripts/init_admin.py
+
+La contrasena NO va en el codigo: se lee de INIT_ADMIN_PASSWORD o se pide
+por consola (no se ve al escribir).
 """
+import getpass
 import sys
 import os
 
@@ -91,12 +95,12 @@ def main():
 
     # Valores por defecto (del requerimiento del frontend)
     default_email = "ventaspuertocarreno@gmail.com"
-    default_password = "VentasCarreno2025.*"
+    default_password = os.getenv("INIT_ADMIN_PASSWORD", "")
     default_name = "Usuario Ventas Puerto Carreño"
 
     print("Configuración por defecto:")
     print(f"  Email: {default_email}")
-    print(f"  Password: {'*' * len(default_password)}")
+    print(f"  Password: {'(de INIT_ADMIN_PASSWORD)' if default_password else '(se pedirá ahora)'}")
     print(f"  Nombre: {default_name}")
     print()
 
@@ -104,12 +108,16 @@ def main():
 
     if use_defaults == 's':
         email = default_email
-        password = default_password
+        password = default_password or getpass.getpass("Password: ")
         name = default_name
     else:
         email = input(f"Email [{default_email}]: ").strip() or default_email
-        password = input(f"Password [{default_password}]: ").strip() or default_password
+        password = getpass.getpass("Password: ") or default_password
         name = input(f"Nombre [{default_name}]: ").strip() or default_name
+
+    if len(password) < 8:
+        print("ERROR: la contraseña debe tener al menos 8 caracteres")
+        sys.exit(1)
 
     print()
     print("Creando usuario...")

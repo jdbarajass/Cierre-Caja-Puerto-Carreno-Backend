@@ -3,7 +3,12 @@
 Script para inicializar usuarios en Supabase
 Hashea las contrasenas y crea usuarios en la BD
 Ejecutar: python scripts/init_supabase.py
+
+Las contrasenas NO van en el codigo: se leen de INIT_SALES_PASSWORD /
+INIT_ADMIN_PASSWORD o se piden por consola. OJO: si el usuario ya existe,
+se le reemplaza la contrasena por la que se escriba aqui.
 """
+import getpass
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,18 +27,27 @@ def hash_password(password: str) -> str:
     ).decode('utf-8')
 
 
+def _password_for(email: str, env_var: str) -> str:
+    """Contrasena desde la variable de entorno o pedida por consola (no se ve al escribir)."""
+    password = os.getenv(env_var) or getpass.getpass(f'Contrasena para {email}: ')
+    if len(password) < 8:
+        print(f'ERROR: la contrasena de {email} debe tener al menos 8 caracteres')
+        sys.exit(1)
+    return password
+
+
 def init_users():
     """Inicializa los usuarios en Supabase"""
     users_data = [
         {
             'email': 'ventaspuertocarreno@gmail.com',
-            'password': 'VentasCarreno2025.*',
+            'password': _password_for('ventaspuertocarreno@gmail.com', 'INIT_SALES_PASSWORD'),
             'name': 'Usuario Ventas Puerto Carreno',
             'role': 'sales'
         },
         {
             'email': 'koaj.puertocarreno@gmail.com',
-            'password': 'Koaj.2025*',
+            'password': _password_for('koaj.puertocarreno@gmail.com', 'INIT_ADMIN_PASSWORD'),
             'name': 'Administrador KOAJ',
             'role': 'admin'
         }

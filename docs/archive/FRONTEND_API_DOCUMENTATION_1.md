@@ -61,8 +61,8 @@ POST http://localhost:5000/auth/login
 ### Body (JSON)
 ```json
 {
-  "email": "ventaspuertocarreno@gmail.com",
-  "password": "VentasCarreno2025.*"
+  "email": "usuario@ejemplo.com",
+  "password": "TuContraseña123*"
 }
 ```
 
@@ -70,7 +70,7 @@ POST http://localhost:5000/auth/login
 ```json
 {
   "success": true,
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoidmVudGFzcHVlcnRvY2FycmVub0BnbWFpbC5jb20iLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3MzI0OTg0MTZ9.xyz",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "email": "ventaspuertocarreno@gmail.com",
     "name": "Usuario Ventas Puerto Carreño",
@@ -745,8 +745,8 @@ export const cashService = {
 ```javascript
 // 1. Login
 const loginData = await authService.login(
-  'ventaspuertocarreno@gmail.com',
-  'VentasCarreno2025.*'
+  'usuario@ejemplo.com',
+  'TuContraseña123*'
 );
 console.log('Token:', loginData.token);
 console.log('Usuario:', loginData.user);

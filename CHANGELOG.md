@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-01] (continuación) - Seguridad: credenciales fuera del repositorio
+
+El repo es **público**. Se quitaron todas las credenciales escritas en archivos versionados (a pedido del usuario, sin cambiar las contraseñas):
+- `scripts/init_admin.py` y `scripts/init_supabase.py`: ya no traen contraseñas. Se leen de `INIT_ADMIN_PASSWORD` / `INIT_SALES_PASSWORD` o se piden por consola sin mostrarse (mínimo 8 caracteres). Lo demás funciona igual (ojo: `init_supabase.py` sigue reemplazando la contraseña de los usuarios que ya existen).
+- `app/routes/auth.py` (ejemplo de Swagger) y `README.md`: ejemplo genérico `usuario@ejemplo.com` / `TuContraseña123*`.
+- `docs/archive/FRONTEND_ANALISIS_TALLAS.md` y `FRONTEND_API_DOCUMENTATION_1.md`: credenciales reemplazadas por ejemplos y un token JWT real abreviado.
+- Verificado: ninguna contraseña ni token en los archivos de los dos repos (backend y frontend). 70/70 tests; `/apispec.json` carga con el ejemplo nuevo.
+- **Limitación:** las contraseñas siguen en el **historial de git** (commits anteriores) de un repo público. Borrarlas de ahí exige reescribir el historial y forzar el push, con riesgo para los despliegues; el usuario decidió no cambiarlas. La única forma de anularlas del todo sería cambiarlas desde Usuarios.
+- **Regla:** nunca escribir contraseñas, tokens ni cadenas de conexión en el código ni en la documentación. Usar variables de entorno (ver `.env.example`) o pedirlas por consola.
+
 ## [2026-10-01] (continuación) - Fase 2 del dashboard de clientes: revisión y limpieza
 
 **Correcciones encontradas al revisar el código nuevo:**

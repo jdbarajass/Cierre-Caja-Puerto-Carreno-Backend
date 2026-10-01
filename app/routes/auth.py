@@ -53,10 +53,10 @@ def login():
           properties:
             email:
               type: string
-              example: ventaspuertocarreno@gmail.com
+              example: usuario@ejemplo.com
             password:
               type: string
-              example: VentasCarreno2025.*
+              example: TuContraseña123*
     responses:
       200:
         description: Login exitoso

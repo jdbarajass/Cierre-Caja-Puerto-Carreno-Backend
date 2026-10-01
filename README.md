@@ -671,8 +671,8 @@ Autentica al usuario y retorna un token JWT.
 
 ```json
 {
-  "email": "ventaspuertocarreno@gmail.com",
-  "password": "VentasCarreno2025.*"
+  "email": "usuario@ejemplo.com",
+  "password": "TuContraseña123*"
 }
 ```
 
