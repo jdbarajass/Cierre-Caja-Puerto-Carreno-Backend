@@ -16,6 +16,29 @@ def get_current_user():
     return getattr(g, 'current_user', None)
 
 
+def _check_store_access(user):
+    """
+    Verifica que el usuario pueda operar sobre la tienda pedida en el request
+    (g.store_code, resuelta en create_app a partir del header X-Store).
+    Devuelve una respuesta 403 si no puede, o None si puede.
+
+    Las reglas de quién opera qué tienda viven en app.stores.stores_for_user.
+    """
+    from app.stores import get_current_store, user_can_access_store
+
+    store_code = get_current_store()
+    if user_can_access_store(user, store_code):
+        return None
+
+    logger.warning(
+        f"Acceso denegado a la tienda '{store_code}' - Usuario: {user.get('email')}"
+    )
+    return jsonify({
+        'success': False,
+        'message': 'No tiene permisos para acceder a esta tienda'
+    }), 403
+
+
 def token_required(f):
     """
     Decorador que requiere un token JWT válido para acceder al endpoint
@@ -70,6 +93,10 @@ def token_required(f):
             }
 
             logger.debug(f"Token válido para usuario: {payload.get('email')}")
+
+            store_error = _check_store_access(g.current_user)
+            if store_error:
+                return store_error
 
         except jwt.ExpiredSignatureError:
             logger.warning(f"Token expirado - IP: {request.remote_addr}")

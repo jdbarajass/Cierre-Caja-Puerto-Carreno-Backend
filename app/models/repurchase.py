@@ -3,9 +3,10 @@ Modelo para Cuentas de Recompras (dinero enviado al socio para recompra de merca
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 
 
-class RepurchaseEntry(db.Model):
+class RepurchaseEntry(StoreScopedMixin, db.Model):
     __tablename__ = 'repurchase_entries'
 
     id = db.Column(db.Integer, primary_key=True)

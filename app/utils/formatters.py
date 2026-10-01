@@ -244,6 +244,9 @@ def filter_voided_invoices(invoices: list) -> dict:
             'voided_count': 0,
             'active_count': 0,
             'total_voided_amount': 0,
+            # Sin esta clave, un día SIN facturas (ej. el primer día de una
+            # tienda nueva) tumbaba el cierre con KeyError en process_invoices.
+            'total_voided_amount_formatted': format_cop(0),
             'voided_summary': []
         }
 

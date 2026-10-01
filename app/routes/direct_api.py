@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 
 from app.middlewares.auth import token_required, role_required
-from app.services.alegra_direct_client import AlegraDirectClient
+from app.stores import get_alegra_direct_client
 from app.config import Config
 from app.exceptions import AlegraConnectionError
 from app.utils.timezone import get_colombia_timestamp
@@ -16,15 +16,6 @@ from app.utils.timezone import get_colombia_timestamp
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('direct_api', __name__)
-
-# Inicializar cliente de API directa
-direct_client = AlegraDirectClient(
-    Config.ALEGRA_USER,
-    Config.ALEGRA_PASS,
-    Config.ALEGRA_API_BASE_URL,
-    Config.ALEGRA_TIMEOUT
-)
-
 
 
 @bp.route('/api/direct/inventory/value-report', methods=['GET', 'OPTIONS'])
@@ -85,7 +76,7 @@ def get_inventory_value_report():
         logger.info(f"Obteniendo inventory value report paginado - toDate: {to_date}, max_items: {max_items}, page_size: {page_size}")
 
         # Obtener datos usando paginación automática
-        result = direct_client.get_inventory_value_report_paginated(
+        result = get_alegra_direct_client().get_inventory_value_report_paginated(
             to_date=to_date,
             max_items=max_items,
             page_size=page_size,
@@ -181,7 +172,7 @@ def get_sales_totals():
         logger.info(f"Obteniendo sales totals - from: {from_date}, to: {to_date}, groupBy: {group_by}")
 
         # Obtener datos de la API directa
-        result = direct_client.get_sales_totals(
+        result = get_alegra_direct_client().get_sales_totals(
             from_date=from_date,
             to_date=to_date,
             group_by=group_by,
@@ -267,7 +258,7 @@ def get_sales_documents():
         logger.info(f"Obteniendo TODAS las facturas - from: {from_date}, to: {to_date}")
 
         # Usar el nuevo método que obtiene TODAS las facturas con paginación automática
-        result = direct_client.get_all_invoices_for_date_range(
+        result = get_alegra_direct_client().get_all_invoices_for_date_range(
             from_date=from_date,
             to_date=to_date
         )
@@ -365,7 +356,7 @@ def get_quick_sales_summary():
 
         # Obtener totales de ventas usando el endpoint rápido de Alegra
         # Este endpoint retorna totales agregados sin detalles de facturas (mucho más rápido)
-        result = direct_client.get_sales_totals(
+        result = get_alegra_direct_client().get_sales_totals(
             from_date=from_date,
             to_date=to_date,
             group_by='day',  # Agrupa por día
@@ -473,7 +464,7 @@ def get_quick_inventory_total():
         logger.info(f"Quick inventory total - to_date: {to_date}")
 
         # Obtener total del inventario usando el endpoint rápido de Alegra
-        result = direct_client.get_inventory_value_totals(
+        result = get_alegra_direct_client().get_inventory_value_totals(
             to_date=to_date,
             query="",
             force_inventory_parallel=False
@@ -592,7 +583,7 @@ def get_bills_open_totals():
         logger.info(f"Bills open totals - from: {from_date}, to: {to_date}")
 
         # Obtener total de cuentas por pagar usando el endpoint rápido de Alegra
-        result = direct_client.get_bills_open_totals(
+        result = get_alegra_direct_client().get_bills_open_totals(
             from_date=from_date,
             to_date=to_date
         )

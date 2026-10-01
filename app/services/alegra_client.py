@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 # Caché compartida entre todas las instancias del cliente (se crea una por request).
 # Solo se usa para fechas PASADAS: las facturas de un día que ya cerró no cambian,
 # mientras que las del día en curso siguen llegando y nunca deben servirse desde caché.
+# La llave incluye el usuario de Alegra (ver _invoices_cache_key): con varias
+# tiendas (cada una con su cuenta de Alegra) las facturas de una fecha NUNCA
+# deben servirse a otra tienda.
 _invoices_cache = TTLCache()
 ALEGRA_CACHE_TTL_SECONDS = int(os.getenv('ALEGRA_CACHE_TTL_SECONDS', '600'))
 
@@ -78,6 +81,9 @@ class AlegraClient:
 
         logger.info(f"Cliente Alegra inicializado para usuario: {username}")
 
+    def _invoices_cache_key(self, date) -> str:
+        return f"{self.username}|{date}"
+
     def get_invoices_by_date(self, date: str) -> List[Dict]:
         """
         Obtiene TODAS las facturas de Alegra para una fecha específica usando paginación
@@ -96,11 +102,16 @@ class AlegraClient:
             AlegraAuthError: Si las credenciales son inválidas
             AlegraConnectionError: Para otros errores de conexión
         """
+        # Algunos callers (analytics/products) pasan un objeto date en vez de
+        # string: sin normalizar, la comparación con "hoy" de abajo nunca
+        # coincidía y el día en curso terminaba cacheado como si fuera pasado.
+        date = str(date)
+
         # Las facturas de un día que ya cerró no cambian: servir desde caché si está disponible.
         # El día actual NUNCA se cachea porque sigue recibiendo ventas nuevas.
         is_past_date = date != get_colombia_today_string()
         if is_past_date:
-            cached = _invoices_cache.get(date)
+            cached = _invoices_cache.get(self._invoices_cache_key(date))
             if cached is not None:
                 logger.info(f"[CACHE HIT] Facturas de {date} servidas desde caché ({len(cached)} facturas)")
                 return cached
@@ -218,7 +229,7 @@ class AlegraClient:
             logger.info(f"✓ TOTAL: {len(all_invoices)} facturas obtenidas para {date} (esperadas: {total_invoices})")
 
             if is_past_date:
-                _invoices_cache.set(date, all_invoices, ALEGRA_CACHE_TTL_SECONDS)
+                _invoices_cache.set(self._invoices_cache_key(date), all_invoices, ALEGRA_CACHE_TTL_SECONDS)
 
             return all_invoices
 

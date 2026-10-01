@@ -2,6 +2,48 @@
 
 ---
 
+## [2026-10-01] - Multi-tienda, Fase 1: backend listo para KOAJ Primavera
+
+Se abre una segunda tienda, **KOAJ Primavera**, con la misma lógica que Carreño pero con datos **100% independientes** (cierres, cuentas, recompras, empleadas, notas/tareas y ventas/inventario de su propia cuenta de Alegra). Comparten plataforma, usuarios y Códigos KOAJ. Esta fase deja el backend multi-tienda **sin cambiar nada visible**: sin header `X-Store` todo funciona exactamente como Carreño.
+
+### 🏬 `app/stores.py` (nuevo)
+- Registro de tiendas (`carreno`, `primavera`), tienda activa por request (header `X-Store`, sin header = `carreno`), credenciales de Alegra por tienda (`ALEGRA_USER_<TIENDA>`/`ALEGRA_PASS_<TIENDA>`; Carreño cae a `ALEGRA_USER`/`ALEGRA_PASS` de siempre), base de caja por tienda (`BASE_OBJETIVO_<TIENDA>`, default 450.000), claves de `app_settings` por tienda y fábricas `get_alegra_client()` / `get_alegra_direct_client()`.
+- Permisos (`stores_for_user`): por ahora el admin opera todas las tiendas y el resto solo Carreño. Se valida en `token_required`; una vendedora que pida otra tienda recibe 403, una tienda inexistente 400.
+
+### 🗄️ Modelos
+- Nuevo `StoreScopedMixin` (`app/models/store_scoped.py`): columna `store_code` (se llena sola con la tienda del request) + `for_current_store()` / `get_for_current_store_or_404()`. Aplicado a cierres, cuentas, recompras (envíos y compras), las 5 tablas de empleadas y notas/tareas. `account_movements` no la lleva: pertenece a la tienda de su cuenta.
+- `cash_closings.closing_date` y `accounts.name`/`payment_key` pasan de únicos globales a **únicos por tienda**.
+- La columna nueva se llama `store_code` (no `store`) porque `repurchase_purchases.store` ya existe y es el proveedor donde compró el socio.
+
+### 🔧 Migración (`_migrate_multi_store` en `app/__init__.py`)
+- Idempotente, no destructiva, en UNA transacción: agrega `store_code` (todo lo existente queda como `carreno`), quita las unicidades globales por introspección (no asume nombres) y crea los índices únicos por tienda. En SQLite (solo desarrollo local) reconstruye `accounts` porque SQLite no permite `DROP CONSTRAINT`.
+- Advisory lock de Postgres para que los 2 workers de gunicorn no la corran a la vez.
+- Si falla en producción, **aborta el arranque** (Render sigue sirviendo el deploy anterior) en vez de arrancar con el código esperando una columna que no existe.
+- `seed_default_accounts()` siembra las 8 cuentas por defecto en cada tienda (Primavera arranca con todas en $0).
+
+### 🔌 Rutas
+- Alegra: `analytics`, `products`, `inventory`, `direct_api` y `cash_closing` ya no crean el cliente una vez al arrancar con credenciales fijas; lo piden por request para la tienda activa. Una tienda sin Alegra configurado responde con un mensaje claro y no afecta a la otra.
+- Cuentas: listado, movimientos, ajustes, transferencias, "contempla saldo hasta", sincronización diaria, estado y alerta de fallo del cron, todo por tienda. No se puede tocar una cuenta de otra tienda aunque se conozca su id (404).
+- Recompras: los envíos descuentan solo las cuentas de su propia tienda.
+- Aviso de cierres pendientes: el ancla de "desde cuándo vigilar" es por tienda.
+- `GET /api/stores` (nuevo): tiendas que puede operar el usuario, para el selector del frontend (Fase 3).
+- CORS: se permite el header `X-Store`.
+
+### 🐛 Bugs preexistentes corregidos de paso
+- **Un día sin facturas en Alegra tumbaba el cierre de caja** (`KeyError 'total_voided_amount_formatted'` en `filter_voided_invoices` con lista vacía). Le habría pasado a Primavera el día de apertura.
+- **La caché de facturas guardaba el día en curso** cuando el caller pasaba un `date` en vez de string (analytics/products): la comparación con "hoy" nunca coincidía. Además la llave de caché ahora incluye el usuario de Alegra, así nunca se sirven facturas de una tienda a otra.
+- El error de configuración en `/api/sum_payments` mostraba "Error inesperado: " vacío (se usaba `str(e)` en vez de `e.message`).
+- `Config.validate()` ahora acepta tanto `ALEGRA_USER` como `ALEGRA_USER_CARRENO` para la tienda por defecto.
+
+### ✅ Verificación
+- `tests/test_multi_store.py` (nuevo, 14 tests, SQLite temporal y Alegra simulado): aislamiento de cuentas, movimientos, cierres del mismo día en ambas tiendas, sincronización independiente, recompras, compras del socio, empleadas, notas, permisos (403/400), tienda sin Alegra, base por tienda y caché. Junto con los existentes: **47/47 pasan**.
+- Migración probada en **Postgres 16 real** (binarios locales): esquema creado con el código de `main` + datos, luego el código nuevo arrancado como **2 procesos en paralelo** → uno migró, el otro esperó el lock y no hizo nada; saldos e ids intactos. Falla simulada a mitad de la migración → arranque abortado y **rollback total** (ninguna tabla quedó con `store_code`).
+- Migración probada también sobre la SQLite local existente (reconstrucción de `accounts` sin pérdida de datos) y re-ejecutada para confirmar idempotencia.
+
+**Deploy:** Manual Deploy en Render. No requiere variables nuevas para que Carreño siga igual. Para activar Primavera: `ALEGRA_USER_PRIMAVERA` y `ALEGRA_PASS_PRIMAVERA` (Fase 4).
+
+---
+
 ## [2026-09-14] - Fecha "Contempla saldo hasta" editable en cuentas (ej. ADDI + DATÁFONO)
 
 El usuario explicó que ADDI (pasarela de tarjetas) paga días después de la transacción, así que el saldo mostrado en "ADDI + DATÁFONO (Tarjetas)" (Gestión → Cuentas → Resumen) solo es válido hasta cierta fecha que él conoce manualmente. Pidió poder anotar/editar esa fecha directamente en la tarjeta, para corroborar si ya le tocaba revisar que Addi hubiera consignado.

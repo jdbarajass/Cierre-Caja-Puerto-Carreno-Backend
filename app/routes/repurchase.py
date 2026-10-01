@@ -66,7 +66,9 @@ def _sync_entry_account_movements(entry, is_delete=False):
 
     accounts_by_key = {}
     if new_keys:
-        accounts_by_key = {a.payment_key: a for a in Account.query.filter(
+        # Solo las cuentas de la MISMA tienda del envío (cada tienda tiene su
+        # propio EFECTIVO, NEQUI, etc.)
+        accounts_by_key = {a.payment_key: a for a in Account.for_store(entry.store_code).filter(
             Account.payment_key.in_(list(new_keys))
         ).all()}
 
@@ -177,7 +179,7 @@ def list_entries():
         year  = request.args.get('year',  type=int)
         month = request.args.get('month', type=int)
 
-        q = RepurchaseEntry.query
+        q = RepurchaseEntry.for_current_store()
 
         # Filtro por rango de fechas en lugar de db.extract (no disponible en Flask-SQLAlchemy)
         if year and month:
@@ -290,7 +292,7 @@ def update_entry(entry_id):
     if err:
         return err
 
-    entry = RepurchaseEntry.query.get_or_404(entry_id)
+    entry = RepurchaseEntry.get_for_current_store_or_404(entry_id)
 
     try:
         data = request.get_json() or {}
@@ -343,7 +345,7 @@ def delete_entry(entry_id):
     if err:
         return err
 
-    entry = RepurchaseEntry.query.get_or_404(entry_id)
+    entry = RepurchaseEntry.get_for_current_store_or_404(entry_id)
 
     try:
         if entry.synced_to_accounts:
@@ -372,7 +374,7 @@ def monthly_summary():
         return err
 
     try:
-        entries = RepurchaseEntry.query.order_by(RepurchaseEntry.date.asc()).all()
+        entries = RepurchaseEntry.for_current_store().order_by(RepurchaseEntry.date.asc()).all()
 
         months = {}
         for e in entries:
@@ -431,7 +433,7 @@ def list_purchases():
         year  = request.args.get('year',  type=int)
         month = request.args.get('month', type=int)
 
-        q = RepurchasePurchase.query
+        q = RepurchasePurchase.for_current_store()
         if year and month:
             start, end = _month_range(year, month)
             q = q.filter(RepurchasePurchase.date >= start, RepurchasePurchase.date <= end)
@@ -512,7 +514,7 @@ def manage_purchase(purchase_id):
     if err:
         return err
 
-    purchase = RepurchasePurchase.query.get_or_404(purchase_id)
+    purchase = RepurchasePurchase.get_for_current_store_or_404(purchase_id)
 
     if request.method == 'DELETE':
         db.session.delete(purchase)

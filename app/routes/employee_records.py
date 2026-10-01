@@ -11,6 +11,7 @@ import logging
 
 from app.middlewares.auth import token_required, get_current_user
 from app.models.user import db
+from app.stores import get_current_store
 from app.models.employee_records import (
     EmployeeClothing, EmployeeLoan,
     EmployeePermission, EmployeeVacation, EmployeePayment
@@ -45,7 +46,7 @@ def list_clothing():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        q = EmployeeClothing.query
+        q = EmployeeClothing.for_current_store()
         nombre = request.args.get('nombre_empleada')
         if nombre:
             q = q.filter(EmployeeClothing.nombre_empleada.ilike(f'%{nombre}%'))
@@ -101,7 +102,7 @@ def manage_clothing(item_id):
         return '', 204
     if not _is_admin():
         return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
-    item = EmployeeClothing.query.get_or_404(item_id)
+    item = EmployeeClothing.get_for_current_store_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item)
         db.session.commit()
@@ -133,7 +134,7 @@ def list_loans():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        q = EmployeeLoan.query
+        q = EmployeeLoan.for_current_store()
         nombre = request.args.get('nombre_empleada')
         if nombre:
             q = q.filter(EmployeeLoan.nombre_empleada.ilike(f'%{nombre}%'))
@@ -175,7 +176,7 @@ def manage_loan(item_id):
         return '', 204
     if not _is_admin():
         return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
-    item = EmployeeLoan.query.get_or_404(item_id)
+    item = EmployeeLoan.get_for_current_store_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item); db.session.commit()
         return jsonify({'success': True}), 200
@@ -203,7 +204,7 @@ def list_permissions():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        q = EmployeePermission.query
+        q = EmployeePermission.for_current_store()
         nombre = request.args.get('nombre_empleada')
         if nombre:
             q = q.filter(EmployeePermission.nombre_empleada.ilike(f'%{nombre}%'))
@@ -248,7 +249,7 @@ def manage_permission(item_id):
         return '', 204
     if not _is_admin():
         return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
-    item = EmployeePermission.query.get_or_404(item_id)
+    item = EmployeePermission.get_for_current_store_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item); db.session.commit()
         return jsonify({'success': True}), 200
@@ -277,7 +278,7 @@ def list_vacations():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        q = EmployeeVacation.query
+        q = EmployeeVacation.for_current_store()
         nombre = request.args.get('nombre_empleada')
         if nombre:
             q = q.filter(EmployeeVacation.nombre_empleada.ilike(f'%{nombre}%'))
@@ -321,7 +322,7 @@ def manage_vacation(item_id):
         return '', 204
     if not _is_admin():
         return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
-    item = EmployeeVacation.query.get_or_404(item_id)
+    item = EmployeeVacation.get_for_current_store_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item); db.session.commit()
         return jsonify({'success': True}), 200
@@ -350,7 +351,7 @@ def list_payments():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        q = EmployeePayment.query
+        q = EmployeePayment.for_current_store()
         nombre = request.args.get('nombre_empleada')
         if nombre:
             q = q.filter(EmployeePayment.nombre_empleada.ilike(f'%{nombre}%'))
@@ -398,7 +399,7 @@ def manage_payment(item_id):
         return '', 204
     if not _is_admin():
         return jsonify({'success': False, 'message': 'Solo admin puede editar o eliminar'}), 403
-    item = EmployeePayment.query.get_or_404(item_id)
+    item = EmployeePayment.get_for_current_store_or_404(item_id)
     if request.method == 'DELETE':
         db.session.delete(item); db.session.commit()
         return jsonify({'success': True}), 200
@@ -433,16 +434,16 @@ def summary():
         nombres = set()
         for model in [EmployeeClothing, EmployeeLoan, EmployeePermission,
                       EmployeeVacation, EmployeePayment]:
-            for row in db.session.query(model.nombre_empleada).distinct():
+            for row in db.session.query(model.nombre_empleada).filter(model.store_code == get_current_store()).distinct():
                 nombres.add(row[0])
 
         result = []
         for nombre in sorted(nombres):
-            clothing = EmployeeClothing.query.filter_by(nombre_empleada=nombre).all()
-            loans = EmployeeLoan.query.filter_by(nombre_empleada=nombre).all()
-            perms = EmployeePermission.query.filter_by(nombre_empleada=nombre).all()
-            vacs = EmployeeVacation.query.filter_by(nombre_empleada=nombre).all()
-            payments = EmployeePayment.query.filter_by(nombre_empleada=nombre).all()
+            clothing = EmployeeClothing.for_current_store().filter_by(nombre_empleada=nombre).all()
+            loans = EmployeeLoan.for_current_store().filter_by(nombre_empleada=nombre).all()
+            perms = EmployeePermission.for_current_store().filter_by(nombre_empleada=nombre).all()
+            vacs = EmployeeVacation.for_current_store().filter_by(nombre_empleada=nombre).all()
+            payments = EmployeePayment.for_current_store().filter_by(nombre_empleada=nombre).all()
             result.append({
                 'nombre_empleada': nombre,
                 'clothing': {'count': len(clothing), 'total': sum(c.final_value for c in clothing)},

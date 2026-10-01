@@ -20,12 +20,14 @@ from app.models.app_setting import AppSetting
 from app.config import Config
 from app.utils.timezone import get_colombia_now, parse_colombia_date
 from app.routes.cash_closing import _get_or_init_pending_closings_tracking_start
+from app.stores import STORES, get_current_store, store_setting_key
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('accounts', __name__)
 
 # Clave en app_settings donde queda registrada la última corrida fallida del
 # cron de sincronización diaria (ver report_sync_failure / sync_status).
+# Es por tienda: se guarda con store_setting_key().
 SYNC_FAILURE_SETTING_KEY = 'last_sync_failure'
 
 # Cuentas por defecto (payment_key -> nombre/color), sembradas una sola vez si la
@@ -50,19 +52,23 @@ ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL = {'ahorro'}
 
 def seed_default_accounts():
     """
-    Inserta las cuentas por defecto que falten. Idempotente y no destructivo:
-    nunca borra ni modifica cuentas existentes (ni su saldo), solo agrega las
-    que falten - así se pueden sumar cuentas nuevas (ej. BBVA) en despliegues
-    futuros sin afectar las que ya están en producción con saldo real.
+    Inserta, en CADA tienda, las cuentas por defecto que le falten. Idempotente
+    y no destructivo: nunca borra ni modifica cuentas existentes (ni su saldo),
+    solo agrega las que falten - así se pueden sumar cuentas nuevas (ej. BBVA)
+    o tiendas nuevas en despliegues futuros sin afectar las que ya están en
+    producción con saldo real.
     """
-    existing_keys = {a.payment_key for a in Account.query.all()}
-    missing = [data for data in DEFAULT_ACCOUNTS if data['payment_key'] not in existing_keys]
-    if not missing:
+    created = []
+    for store_code in STORES:
+        existing_keys = {a.payment_key for a in Account.for_store(store_code).all()}
+        for data in DEFAULT_ACCOUNTS:
+            if data['payment_key'] not in existing_keys:
+                db.session.add(Account(store_code=store_code, balance=0, active=True, **data))
+                created.append(f"{store_code}:{data['name']}")
+    if not created:
         return
-    for data in missing:
-        db.session.add(Account(balance=0, active=True, **data))
     db.session.commit()
-    logger.info(f"Cuentas por defecto creadas: {[m['name'] for m in missing]}")
+    logger.info(f"Cuentas por defecto creadas: {created}")
 
 
 def sync_token_or_admin_required(f):
@@ -103,7 +109,7 @@ def list_accounts():
     if request.method == 'OPTIONS':
         return '', 204
 
-    accounts = Account.query.filter_by(active=True).order_by(Account.sort_order.asc()).all()
+    accounts = Account.for_current_store().filter_by(active=True).order_by(Account.sort_order.asc()).all()
     # No incluye cuentas como AHORRO - ver ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
     total_balance = sum(
         a.balance for a in accounts if a.payment_key not in ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
@@ -128,7 +134,10 @@ def list_movements():
         return '', 204
 
     try:
-        q = AccountMovement.query
+        # Los movimientos no tienen tienda propia: pertenecen a la tienda de su cuenta.
+        q = (AccountMovement.query
+             .join(Account, AccountMovement.account_id == Account.id)
+             .filter(Account.store_code == get_current_store()))
 
         account_id = request.args.get('account_id', type=int)
         if account_id:
@@ -194,7 +203,7 @@ def manual_adjustment():
         # Bloquea la fila para que un ajuste y una transferencia concurrentes
         # sobre la misma cuenta no lean el mismo balance antes de que ninguno
         # de los dos haga commit (evita corromper el saldo).
-        account = Account.query.with_for_update().get(account_id)
+        account = Account.for_current_store().filter(Account.id == account_id).with_for_update().first()
         if not account:
             return jsonify({'success': False, 'message': 'Cuenta no encontrada'}), 404
 
@@ -266,7 +275,7 @@ def transfer():
         # simultáneas desde la misma cuenta no puedan dejarla en negativo.
         first_id, second_id = sorted([int(from_account_id), int(to_account_id)])
         locked_by_id = {
-            a.id: a for a in Account.query.filter(Account.id.in_([first_id, second_id]))
+            a.id: a for a in Account.for_current_store().filter(Account.id.in_([first_id, second_id]))
             .with_for_update().order_by(Account.id.asc()).all()
         }
         from_account = locked_by_id.get(int(from_account_id))
@@ -338,7 +347,7 @@ def update_contemplated_until(account_id):
         data = request.get_json() or {}
         date_str = (data.get('contemplated_until') or '').strip() or None
 
-        account = Account.query.get(account_id)
+        account = Account.for_current_store().filter(Account.id == account_id).first()
         if not account:
             return jsonify({'success': False, 'message': 'Cuenta no encontrada'}), 404
 
@@ -372,7 +381,7 @@ def _clear_sync_failure_alert():
     bien. Nunca debe tumbar la respuesta de éxito si falla.
     """
     try:
-        AppSetting.query.filter_by(key=SYNC_FAILURE_SETTING_KEY).delete()
+        AppSetting.query.filter_by(key=store_setting_key(SYNC_FAILURE_SETTING_KEY)).delete()
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -419,7 +428,8 @@ def _claim_and_credit_closing(closing, user_id):
         ('addi_datafono', closing.addi_datafono),
     ]
 
-    accounts_by_key = {a.payment_key: a for a in Account.query.filter(
+    # Solo las cuentas de la tienda del cierre
+    accounts_by_key = {a.payment_key: a for a in Account.for_store(closing.store_code).filter(
         Account.payment_key.in_([k for k, _ in credit_map])
     ).all()}
 
@@ -500,7 +510,7 @@ def sync_daily():
 
         if date_str:
             closing_date = parse_colombia_date(date_str).date()
-            closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+            closing = CashClosing.for_current_store().filter_by(closing_date=closing_date).first()
             if not closing:
                 return jsonify({
                     'success': False,
@@ -509,7 +519,7 @@ def sync_daily():
             targets = [closing]
         else:
             today = get_colombia_now().date()
-            targets = CashClosing.query.filter(
+            targets = CashClosing.for_current_store().filter(
                 CashClosing.synced_to_accounts == False,  # noqa: E712
                 CashClosing.closing_date <= today
             ).order_by(CashClosing.closing_date.asc()).all()
@@ -584,18 +594,18 @@ def sync_status():
     # anoche por el cron), lo que se quiere mostrar aquí es "cuál es el día
     # más reciente ya sincronizado", no "cuál fue la última vez que se tocó
     # algo" - de lo contrario el día más viejo tapa al más nuevo en pantalla.
-    last_synced = CashClosing.query.filter(
+    last_synced = CashClosing.for_current_store().filter(
         CashClosing.synced_to_accounts == True,  # noqa: E712
         CashClosing.closing_date >= tracking_start
     ).order_by(CashClosing.closing_date.desc(), CashClosing.synced_at.desc()).first()
 
-    pending_count = CashClosing.query.filter(
+    pending_count = CashClosing.for_current_store().filter(
         CashClosing.synced_to_accounts == False,  # noqa: E712
         CashClosing.closing_date <= today
     ).count()
 
     last_failure = None
-    failure_setting = AppSetting.query.get(SYNC_FAILURE_SETTING_KEY)
+    failure_setting = AppSetting.query.get(store_setting_key(SYNC_FAILURE_SETTING_KEY))
     if failure_setting and failure_setting.value:
         try:
             last_failure = json.loads(failure_setting.value)
@@ -635,11 +645,11 @@ def report_sync_failure():
         message = (data.get('message') or 'La sincronización automática de cuentas falló.').strip()[:500]
 
         payload = json.dumps({'at': _iso_utc(datetime.utcnow()), 'message': message})
-        setting = AppSetting(key=SYNC_FAILURE_SETTING_KEY, value=payload, updated_at=datetime.utcnow())
+        setting = AppSetting(key=store_setting_key(SYNC_FAILURE_SETTING_KEY), value=payload, updated_at=datetime.utcnow())
         db.session.merge(setting)
         db.session.commit()
 
-        logger.error(f"Fallo de sincronización reportado por el workflow externo: {message}")
+        logger.error(f"Fallo de sincronización reportado por el workflow externo (tienda={get_current_store()}): {message}")
         return jsonify({'success': True}), 200
 
     except Exception as e:

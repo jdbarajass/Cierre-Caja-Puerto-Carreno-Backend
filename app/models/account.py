@@ -4,6 +4,7 @@ transferencias entre cuentas y créditos automáticos desde el cierre de caja).
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 
 # Tipos válidos de movimiento (documentado aquí, no se fuerza con CHECK constraint
 # para mantener el mismo estilo simple del resto del proyecto)
@@ -28,12 +29,19 @@ def _iso_utc(dt):
     return dt.isoformat() + 'Z'
 
 
-class Account(db.Model):
+class Account(StoreScopedMixin, db.Model):
     __tablename__ = 'accounts'
+    # Nombre y payment_key únicos POR TIENDA (cada tienda tiene su propio
+    # EFECTIVO, NEQUI, etc.) - antes eran únicos globalmente, ver
+    # _migrate_multi_store en app/__init__.py.
+    __table_args__ = (
+        db.Index('uq_accounts_store_name', 'store_code', 'name', unique=True),
+        db.Index('uq_accounts_store_payment_key', 'store_code', 'payment_key', unique=True),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    payment_key = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    payment_key = db.Column(db.String(50), nullable=False)
     color = db.Column(db.String(20), default='blue')
     balance = db.Column(db.Float, default=0, nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
@@ -49,6 +57,7 @@ class Account(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'store_code': self.store_code,
             'name': self.name,
             'payment_key': self.payment_key,
             'color': self.color,

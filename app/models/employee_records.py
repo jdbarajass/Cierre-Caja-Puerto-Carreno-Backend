@@ -5,9 +5,10 @@ a qué persona corresponde cada registro cuando varias comparten la misma cuenta
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 
 
-class EmployeeClothing(db.Model):
+class EmployeeClothing(StoreScopedMixin, db.Model):
     __tablename__ = 'employee_clothing'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -34,7 +35,7 @@ class EmployeeClothing(db.Model):
         }
 
 
-class EmployeeLoan(db.Model):
+class EmployeeLoan(StoreScopedMixin, db.Model):
     __tablename__ = 'employee_loans'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -55,7 +56,7 @@ class EmployeeLoan(db.Model):
         }
 
 
-class EmployeePermission(db.Model):
+class EmployeePermission(StoreScopedMixin, db.Model):
     __tablename__ = 'employee_permissions'
 
     TYPES = ['permiso', 'incapacidad', 'llegada_tarde', 'salida_temprana']
@@ -80,7 +81,7 @@ class EmployeePermission(db.Model):
         }
 
 
-class EmployeeVacation(db.Model):
+class EmployeeVacation(StoreScopedMixin, db.Model):
     __tablename__ = 'employee_vacations'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -103,7 +104,7 @@ class EmployeeVacation(db.Model):
         }
 
 
-class EmployeePayment(db.Model):
+class EmployeePayment(StoreScopedMixin, db.Model):
     __tablename__ = 'employee_payments'
 
     TYPES = ['quincena', 'prima', 'comision', 'otro']

@@ -69,6 +69,7 @@ def create_app(config_class=Config):
     with app.app_context():
         try:
             _migrate_employee_tables(db, app)
+            _migrate_multi_store(db, app)
             db.create_all()
             app.logger.info("Database tables created/verified successfully")
 
@@ -78,6 +79,12 @@ def create_app(config_class=Config):
             _fix_historical_closing_dates_timezone_bug(db, app)
         except Exception as e:
             app.logger.error(f"Error creating database tables: {e}")
+            # Sin la migración multi-tienda TODAS las consultas a cierres/
+            # cuentas/etc. fallarían (el código ya espera store_code). En
+            # producción es mejor no arrancar: Render sigue sirviendo el
+            # deploy anterior en vez de uno roto.
+            if isinstance(e, MultiStoreMigrationError) and not app.config['DEBUG'] and not app.config.get('TESTING'):
+                raise
 
     # Configurar CORS - SOLUCIÓN MEJORADA Y ROBUSTA
     # Leer los orígenes permitidos de la configuración
@@ -95,7 +102,8 @@ def create_app(config_class=Config):
                 "X-Requested-With",
                 "X-HTTP-Method-Override",
                 "Accept-Language",
-                "Cache-Control"
+                "Cache-Control",
+                "X-Store"
             ],
             "expose_headers": [
                 "Content-Type",
@@ -114,6 +122,17 @@ def create_app(config_class=Config):
     def assign_request_id():
         g.request_id = request.headers.get('X-Request-Id') or uuid.uuid4().hex
 
+    # Multi-tienda: fija la tienda activa del request (header X-Store; sin
+    # header = Carreño). El permiso del usuario sobre esa tienda se valida
+    # después, en token_required. Ver app/stores.py.
+    @app.before_request
+    def assign_store():
+        from app.stores import resolve_request_store, InvalidStoreError
+        try:
+            g.store_code = resolve_request_store()
+        except InvalidStoreError as e:
+            return {'success': False, 'message': str(e)}, 400
+
     # Agregar headers CORS manualmente en cada respuesta como backup
     @app.after_request
     def after_request(response):
@@ -126,7 +145,7 @@ def create_app(config_class=Config):
             response.headers['Access-Control-Allow-Origin'] = origin
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With, X-HTTP-Method-Override, Accept-Language, Cache-Control'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With, X-HTTP-Method-Override, Accept-Language, Cache-Control, X-Store'
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count, X-Page, X-Per-Page'
             response.headers['Access-Control-Max-Age'] = '3600'
 
@@ -207,6 +226,7 @@ def create_app(config_class=Config):
     from app.routes.repurchase import bp as repurchase_bp
     from app.routes.notes_tasks import bp as notes_tasks_bp
     from app.routes.accounts import bp as accounts_bp
+    from app.routes.stores import bp as stores_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -221,6 +241,7 @@ def create_app(config_class=Config):
     app.register_blueprint(repurchase_bp)  # Cuentas de recompras
     app.register_blueprint(notes_tasks_bp)  # Notas y pendientes
     app.register_blueprint(accounts_bp)  # Cuentas (saldo por medio de pago)
+    app.register_blueprint(stores_bp)  # Multi-tienda: tiendas del usuario
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
@@ -358,6 +379,147 @@ def _fix_historical_closing_dates_timezone_bug(db, app):
             f"{len(closings)} cierre(s) histórico(s) - bug de zona horaria "
             f"de parse_colombia_date (activo desde 2025-11-16, corregido ahora)"
         )
+
+
+class MultiStoreMigrationError(RuntimeError):
+    """Falló la migración de esquema multi-tienda (ver _migrate_multi_store)."""
+
+
+# Tablas cuyos datos pertenecen a una tienda (modelos con StoreScopedMixin).
+# account_movements NO está: un movimiento pertenece a la tienda de su cuenta.
+STORE_SCOPED_TABLES = (
+    'cash_closings', 'accounts',
+    'repurchase_entries', 'repurchase_purchases',
+    'employee_clothing', 'employee_loans', 'employee_permissions',
+    'employee_vacations', 'employee_payments',
+    'restock_items', 'operational_tasks',
+)
+
+# Columnas que antes eran únicas por sí solas y ahora son únicas POR TIENDA
+# (los nuevos índices únicos compuestos están declarados en cada modelo).
+LEGACY_SINGLE_COLUMN_UNIQUES = {
+    'cash_closings': ('closing_date',),
+    'accounts': ('name', 'payment_key'),
+}
+
+# Llave arbitraria (fija) del advisory lock de Postgres que serializa la
+# migración entre los workers de gunicorn que arrancan al mismo tiempo.
+MULTI_STORE_MIGRATION_LOCK_KEY = 7420261001
+
+
+def _migrate_multi_store(db, app):
+    """
+    Migración multi-tienda (2026-10-01), idempotente y NO destructiva:
+
+    1. Agrega `store_code` (NOT NULL, DEFAULT 'carreno') a cada tabla de
+       STORE_SCOPED_TABLES que no la tenga: todos los datos existentes quedan
+       asignados a Carreño, que es la única tienda que existía.
+    2. Quita la unicidad GLOBAL de cash_closings.closing_date y de
+       accounts.name/payment_key (cada tienda tiene su cierre del día y sus
+       propias cuentas EFECTIVO, NEQUI, ...).
+    3. Crea los índices declarados en los modelos que falten (incluidos los
+       únicos compuestos por tienda que reemplazan a los del paso 2).
+
+    Todo corre en UNA transacción: o queda todo aplicado o nada. En Postgres,
+    un advisory lock evita que los 2 workers de gunicorn la ejecuten a la vez;
+    el que espera vuelve a inspeccionar el esquema y no encuentra nada que hacer.
+    """
+    from sqlalchemy import inspect, text
+    from app.stores import DEFAULT_STORE
+
+    try:
+        with db.engine.begin() as conn:
+            if conn.dialect.name == 'postgresql':
+                conn.execute(text('SELECT pg_advisory_xact_lock(:key)'),
+                             {'key': MULTI_STORE_MIGRATION_LOCK_KEY})
+
+            existing_tables = set(inspect(conn).get_table_names())
+            changes = []
+
+            for table_name in STORE_SCOPED_TABLES:
+                if table_name not in existing_tables:
+                    continue  # tabla nueva: db.create_all() la crea ya con el esquema nuevo
+                table = db.metadata.tables[table_name]
+
+                columns = {c['name'] for c in inspect(conn).get_columns(table_name)}
+                if 'store_code' not in columns:
+                    conn.execute(text(
+                        f"ALTER TABLE {table_name} ADD COLUMN store_code "
+                        f"VARCHAR(20) NOT NULL DEFAULT '{DEFAULT_STORE}'"
+                    ))
+                    changes.append(f"{table_name}.store_code")
+
+                for column in LEGACY_SINGLE_COLUMN_UNIQUES.get(table_name, ()):
+                    if _drop_single_column_unique(conn, table, column):
+                        changes.append(f"{table_name}.{column} ya no es única global")
+
+                existing_indexes = {i['name'] for i in inspect(conn).get_indexes(table_name)}
+                for index in table.indexes:
+                    if index.name not in existing_indexes:
+                        index.create(bind=conn)
+                        changes.append(f"índice {index.name}")
+
+            if changes:
+                app.logger.warning(f"Migración multi-tienda aplicada: {changes}")
+    except Exception as e:
+        raise MultiStoreMigrationError(f"Falló la migración multi-tienda: {e}") from e
+
+
+def _drop_single_column_unique(conn, table, column):
+    """
+    Quita la restricción/índice UNIQUE que exista solo sobre `column`.
+    Devuelve True si quitó algo.
+
+    Postgres: puede ser una constraint (`unique=True`) o un índice único
+    (`unique=True, index=True`) - se busca por introspección en vez de asumir
+    nombres. SQLite no permite DROP CONSTRAINT: si la unicidad está declarada
+    dentro del CREATE TABLE, se reconstruye la tabla (procedimiento oficial de
+    SQLite; solo aplica a bases locales de desarrollo).
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(conn)
+    is_sqlite = conn.dialect.name == 'sqlite'
+    dropped = False
+
+    for constraint in inspector.get_unique_constraints(table.name):
+        if constraint['column_names'] == [column]:
+            if is_sqlite:
+                _sqlite_rebuild_table(conn, table)
+                return True
+            conn.execute(text(f'ALTER TABLE {table.name} DROP CONSTRAINT "{constraint["name"]}"'))
+            dropped = True
+
+    for index in inspector.get_indexes(table.name):
+        if (index.get('unique') and index['column_names'] == [column]
+                and not index.get('duplicates_constraint')):
+            conn.execute(text(f'DROP INDEX "{index["name"]}"'))
+            dropped = True
+
+    return dropped
+
+
+def _sqlite_rebuild_table(conn, table):
+    """
+    Recrea `table` en SQLite con el esquema actual del modelo conservando
+    todas sus filas (crear nueva -> copiar -> borrar vieja -> renombrar). Las
+    FKs de otras tablas apuntan por NOMBRE, así que siguen siendo válidas.
+    Los índices del modelo los crea luego _migrate_multi_store.
+    """
+    from sqlalchemy import inspect, text
+    from sqlalchemy.schema import CreateTable
+
+    tmp_name = f"{table.name}__multistore_tmp"
+    ddl = str(CreateTable(table).compile(dialect=conn.dialect))
+    ddl = ddl.replace(f"CREATE TABLE {table.name} (", f"CREATE TABLE {tmp_name} (", 1)
+
+    old_columns = {c['name'] for c in inspect(conn).get_columns(table.name)}
+    columns = ', '.join(c.name for c in table.columns if c.name in old_columns)
+
+    conn.execute(text(ddl))
+    conn.execute(text(f"INSERT INTO {tmp_name} ({columns}) SELECT {columns} FROM {table.name}"))
+    conn.execute(text(f"DROP TABLE {table.name}"))
+    conn.execute(text(f"ALTER TABLE {tmp_name} RENAME TO {table.name}"))
 
 
 def _migrate_employee_tables(db, app):

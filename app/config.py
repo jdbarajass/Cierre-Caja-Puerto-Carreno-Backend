@@ -102,12 +102,20 @@ class Config:
         por eso NO debe incluir checks de secretos (ver validate_security()),
         que solo deben frenar el ARRANQUE del servidor, no cada petición.
         """
+        # Import diferido: app.stores importa Config.
+        from app.stores import DEFAULT_STORE, get_alegra_credentials
+
         errors = []
 
-        if not cls.ALEGRA_USER:
+        # Solo se exige la cuenta de Alegra de la tienda por defecto (Carreño:
+        # ALEGRA_USER/ALEGRA_PASS o ALEGRA_USER_CARRENO/ALEGRA_PASS_CARRENO).
+        # Una tienda nueva sin Alegra configurado NO debe bloquear el arranque
+        # ni los cierres de las demás - ver app/stores.py.
+        alegra_user, alegra_pass = get_alegra_credentials(DEFAULT_STORE)
+        if not alegra_user:
             errors.append("ALEGRA_USER no está configurado")
 
-        if not cls.ALEGRA_PASS:
+        if not alegra_pass:
             errors.append("ALEGRA_PASS no está configurado")
 
         if cls.BASE_OBJETIVO <= 0:

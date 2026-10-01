@@ -40,7 +40,7 @@ def list_restock():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        items = RestockItem.query.order_by(RestockItem.completed.asc(), RestockItem.created_at.desc()).all()
+        items = RestockItem.for_current_store().order_by(RestockItem.completed.asc(), RestockItem.created_at.desc()).all()
         return jsonify({
             'success': True,
             'items': [i.to_dict() for i in items],
@@ -84,7 +84,7 @@ def manage_restock(item_id):
     if request.method == 'OPTIONS':
         return '', 204
 
-    item = RestockItem.query.get_or_404(item_id)
+    item = RestockItem.get_for_current_store_or_404(item_id)
 
     if request.method == 'DELETE':
         if not _is_admin():
@@ -125,7 +125,7 @@ def list_operational():
     if request.method == 'OPTIONS':
         return '', 204
     try:
-        tasks = OperationalTask.query.order_by(OperationalTask.completed.asc(), OperationalTask.created_at.desc()).all()
+        tasks = OperationalTask.for_current_store().order_by(OperationalTask.completed.asc(), OperationalTask.created_at.desc()).all()
         return jsonify({
             'success': True,
             'items': [t.to_dict() for t in tasks],
@@ -171,7 +171,7 @@ def manage_operational(task_id):
     if request.method == 'OPTIONS':
         return '', 204
 
-    task = OperationalTask.query.get_or_404(task_id)
+    task = OperationalTask.get_for_current_store_or_404(task_id)
 
     if request.method == 'DELETE':
         if not _is_admin():

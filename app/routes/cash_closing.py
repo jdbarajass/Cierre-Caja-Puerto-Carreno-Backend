@@ -16,7 +16,13 @@ from app.services.cash_calculator import (
     validar_cierre,
     preparar_respuesta_completa
 )
-from app.services.alegra_client import AlegraClient
+from app.stores import (
+    get_alegra_client,
+    get_alegra_credentials,
+    get_base_objetivo,
+    get_current_store,
+    store_setting_key,
+)
 from app.exceptions import (
     ValidationError,
     AlegraConnectionError,
@@ -217,8 +223,9 @@ def sum_payments():
     # IMPORTANTE: Se usa excedente_efectivo porque la venta en efectivo de Alegra
     # debe compararse solo con el excedente en efectivo, no con otros excedentes
     # Usar base_objetivo personalizado si se proporciona, sino usar el valor por defecto de Config
-    base_objetivo_a_usar = cash_request.base_objetivo if cash_request.base_objetivo else Config.BASE_OBJETIVO
-    current_app.logger.info(f"Base objetivo a usar: {base_objetivo_a_usar}")
+    store_code = get_current_store()
+    base_objetivo_a_usar = cash_request.base_objetivo if cash_request.base_objetivo else get_base_objetivo(store_code)
+    current_app.logger.info(f"Tienda: {store_code} | Base objetivo a usar: {base_objetivo_a_usar}")
 
     calculator = CashCalculator(base_objetivo=base_objetivo_a_usar)
     cash_result = calculator.procesar_cierre_completo(
@@ -237,18 +244,14 @@ def sum_payments():
     cash_result['adjustments']['excedente_daviplata'] = excedentes_procesados['excedente_daviplata']
     cash_result['adjustments']['excedente_qr'] = excedentes_procesados['excedente_qr']
 
-    # Obtener datos de Alegra
+    # Obtener datos de Alegra (cuenta de Alegra de la tienda activa)
     alegra_result = None
     alegra_error = None
+    alegra_username = get_alegra_credentials(store_code)[0]
 
     try:
         current_app.logger.info("Consultando datos de Alegra...")
-        client = AlegraClient(
-            Config.ALEGRA_USER,
-            Config.ALEGRA_PASS,
-            Config.ALEGRA_API_BASE_URL,
-            Config.ALEGRA_TIMEOUT
-        )
+        client = get_alegra_client(store_code)
         alegra_result = client.get_sales_summary(str(cash_request.date))
         current_app.logger.info("✓ Datos de Alegra obtenidos exitosamente")
 
@@ -269,7 +272,7 @@ def sum_payments():
             "server_timestamp": get_colombia_timestamp(),
             "timezone": "America/Bogota",
             "date_requested": str(cash_request.date),
-            "username_used": Config.ALEGRA_USER,
+            "username_used": alegra_username,
             "cash_count": cash_result,
             "alegra": alegra_error
         }
@@ -279,8 +282,14 @@ def sum_payments():
 
     except Exception as e:
         current_app.logger.error(f"Error inesperado con Alegra: {str(e)}", exc_info=True)
+        # ConfigurationError (ej. tienda sin cuenta de Alegra configurada
+        # todavía) trae su texto en .message - str(e) sale vacío.
+        if isinstance(e, ConfigurationError):
+            error_message = e.message
+        else:
+            error_message = f"Error inesperado: {str(e)}"
         alegra_error = {
-            "error": f"Error inesperado: {str(e)}"
+            "error": error_message
         }
 
         # Respuesta parcial para errores inesperados
@@ -293,7 +302,7 @@ def sum_payments():
             "server_timestamp": get_colombia_timestamp(),
             "timezone": "America/Bogota",
             "date_requested": str(cash_request.date),
-            "username_used": Config.ALEGRA_USER,
+            "username_used": alegra_username,
             "cash_count": cash_result,
             "alegra": alegra_error
         }
@@ -321,7 +330,7 @@ def sum_payments():
         payload_original=data,
         datetime_info=datetime_info,
         tz_used=tz_used,
-        username=Config.ALEGRA_USER,
+        username=alegra_username,
         desfases_procesados=desfases_procesados
     )
 
@@ -393,13 +402,13 @@ def sum_payments():
         current_user = get_current_user()
         created_by = current_user.get('userId') if current_user else None
 
-        closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+        closing = CashClosing.query.filter_by(store_code=store_code, closing_date=closing_date).first()
         if closing:
             _apply_closing_fields(closing)
             closing.created_by = created_by
             db.session.commit()
         else:
-            closing = CashClosing(closing_date=closing_date, created_by=created_by)
+            closing = CashClosing(store_code=store_code, closing_date=closing_date, created_by=created_by)
             _apply_closing_fields(closing)
             db.session.add(closing)
             try:
@@ -411,7 +420,7 @@ def sum_payments():
                 # perder silenciosamente este segundo envío, se aplica como UPDATE
                 # sobre la fila que sí quedó insertada.
                 db.session.rollback()
-                closing = CashClosing.query.filter_by(closing_date=closing_date).first()
+                closing = CashClosing.query.filter_by(store_code=store_code, closing_date=closing_date).first()
                 if closing:
                     _apply_closing_fields(closing)
                     closing.created_by = created_by
@@ -419,7 +428,7 @@ def sum_payments():
                 else:
                     raise
 
-        current_app.logger.info(f"Cierre de caja persistido para {closing_date} (id={closing.id})")
+        current_app.logger.info(f"Cierre de caja persistido para {closing_date} tienda={store_code} (id={closing.id})")
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"No se pudo persistir el cierre de caja: {e}", exc_info=True)
@@ -460,8 +469,12 @@ def _get_or_init_pending_closings_tracking_start(today):
     registrar antes de que existiera este aviso) vería aparecer de golpe
     todo ese historial como "pendiente" el día que se activa la función -
     la idea es que el aviso solo vigile hacia adelante desde que se activó.
+
+    Es por tienda (ver store_setting_key): una tienda nueva empieza a vigilar
+    desde su primer uso, no desde la fecha en que se activó en Carreño.
     """
-    setting = AppSetting.query.get(PENDING_CLOSINGS_TRACKING_SETTING_KEY)
+    setting_key = store_setting_key(PENDING_CLOSINGS_TRACKING_SETTING_KEY)
+    setting = AppSetting.query.get(setting_key)
     if setting and setting.value:
         try:
             return datetime.strptime(setting.value, '%Y-%m-%d').date()
@@ -469,7 +482,7 @@ def _get_or_init_pending_closings_tracking_start(today):
             pass  # Valor corrupto/inesperado - se reinicia abajo como si no existiera
 
     setting = AppSetting(
-        key=PENDING_CLOSINGS_TRACKING_SETTING_KEY,
+        key=setting_key,
         value=today.isoformat(),
         updated_at=datetime.utcnow()
     )
@@ -508,7 +521,11 @@ def pending_closing_dates():
 
     existing_dates = {
         row[0] for row in db.session.query(CashClosing.closing_date)
-        .filter(CashClosing.closing_date >= start, CashClosing.closing_date < today)
+        .filter(
+            CashClosing.store_code == get_current_store(),
+            CashClosing.closing_date >= start,
+            CashClosing.closing_date < today
+        )
         .all()
     }
 
@@ -594,12 +611,7 @@ def get_monthly_sales():
         current_app.logger.info(f"Consultando ventas mensuales desde {start_date} hasta {end_date}")
 
         # Crear cliente de Alegra
-        alegra_client = AlegraClient(
-            username=Config.ALEGRA_USER,
-            password=Config.ALEGRA_PASS,
-            base_url=Config.ALEGRA_API_BASE_URL,
-            timeout=Config.ALEGRA_TIMEOUT
-        )
+        alegra_client = get_alegra_client()
 
         # Obtener resumen de ventas mensuales
         sales_summary = alegra_client.get_monthly_sales_summary(start_date, end_date)
@@ -695,12 +707,7 @@ def get_sales_comparison_yoy():
         current_app.logger.info(f"Consultando comparación año sobre año para: {date_str}")
 
         # Crear cliente de Alegra
-        alegra_client = AlegraClient(
-            username=Config.ALEGRA_USER,
-            password=Config.ALEGRA_PASS,
-            base_url=Config.ALEGRA_API_BASE_URL,
-            timeout=Config.ALEGRA_TIMEOUT
-        )
+        alegra_client = get_alegra_client()
 
         # Obtener comparación diaria
         daily_comparison = alegra_client.get_sales_comparison_year_over_year(date_str)
@@ -911,20 +918,15 @@ def preconsulta_alegra():
         current_app.logger.info(f"PRECONSULTA ALEGRA para fecha: {date_str}")
         current_app.logger.info("=" * 80)
 
-        # Verificar configuración
-        if not Config.ALEGRA_USER or not Config.ALEGRA_PASS:
+        # Verificar configuración (cuenta de Alegra de la tienda activa)
+        if not all(get_alegra_credentials(get_current_store())):
             return jsonify({
                 'success': False,
                 'error': 'Configuración de Alegra incompleta'
             }), 500
 
         # Crear cliente de Alegra y obtener facturas
-        client = AlegraClient(
-            Config.ALEGRA_USER,
-            Config.ALEGRA_PASS,
-            Config.ALEGRA_API_BASE_URL,
-            Config.ALEGRA_TIMEOUT
-        )
+        client = get_alegra_client()
 
         # Obtener todas las facturas del día
         invoices = client.get_invoices_by_date(date_str)

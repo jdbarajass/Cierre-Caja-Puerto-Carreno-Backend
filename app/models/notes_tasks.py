@@ -4,9 +4,10 @@ Checklist simple: cualquier usuario crea y marca completado; solo admin edita/el
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 
 
-class RestockItem(db.Model):
+class RestockItem(StoreScopedMixin, db.Model):
     """Items por pedir / resurtir en la tienda"""
     __tablename__ = 'restock_items'
 
@@ -32,7 +33,7 @@ class RestockItem(db.Model):
         }
 
 
-class OperationalTask(db.Model):
+class OperationalTask(StoreScopedMixin, db.Model):
     """Tareas operativas del local"""
     __tablename__ = 'operational_tasks'
 

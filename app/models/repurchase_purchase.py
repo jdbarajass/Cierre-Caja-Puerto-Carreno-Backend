@@ -4,9 +4,10 @@ Representa cuándo y cuánto gastó Jhonatan en una tienda específica.
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 
 
-class RepurchasePurchase(db.Model):
+class RepurchasePurchase(StoreScopedMixin, db.Model):
     __tablename__ = 'repurchase_purchases'
 
     id = db.Column(db.Integer, primary_key=True)

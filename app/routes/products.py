@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import logging
 
 from app.middlewares.auth import token_required, role_required
-from app.services.alegra_client import AlegraClient
+from app.stores import get_alegra_client
 from app.services.product_analytics import ProductAnalytics
 from app.services.pdf_generator import ProductReportPDFGenerator
 from app.config import Config
@@ -15,14 +15,6 @@ from app.exceptions import AlegraConnectionError, AlegraAuthError
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('products', __name__)
-
-# Inicializar cliente de Alegra
-alegra_client = AlegraClient(
-    Config.ALEGRA_USER,
-    Config.ALEGRA_PASS,
-    Config.ALEGRA_API_BASE_URL,
-    Config.ALEGRA_TIMEOUT
-)
 
 
 @bp.route('/api/products/analysis', methods=['GET'])
@@ -59,7 +51,7 @@ def get_products_analysis():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             # Rango de fechas
             # Validar formato de fechas
@@ -67,12 +59,12 @@ def get_products_analysis():
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
             # Pasar strings directamente, no objetos date
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             # Día actual por defecto
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -159,7 +151,7 @@ def download_products_analysis_pdf():
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
             filename_date = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             # Validar formato de fechas
             datetime.strptime(start_date_param, '%Y-%m-%d')
@@ -167,12 +159,12 @@ def download_products_analysis_pdf():
             date_range = f"{start_date_param} al {end_date_param}"
             filename_date = f"{start_date_param}_al_{end_date_param}"
             # Pasar strings directamente, no objetos date
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
             filename_date = date_range
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -260,18 +252,18 @@ def get_top_sellers():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             # Validar formato de fechas
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
             # Pasar strings directamente, no objetos date
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -339,18 +331,18 @@ def get_categories_analysis():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             # Validar formato de fechas
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
             # Pasar strings directamente, no objetos date
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -413,18 +405,18 @@ def get_products_summary():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             # Validar formato de fechas
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
             # Pasar strings directamente, no objetos date
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -491,16 +483,16 @@ def get_size_analysis():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -567,16 +559,16 @@ def get_category_size_analysis():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({
@@ -642,16 +634,16 @@ def get_department_size_analysis():
             datetime.strptime(date_param, '%Y-%m-%d')
             target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
             date_range = date_param
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
         elif start_date_param and end_date_param:
             datetime.strptime(start_date_param, '%Y-%m-%d')
             datetime.strptime(end_date_param, '%Y-%m-%d')
             date_range = f"{start_date_param} al {end_date_param}"
-            invoices = alegra_client.get_all_invoices_in_range(start_date_param, end_date_param)
+            invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
         else:
             target_date = datetime.now().date()
             date_range = target_date.strftime('%Y-%m-%d')
-            invoices = alegra_client.get_invoices_by_date(target_date)
+            invoices = get_alegra_client().get_invoices_by_date(target_date)
 
         if not invoices:
             return jsonify({

@@ -8,14 +8,21 @@ verdad al acreditar los saldos por medio de pago.
 """
 from datetime import datetime
 from app.models.user import db
+from app.models.store_scoped import StoreScopedMixin
 from app.models.account import _iso_utc
 
 
-class CashClosing(db.Model):
+class CashClosing(StoreScopedMixin, db.Model):
     __tablename__ = 'cash_closings'
 
+    # Un cierre por día POR TIENDA (antes closing_date era única globalmente -
+    # ver _migrate_multi_store en app/__init__.py).
+    __table_args__ = (
+        db.Index('uq_cash_closings_store_date', 'store_code', 'closing_date', unique=True),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
-    closing_date = db.Column(db.Date, unique=True, nullable=False, index=True)
+    closing_date = db.Column(db.Date, nullable=False, index=True)
 
     # Montos por medio de pago tal como se registraron en el cierre
     efectivo = db.Column(db.Float, default=0, nullable=False)
@@ -44,6 +51,7 @@ class CashClosing(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'store_code': self.store_code,
             'closing_date': self.closing_date.isoformat() if self.closing_date else None,
             'efectivo': self.efectivo,
             'nequi': self.nequi,

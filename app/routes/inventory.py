@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 import logging
 
 from app.middlewares.auth import token_required, role_required
-from app.services.alegra_client import AlegraClient
+from app.stores import get_alegra_client
 from app.services.inventory_analytics import InventoryAnalytics
 from app.services.inventory_file_processor import InventoryFileProcessor
 from app.config import Config
@@ -14,14 +14,6 @@ from app.exceptions import AlegraConnectionError, AlegraAuthError
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('inventory', __name__)
-
-# Inicializar cliente de Alegra
-alegra_client = AlegraClient(
-    Config.ALEGRA_USER,
-    Config.ALEGRA_PASS,
-    Config.ALEGRA_API_BASE_URL,
-    Config.ALEGRA_TIMEOUT
-)
 
 
 @bp.route('/api/inventory/analysis', methods=['GET'])
@@ -47,7 +39,7 @@ def get_inventory_analysis():
     """
     try:
         # Obtener items activos de Alegra
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -113,7 +105,7 @@ def get_inventory_summary():
         GET /api/inventory/summary
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -169,7 +161,7 @@ def get_inventory_by_department():
         GET /api/inventory/by-department
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -218,7 +210,7 @@ def get_inventory_by_category():
         GET /api/inventory/by-category
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -266,7 +258,7 @@ def get_inventory_by_size():
         GET /api/inventory/by-size
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -315,7 +307,7 @@ def get_out_of_stock():
         GET /api/inventory/out-of-stock
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -371,7 +363,7 @@ def get_low_stock():
     try:
         threshold = int(request.args.get('threshold', 5))
 
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -436,7 +428,7 @@ def get_top_by_value():
     try:
         limit = int(request.args.get('limit', 20))
 
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
@@ -497,7 +489,7 @@ def get_abc_analysis():
         GET /api/inventory/abc-analysis
     """
     try:
-        items = alegra_client.get_active_items()
+        items = get_alegra_client().get_active_items()
 
         if not items:
             return jsonify({
