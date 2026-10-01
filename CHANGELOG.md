@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-10-01] (continuación) - Dashboard de clientes con reportes agregados de Alegra
+
+- **Verificado con las credenciales reales**: `/api/v1/reports/sales-by-client`, `sales-by-seller` y `sales-by-item` aceptan Basic (correo:token); `reports-api.alegra.com/api/v2` NO (401). `limit=2000` trae todos los clientes del año en una llamada; Alegra solo ordena bien con `order_field=total`, así que el backend ordena por su cuenta.
+- `AlegraDirectClient`: `get_sales_by_client` (filtro opcional por vendedora), `get_sales_by_seller`, `get_sellers`, `get_contact`, `get_last_invoice_date`. Paginación defensiva hasta `metadata.total`; propagan los errores de red.
+- Nuevo `app/services/customer_insights.py` + `app/routes/customer_insights.py`:
+  - `GET /api/analytics/customers/summary`: % de venta con cliente identificado (total y por vendedora), top clientes por monto/frecuencia/descuento, compras del equipo (marcadas en el ranking y resumidas aparte), clientes nuevos vs recurrentes.
+  - `GET /api/analytics/customers/inactive?days=`: clientas que dejaron de venir; las 50 que más compraron traen teléfono, WhatsApp y última compra.
+  - Solo admin, por tienda (`X-Store`); caché en memoria con la tienda en la clave. Tienda sin Alegra configurado → 503 `alegra_not_configured` (Primavera hasta que tenga sus credenciales; con cuenta nueva sale vacío, misma lógica).
+- No cambia ningún endpoint existente (`/api/analytics/top-customers` y demás siguen igual).
+- Docs: sección 8 en `ANALYTICS_API_DOCUMENTATION.md`.
+- Tests: +12 en `tests/test_customer_insights.py`. **68/68 pasan** (los mismos 4 archivos de antes + el nuevo; `test_analytics_endpoints.py` y `test_endpoints_simple.py` ya fallaban antes porque esperan un servidor real).
+
 ## [2026-10-01] (continuación) - Multi-tienda, Fase 5: comparativo entre tiendas
 
 - `GET /api/stores/comparison?start_date&end_date` (solo admin; por defecto el mes en curso; máx. 92 días; fechas futuras se recortan a hoy). Por cada tienda devuelve:

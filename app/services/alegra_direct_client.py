@@ -628,3 +628,84 @@ class AlegraDirectClient:
                 'error': str(e),
                 'data': {}
             }
+
+    # ------------------------------------------------------------------
+    # Reportes de ventas agregados (clientes / vendedoras) y contactos.
+    # Verificado 2026-10-01 con Basic en /api/v1: Alegra suma el rango en
+    # el servidor; limit=2000 trae todos los clientes de un año en una sola
+    # llamada. Solo order_field=total ordena bien, así que quien consume
+    # estos métodos ordena por su cuenta. A diferencia de los métodos de
+    # arriba, estos NO atrapan errores: los propaga para que el servicio
+    # decida (requests.exceptions.*).
+    # ------------------------------------------------------------------
+
+    REPORT_PAGE_SIZE = 2000
+
+    def _get_report_rows(self, endpoint: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Todas las filas de un reporte paginado ({data, metadata.total}).
+        Pide páginas grandes y sigue mientras falten filas, por si Alegra
+        llega a limitar el tamaño de página.
+        """
+        rows: List[Dict[str, Any]] = []
+        start = 0
+        while True:
+            response = self._make_request(endpoint, {**params, 'limit': self.REPORT_PAGE_SIZE, 'start': start})
+            if isinstance(response, list):
+                return response
+            page = response.get('data') or []
+            rows.extend(page)
+            total = (response.get('metadata') or {}).get('total')
+            if not page or total is None or len(rows) >= int(total):
+                return rows
+            start += len(page)
+
+    def get_sales_by_client(self, from_date: str, to_date: str, seller_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Ventas agregadas por cliente en el rango (una fila por cliente):
+        idLocal (= id del contacto), clientName, identification,
+        totalDocuments, subTotal, discount, creditNote, afterTaxes...
+        seller_id filtra a los documentos de una vendedora.
+        """
+        params = {'from': from_date, 'to': to_date, 'creditNoteFilter': 'creditNote'}
+        if seller_id:
+            params['sellerId'] = seller_id
+        return self._get_report_rows('/reports/sales-by-client', params)
+
+    def get_sales_by_seller(self, from_date: str, to_date: str) -> List[Dict[str, Any]]:
+        """Ventas agregadas por vendedora en el rango (una fila por vendedora)."""
+        params = {'from': from_date, 'to': to_date, 'creditNoteFilter': 'creditNote'}
+        return self._get_report_rows('/reports/sales-by-seller', params)
+
+    def get_sellers(self) -> List[Dict[str, Any]]:
+        """Todas las vendedoras (activas e inactivas): id, name, identification, status."""
+        sellers: List[Dict[str, Any]] = []
+        start = 0
+        while True:
+            page = self._make_request('/sellers', {'start': start, 'limit': 30})
+            page = page if isinstance(page, list) else page.get('data') or []
+            sellers.extend(page)
+            if len(page) < 30:
+                return sellers
+            start += 30
+
+    def get_contact(self, contact_id: str) -> Dict[str, Any]:
+        """Contacto de Alegra (teléfonos en phonePrimary / phoneSecondary / mobile)."""
+        return self._make_request(f'/contacts/{contact_id}')
+
+    def get_last_invoice_date(self, client_id: str) -> Optional[str]:
+        """Fecha (YYYY-MM-DD) de la factura más reciente del cliente, o None."""
+        response = self._make_request('/invoices', {
+            'client_id': client_id,
+            'order_field': 'date',
+            'order_direction': 'DESC',
+            'limit': 1,
+        })
+        invoices = response if isinstance(response, list) else response.get('data') or []
+        if not invoices:
+            return None
+        invoice = invoices[0]
+        # Si Alegra ignorara el filtro devolvería la factura de otro cliente.
+        if str((invoice.get('client') or {}).get('id')) != str(client_id):
+            return None
+        return invoice.get('date')

@@ -52,6 +52,7 @@ cierre-caja-api/
 │   │   ├── auth.py           # Autenticación JWT
 │   │   ├── products.py       # Análisis de productos
 │   │   ├── analytics.py      # Análisis de ventas
+│   │   ├── customer_insights.py # Dashboard de clientes (reportes de Alegra)
 │   │   ├── inventory.py      # Análisis de inventario
 │   │   ├── direct_api.py     # APIs directas de Alegra
 │   │   ├── users.py          # CRUD de usuarios (admin)
@@ -65,6 +66,7 @@ cierre-caja-api/
 │   │   ├── jwt_service.py    # Servicio JWT
 │   │   ├── product_analytics.py # Análisis de productos
 │   │   ├── inventory_analytics.py # Análisis de inventario
+│   │   ├── customer_insights.py # Indicadores de clientes por tienda
 │   │   ├── sku_parser.py     # Parser de SKU/códigos
 │   │   └── pdf_generator.py  # Generador de PDFs
 │   ├── middlewares/          # Middlewares

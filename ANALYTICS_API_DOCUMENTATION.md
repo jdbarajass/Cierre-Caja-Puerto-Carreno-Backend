@@ -454,6 +454,29 @@ GET /api/analytics/dashboard?start_date=2025-11-01&end_date=2025-11-30
 
 ---
 
+### 8. Dashboard de Clientes (reportes agregados de Alegra)
+
+A diferencia de los endpoints 1-7 (que descargan las facturas día por día), estos usan los reportes agregados de Alegra (`/api/v1/reports/sales-by-client` y `sales-by-seller`, Basic con las credenciales de la tienda): un año completo son pocas consultas. Solo admin; por tienda vía header `X-Store`. Lógica en `app/services/customer_insights.py`.
+
+**`GET /api/analytics/customers/summary?start_date&end_date&limit`**
+- Por defecto: 1 de enero del año en curso → hoy. Rango máximo 3 años. `limit` = clientes por ranking (5-100, default 25).
+- `data.kpis`: `total_sales`, `identified_sales`, `identified_pct` (% del dinero con cliente identificado), `identified_documents_pct`, `unique_clients`, `average_per_client`, `total_discount`.
+- `data.anonymous`: venta de "Consumidor final" (NIT 222222222222).
+- `data.top_by_amount` / `top_by_frequency` / `top_by_discount`: clientes identificados (`id` = id del contacto en Alegra, `documents`, `total`, `discount`, `discount_pct`, `average_ticket`, `employee`).
+- `data.employees`: clientes que son vendedoras (misma cédula o todos los nombres de la vendedora en el del cliente). **Siguen en los rankings** con `employee` lleno y además se resumen aquí.
+- `data.sellers`: por vendedora, venta y `identified_pct`. Si el filtro por vendedora de Alegra no cuadra con su venta, `identified_available: false` (no se inventa el %).
+- `data.new_vs_returning`: clientes sin compras antes del periodo (historia desde 2015) vs recurrentes. `null` si no se pudo consultar la historia.
+
+**`GET /api/analytics/customers/inactive?days=90`**
+- `days` ∈ 30, 60, 90, 120, 180. Clientas con compras en el último año pero ninguna en los últimos `days` días, de mayor a menor compra.
+- Las primeras 50 traen `phone`, `whatsapp` (573XXXXXXXXX, solo celulares) y `last_purchase` (una consulta a `/contacts/{id}` y otra a `/invoices?client_id` por clienta, en caché 12 h).
+
+**Errores**: `503` + `code: alegra_not_configured` si la tienda no tiene cuenta de Alegra; `502 alegra_auth` si Alegra rechaza las credenciales; `504 alegra_timeout`.
+
+**Caché** (en memoria, clave con la tienda): rango cerrado 12 h, rango que incluye hoy 10 min.
+
+---
+
 ## Códigos de Estado HTTP
 
 - **200 OK**: Petición exitosa

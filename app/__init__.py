@@ -229,6 +229,7 @@ def create_app(config_class=Config):
     from app.routes.notes_tasks import bp as notes_tasks_bp
     from app.routes.accounts import bp as accounts_bp
     from app.routes.stores import bp as stores_bp
+    from app.routes.customer_insights import bp as customer_insights_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -244,6 +245,7 @@ def create_app(config_class=Config):
     app.register_blueprint(notes_tasks_bp)  # Notas y pendientes
     app.register_blueprint(accounts_bp)  # Cuentas (saldo por medio de pago)
     app.register_blueprint(stores_bp)  # Multi-tienda: tiendas del usuario
+    app.register_blueprint(customer_insights_bp)  # Dashboard de clientes (Alegra)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
