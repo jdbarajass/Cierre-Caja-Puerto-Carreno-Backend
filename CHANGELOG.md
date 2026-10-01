@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-01] (continuación) - Multi-tienda, Fase 4: cron de las 9pm por tienda
+
+- `.github/workflows/daily-accounts-sync.yml`: matriz `store: [carreno, primavera]` con `fail-fast: false`. Cada tienda corre su propio `POST /api/accounts/sync-daily` con `X-Store`; si una falla, la otra igual se sincroniza y `sync-failure` registra la alerta **solo** en la tienda que falló (clave de `app_settings` por tienda). Para sumar una tienda nueva basta con agregar su código a la matriz.
+- Test nuevo que simula el cron (token de sync, sin usuario, con `X-Store`): sincroniza solo la tienda pedida, la alerta de fallo es independiente por tienda y un token inválido sigue dando 401. **53/53 pasan.**
+- Pendiente para activar Primavera del todo: `ALEGRA_USER_PRIMAVERA` / `ALEGRA_PASS_PRIMAVERA` en Render (no requiere código).
+
+---
+
 ## [2026-10-01] (continuación) - Multi-tienda, Fase 2: usuarios con tienda asignada
 
 - `users.store_code` (nuevo, default `carreno`; la migración multi-tienda lo agrega y deja a todos los usuarios existentes en Carreño).

@@ -312,3 +312,39 @@ def test_login_devuelve_tienda_y_la_mete_en_el_token(app, client, admin_headers)
     from app.services.jwt_service import JWTService
     with app.app_context():
         assert JWTService.verify_token(body['token'])['storeCode'] == 'primavera'
+
+
+# ─── Fase 4: cron de las 9pm por tienda (GitHub Actions con X-Sync-Token) ────
+
+def test_cron_sincroniza_y_reporta_fallos_por_tienda(client, admin_headers, monkeypatch):
+    from app.config import Config
+    monkeypatch.setattr(Config, 'DAILY_SYNC_TOKEN', 'token-cron')
+    monkeypatch.setenv('ALEGRA_USER_PRIMAVERA', 'primavera@test.com')
+    monkeypatch.setenv('ALEGRA_PASS_PRIMAVERA', 'tok-primavera')
+    cron = lambda store: {'X-Sync-Token': 'token-cron', 'X-Store': store}
+
+    client.post('/api/sum_payments', headers=admin_headers(), json=_closing_payload())
+    client.post('/api/sum_payments', headers=admin_headers('primavera'), json=_closing_payload())
+
+    # Fallo reportado solo para Primavera
+    assert client.post('/api/accounts/sync-failure', headers=cron('primavera'),
+                       json={'message': 'falló'}).status_code == 200
+    status = lambda store: client.get('/api/accounts/sync-status', headers=admin_headers(store)).get_json()
+    assert status('primavera')['last_failure']['message'] == 'falló'
+    assert status('carreno')['last_failure'] is None
+
+    # Corrida de Carreño: sincroniza solo Carreño y no limpia la alerta de Primavera
+    r = client.post('/api/accounts/sync-daily', headers=cron('carreno'), json={})
+    assert r.status_code == 200 and r.get_json()['synced_dates'] == ['2026-09-30']
+    assert status('carreno')['pending_count'] == 0
+    assert status('primavera')['pending_count'] == 1
+    assert status('primavera')['last_failure'] is not None
+
+    # Corrida de Primavera: sincroniza la suya y limpia su alerta
+    r = client.post('/api/accounts/sync-daily', headers=cron('primavera'), json={})
+    assert r.get_json()['synced_dates'] == ['2026-09-30']
+    assert status('primavera')['pending_count'] == 0
+    assert status('primavera')['last_failure'] is None
+
+    # Token inválido: sigue protegido
+    assert client.post('/api/accounts/sync-daily', headers={'X-Sync-Token': 'malo', 'X-Store': 'carreno'}).status_code == 401

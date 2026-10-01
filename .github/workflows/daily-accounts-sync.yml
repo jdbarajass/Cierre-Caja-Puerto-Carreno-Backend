@@ -9,6 +9,11 @@ name: Daily Accounts Sync
 # 9:00pm hora Colombia (America/Bogota, UTC-5) == 02:00 UTC del día siguiente.
 # Requiere el secret DAILY_SYNC_TOKEN (Settings > Secrets and variables > Actions),
 # con el mismo valor que la variable de entorno DAILY_SYNC_TOKEN en Render.
+#
+# Multi-tienda: un job por tienda (header X-Store), independientes entre sí
+# (fail-fast: false) - si una tienda falla, la otra igual se sincroniza y la
+# alerta de fallo queda registrada SOLO en la tienda que falló. Para sumar
+# una tienda nueva, agregar su código (ver app/stores.py) a matrix.store.
 
 on:
   schedule:
@@ -18,8 +23,13 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [carreno, primavera]
+    name: sync (${{ matrix.store }})
     steps:
-      - name: Trigger POST /api/accounts/sync-daily
+      - name: Trigger POST /api/accounts/sync-daily (${{ matrix.store }})
         env:
           SYNC_TOKEN: ${{ secrets.DAILY_SYNC_TOKEN }}
         run: |
@@ -27,6 +37,7 @@ jobs:
             --retry 3 --retry-delay 30 --max-time 120 \
             -X POST "https://cierre-caja-api.onrender.com/api/accounts/sync-daily" \
             -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            -H "X-Store: ${{ matrix.store }}" \
             -H "Content-Type: application/json" \
             -d '{}'
 
@@ -43,6 +54,7 @@ jobs:
           curl --show-error --max-time 30 \
             -X POST "https://cierre-caja-api.onrender.com/api/accounts/sync-failure" \
             -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            -H "X-Store: ${{ matrix.store }}" \
             -H "Content-Type: application/json" \
             -d '{"message": "El cron de sincronización diaria (9pm Colombia) falló después de 3 reintentos. Revisa Render y sincroniza manualmente desde Cuentas."}' \
             || echo "No se pudo reportar el fallo al sistema (revisar Render/DAILY_SYNC_TOKEN manualmente)"
