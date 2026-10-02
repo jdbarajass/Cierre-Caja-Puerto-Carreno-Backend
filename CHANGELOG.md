@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-02] (continuación) - Tallas: lectura desde el precio del nombre
+
+Pedido del usuario tras revisar Prendas en producción ("Jean Mujer Bota Campana: SIN TALLA", zapatos con talla S/L/XS). Afecta a todo lo que lee tallas: **Prendas, Análisis de Productos e Inventario** (`SKUParser.extract_size_from_product_name`).
+- Nuevo `SKUParser.parse_with_price`: el SKU es `10 + departamento (51-54, no siempre) + código de prenda (0-2 dígitos) + precio/100 + talla`. Como el código de prenda y la talla cambian de largo, se ubica la talla **a partir del precio que trae el nombre** ("JEAN HOMBRE 99900 / 10519990034" → precio 999 → talla 34). Si el precio no aparece, se usa la lectura anterior (`parse_sku`).
+- Corrige (ejemplos reales de Alegra): jeans de hombre y de mujer con talla de 1 dígito o sin código de prenda (salían "L"/"XL"), **zapatos** 33-43 (salían S/M/L o sin talla), rangos de niños "24"/"46"/"68"/"810" (salían como talla 24 o 10), medias y gorras ("ÚNICA").
+- **Error en `parse_sku`**: buscaba los códigos de talla única 62-65 en TODO el SKU, así que "CAMISETA HOMBRE 62900" o "64900" salían como "ÚNICA". Ahora solo en la posición del código de prenda.
+- `tests/test_sku_parser.py` (+33): 18 lecturas que antes eran incorrectas y 13 que ya eran correctas y no cambian (comparación con 51 productos reales: 24 cambian y todas son correcciones). **156/156**.
+
 ## [2026-10-02] (continuación) - Prendas: ajustes tras la revisión en producción
 
 Revisado con el usuario en producción (Carreño, 2-oct 17:20): Prendas carga, la primera tanda guardó enero (31 días, 260 facturas) y "Venta en prendas" de hoy cuadra con la venta del día menos las bolsas ($3.900 = 13 × $300).

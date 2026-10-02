@@ -149,8 +149,10 @@ class SKUParser:
             # Obtener nombre base sin precio
             product_base = re.sub(r'\s+\d+\s*$', '', name_part).strip()
 
-            # Parsear SKU para obtener talla
-            sku_result = SKUParser.parse_sku(sku_code, gender, product_base)
+            # Primero, ubicar la talla con el precio del nombre (ver
+            # parse_with_price); si no se puede, la heurística de siempre.
+            sku_result = (SKUParser.parse_with_price(sku_code, price, gender, product_base)
+                          or SKUParser.parse_sku(sku_code, gender, product_base))
 
             return {
                 'size': sku_result['size'],
@@ -175,6 +177,88 @@ class SKUParser:
                 'is_valid': False,
                 'error': f'Error de parseo: {str(e)}'
             }
+
+    # Rangos de talla de niños tal como vienen al final del SKU (sin ceros):
+    # "24" = 2-4, "1012" = 10-12. En ropa de niños no existe la talla 24 ni la 46.
+    KIDS_RANGE_TAILS = {'24': '2-4', '46': '4-6', '68': '6-8', '810': '8-10',
+                        '1012': '10-12', '1214': '12-14', '1416': '14-16'}
+    # Prendas que se miden con números aunque el SKU no traiga el código de
+    # prenda (ej. "JEAN HOMBRE 99900 / 10519990034" = talla 34).
+    NUMERIC_NAME_KEYWORDS = ('JEAN', 'PANTALON', 'JOGGER', 'JOGGUER', 'SHORT', 'BERMUDA',
+                             'ZAPATO', 'LEGGIN', 'BICICLETERO', 'DRILL', 'CARGO')
+    SHOE_CODES = ['30']
+
+    @staticmethod
+    def parse_with_price(sku_code: str, price: int, gender: str = None, product_name: str = '') -> Optional[Dict]:
+        """
+        Ubica la talla usando el precio del nombre del producto.
+
+        SKU = 10 + DEPARTAMENTO (51-54, no siempre) + CÓDIGO DE PRENDA (0-2
+        dígitos) + PRECIO/100 + TALLA. El código de prenda y la talla cambian de
+        largo según el producto, así que adivinar posiciones fallaba (verificado
+        con productos de Alegra el 2026-10-02):
+          "JEAN HOMBRE 99900 / 10519990034"                -> 34 (antes "L")
+          "JEAN MUJER BOTA CAMPANA 119900 / 105224119904"  -> 4  (antes "L")
+          "ZAPATO HOMBRE 129900 / 1051301299040"           -> 40 (antes sin talla)
+          "CAMISETA HOMBRE 62900 / 1051629001"             -> XS (antes "ÚNICA" por el 62 del precio)
+          "BODY NIÑA 34900 / 1054734924"                   -> 2-4 (antes 24)
+        Devuelve None si el precio no aparece donde se espera (se usa parse_sku).
+        """
+        try:
+            if not sku_code or not sku_code.isdigit() or not sku_code.startswith('10') or price < 100:
+                return None
+            price_code = str(price // 100)
+            gender_code = sku_code[2:4]
+            if gender_code in SKUParser.GENDER_MAP:
+                rest = sku_code[4:]
+                gender = SKUParser.GENDER_MAP[gender_code]
+            else:
+                gender_code = ''
+                rest = sku_code[2:]
+                gender = gender or 'UNKNOWN'
+
+            positions = [g for g in (2, 1, 0) if rest[g:].startswith(price_code)]
+            if not positions and rest[3:].startswith(price_code):
+                positions = [3]  # ej. "BODY U 49900 / 1035049900": código de prenda "350"
+            if not positions:
+                return None
+            known = [g for g in positions if g and rest[:g] in SKUParser.GARMENT_TYPE_MAP]
+            g = known[0] if known else (0 if 0 in positions else positions[0])
+            garment_code = rest[:g]
+            tail = rest[g + len(price_code):]
+            if len(tail) > 6:
+                return None
+
+            result = {
+                'sku_code': sku_code,
+                'gender_code': gender_code,
+                'gender': gender,
+                'garment_code': garment_code,
+                'garment_type': SKUParser.GARMENT_TYPE_MAP.get(garment_code, 'UNKNOWN'),
+                'price': price,
+                'size_code': tail,
+                'is_valid': True,
+                'error': '',
+            }
+            stripped = tail.lstrip('0')
+            if not stripped:
+                return {**result, 'size_code': tail or 'U', 'size': 'ÚNICA', 'size_type': 'UNIQUE'}
+
+            name = str(product_name or '').upper()
+            if gender in ('NIÑO', 'NIÑA'):
+                if stripped in SKUParser.KIDS_RANGE_TAILS:
+                    return {**result, 'size': SKUParser.KIDS_RANGE_TAILS[stripped], 'size_type': 'KIDS'}
+                return {**result, 'size': stripped, 'size_type': 'NUMERIC'}
+
+            numeric = (garment_code in SKUParser.SHOE_CODES
+                       or (garment_code and SKUParser.determine_size_type(garment_code, gender) == 'NUMERIC')
+                       or any(k in name for k in SKUParser.NUMERIC_NAME_KEYWORDS))
+            if not numeric and stripped in SKUParser.ALPHA_SIZE_MAP:
+                return {**result, 'size': SKUParser.ALPHA_SIZE_MAP[stripped], 'size_type': 'ALPHA'}
+            return {**result, 'size': stripped, 'size_type': 'NUMERIC'}
+        except Exception as e:  # nunca romper el análisis por un SKU raro
+            logger.warning(f"parse_with_price falló para '{sku_code}': {e}")
+            return None
 
     @staticmethod
     def parse_sku(sku_code: str, gender_hint: str = None, product_name_hint: str = None) -> Dict:
@@ -218,8 +302,10 @@ class SKUParser:
             # Estrategia: los últimos 1-4 dígitos son la talla
             # Intentar identificar el código de prenda y la talla
 
-            # Caso especial: productos con talla única (códigos 62, 63, 64, 65)
-            if any(code in sku_code for code in ['62', '63', '64', '65']):
+            # Caso especial: productos con talla única (códigos 62, 63, 64, 65).
+            # Solo en la posición del código de prenda: antes se buscaba en todo
+            # el SKU y un precio como 62900 o 64900 lo volvía "talla única".
+            if sku_code[4:6] in SKUParser.UNIQUE_SIZE_CODES:
                 return SKUParser._parse_unique_size_sku(sku_code, gender_code, gender)
 
             # Estrategia principal: identificar el código de prenda primero,
