@@ -2,6 +2,19 @@
 
 ---
 
+## [2026-10-02] Dashboard de clientes: fase 3 cerrada (revisión en producción)
+
+Revisado con el usuario en producción (Carreño, "Este año", 1-ene a 2-oct-2026):
+- Venta $380.986.649; 55,3 % con cliente identificado; 3.091 facturas (1.605 con cliente = 51,9 %); 1.109 clientes; compra promedio $190.091. Las cifras cuadran entre sí y con Alegra.
+- Ventas por vendedora: Mónica 52,8 %, Rita 45,5 %, Astrid 1,5 % de la venta; $806.700 sin vendedora.
+- Equipo (reconocido por nombre): Mónica, Rita y Astrid como clientas, $2.173.465 en total.
+- Nuevos 853 ($146,5 M) vs recurrentes 256 ($64,3 M): suman exactamente la venta con cliente. Solo ~1 de cada 4 clientes del año ya había comprado antes.
+- Inactivas (90 días): 823 clientas, $135,2 M; fechas de última compra coherentes. Casi la mitad no tiene celular en Alegra; números incompletos (ej. 9 dígitos) salen como "Sin celular" a propósito.
+- Primavera: muestra "Alegra rechazó las credenciales de esta tienda" sin romper la página. Significa que en Render YA existen `ALEGRA_USER_PRIMAVERA` / `ALEGRA_PASS_PRIMAVERA` con valores que Alegra no acepta; cuando se cree la cuenta de Primavera basta con poner ahí su correo y token (sin cambiar código).
+- Errores encontrados en esta fase y corregidos: montos en $0 (v1 usa `total`) y datos que /api/v1 no entrega (cédula, descuento, filtro por vendedora). Ver entradas anteriores.
+
+Siguiente: fase 4 (detalle de facturas por tienda), ver MEJORAS_PENDIENTES.md del backend.
+
 ## [2026-10-02] (continuación) - Clientes: límites reales de /api/v1
 
 Prueba con las credenciales reales (script de solo lectura, ya borrado):
