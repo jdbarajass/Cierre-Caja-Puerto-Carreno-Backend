@@ -21,7 +21,12 @@ class InventoryAnalytics:
         Args:
             items: Lista de items de Alegra con inventario
         """
-        self.items = items
+        # Igual que el reporte de valor de inventario (resumen de arriba de la
+        # página): los nombres con asteriscos son productos obsoletos en Alegra.
+        self.items = [
+            item for item in items
+            if not str(item.get('name') or '').strip().startswith('*')
+        ]
         self.sku_parser = SKUParser()
 
     def get_complete_analysis(self) -> Dict:

@@ -13,6 +13,18 @@ from app.utils.formatters import format_cop, filter_voided_invoices
 logger = logging.getLogger(__name__)
 
 
+CONSUMIDOR_FINAL_ID = '1'
+CONSUMIDOR_FINAL_IDENTIFICATION = '222222222222'
+
+
+def is_consumidor_final(client: Dict) -> bool:
+    """Venta sin cliente identificado (contacto genérico de Alegra)."""
+    if not client:
+        return True
+    return (str(client.get('id', '')) == CONSUMIDOR_FINAL_ID
+            or str(client.get('identification', '')) == CONSUMIDOR_FINAL_IDENTIFICATION)
+
+
 class SalesAnalytics:
     """Servicio de análisis avanzado de ventas"""
 
@@ -228,9 +240,15 @@ class SalesAnalytics:
             'products_purchased': []
         })
 
+        # "Consumidor final" agrupa todas las ventas sin cliente (~45 % del dinero):
+        # salía #1 del ranking. Se excluye y se informa aparte.
+        consumidor_final = {'total': 0.0, 'count': 0}
+
         for invoice in self.invoices:
             client = invoice.get('client', {})
-            if not client:
+            if is_consumidor_final(client):
+                consumidor_final['total'] += float(invoice.get('total', 0))
+                consumidor_final['count'] += 1
                 continue
 
             client_id = str(client.get('id', ''))
@@ -340,7 +358,12 @@ class SalesAnalytics:
                 'recurring_rate': round((recurring_customers / total_unique_customers * 100), 2) if total_unique_customers > 0 else 0
             },
             'top_customers': top_customers,
-            'total_customers': total_unique_customers
+            'total_customers': total_unique_customers,
+            'consumidor_final': {
+                'total': int(consumidor_final['total']),
+                'total_formatted': format_cop(consumidor_final['total']),
+                'invoices': consumidor_final['count'],
+            }
         }
 
     # ============================================================
@@ -529,7 +552,7 @@ class SalesAnalytics:
                 continue
 
             client_id = str(client.get('id', ''))
-            if not client_id or client_id == '1':  # Excluir "Consumidor final"
+            if not client_id or is_consumidor_final(client):
                 continue
 
             customer_purchases[client_id]['customer_name'] = client.get('name', 'Sin nombre')
@@ -581,18 +604,23 @@ class SalesAnalytics:
                 days_as_customer = (data['last_purchase'] - data['first_purchase']).days
 
             # Clasificación de cliente
-            customer_type = 'Nuevo'
+            # 'Una compra' (antes 'Nuevo'): solo se miran las facturas del periodo
+            # consultado, así que no se sabe si es su primera compra en la tienda.
+            # Nuevos de verdad vs. recurrentes: Estadísticas → Clientes.
+            customer_type = 'Una compra'
             if frequency >= 5:
                 customer_type = 'Leal'
             elif frequency >= 2:
                 customer_type = 'Recurrente'
 
-            # Estado de actividad
-            activity_status = 'Activo'
-            if recency > 90:
-                activity_status = 'En riesgo'
-            elif recency > 180:
+            # Estado de actividad (el umbral mayor va primero: antes 'Inactivo'
+            # nunca se asignaba porque >90 se evaluaba antes que >180)
+            if recency > 180:
                 activity_status = 'Inactivo'
+            elif recency > 90:
+                activity_status = 'En riesgo'
+            else:
+                activity_status = 'Activo'
 
             rfm_analysis.append({
                 'customer_id': client_id,
@@ -611,7 +639,7 @@ class SalesAnalytics:
 
         # Segmentación de clientes
         total_customers = len(rfm_analysis)
-        new_customers = len([c for c in rfm_analysis if c['customer_type'] == 'Nuevo'])
+        new_customers = len([c for c in rfm_analysis if c['customer_type'] == 'Una compra'])
         recurring_customers = len([c for c in rfm_analysis if c['customer_type'] == 'Recurrente'])
         loyal_customers = len([c for c in rfm_analysis if c['customer_type'] == 'Leal'])
 

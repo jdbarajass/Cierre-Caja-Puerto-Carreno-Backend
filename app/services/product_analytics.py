@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Tuple
 from datetime import datetime
 import logging
 from app.services.sku_parser import SKUParser
+from app.utils.formatters import filter_voided_invoices
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,10 @@ class ProductAnalytics:
         Args:
             invoices: Lista de facturas de Alegra con estructura completa
         """
-        self.invoices = invoices
+        # Las anuladas no son venta (antes se contaban sus prendas y su dinero)
+        voided_info = filter_voided_invoices(invoices or [])
+        self.invoices = voided_info['active_invoices']
+        self.voided_count = voided_info['voided_count']
         self.products_data = []
         self._process_invoices()
 
@@ -134,6 +138,7 @@ class ProductAnalytics:
             'unidades_mas_vendido': best_prod_qty,
             'unidades_mas_vendido_formatted': self.format_number(best_prod_qty),
             'numero_facturas': len(self.invoices),
+            'facturas_anuladas_excluidas': self.voided_count,
             'numero_items_unicos': len(set(p['nombre'] for p in self.products_data))
         }
 

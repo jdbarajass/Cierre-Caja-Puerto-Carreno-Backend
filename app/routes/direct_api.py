@@ -12,6 +12,7 @@ from app.stores import get_alegra_direct_client
 from app.config import Config
 from app.exceptions import AlegraConnectionError
 from app.utils.timezone import get_colombia_timestamp
+from app.utils.formatters import filter_voided_invoices
 
 logger = logging.getLogger(__name__)
 
@@ -270,14 +271,24 @@ def get_sales_documents():
                 'details': result.get('error')
             }), 502
 
+        # Las anuladas no son venta: Totales de Ventas y Documentos las sumaban.
+        # Se quitan aquí (como en Cierre de Caja y Analytics) y se informan aparte.
+        voided_info = filter_voided_invoices(result.get('data', []))
+        active = voided_info['active_invoices']
+
         response = {
             'success': True,
             'server_timestamp': get_colombia_timestamp(),
-            'data': result.get('data', []),
-            'metadata': result.get('metadata', {})
+            'data': active,
+            'metadata': result.get('metadata', {}),
+            'voided': {
+                'count': voided_info['voided_count'],
+                'total': voided_info['total_voided_amount'],
+                'invoices': voided_info['voided_summary'],
+            },
         }
 
-        logger.info(f"Retornando {len(result.get('data', []))} facturas en total")
+        logger.info(f"Retornando {len(active)} facturas ({voided_info['voided_count']} anuladas excluidas)")
 
         return jsonify(response), 200
 

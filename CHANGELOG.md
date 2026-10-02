@@ -2,6 +2,20 @@
 
 ---
 
+## [2026-10-02] (continuación) - Estadísticas, Fase A: errores que cambiaban números
+
+Plan: `docs/PLAN_ESTADISTICAS.md`. Antes de cambiar código se verificó contra Alegra con el conector (solo lectura): factura de `/invoices` trae `seller` como objeto `{id, name, ...}`, anuladas con `status: "void"`, `items[].discount` en **porcentaje** y `items[].total` con el descuento ya aplicado (sin IVA). En 2026 hay solo 2 anuladas (24-feb $379.900 y 19-mar $36.900) y 0 notas crédito; 1.608 productos activos.
+
+- **Inventario (pestañas)**: `AlegraClient.get_active_items()` ahora pagina `/items` (30 por petición, `status=active`) hasta el final; antes devolvía solo 30 de ~1.600. Lista cacheada 5 min por usuario de Alegra (= por tienda) con candado para que las pestañas en paralelo no repitan la descarga; si una página falla lanza excepción (nunca lista a medias) y no se cachea; se detiene si Alegra repite la página (ignora `start`). `InventoryAnalytics` descarta los nombres con asteriscos, igual que el resumen de arriba (value-report), para que cuadren.
+- **Resumen de inventario (value-report)**: si una página falla ya no corta en silencio: `metadata.incomplete`, `failed_page`, `error` (y 502 si falla la primera).
+- **Facturas por rango** (`AlegraDirectClient.get_all_invoices_for_date_range`, usado por Totales de Ventas y Documentos): cada página se reintenta 3 veces (1 s, 2 s); si un día sigue fallando se deja por fuera **completo** y se informa en `metadata.failed_days` / `metadata.complete` (antes `break` y `success: true` con días faltantes). Protección si Alegra ignora `start`.
+- **Anuladas fuera**: `GET /api/direct/sales/documents` quita las anuladas con `filter_voided_invoices` (la misma del Cierre de Caja) y las informa en `voided {count, total, invoices}`. `ProductAnalytics` (todas las rutas de Análisis de Productos) también las quita; `get_summary` trae `facturas_anuladas_excluidas`.
+- **Retención (Analytics)**: el orden de umbrales estaba al revés (`>90` antes de `>180`) y "Inactivo" nunca salía; corregido. "Nuevo" pasa a llamarse **"Una compra"**: solo mira el periodo consultado, no sabe si es la primera compra en la tienda (nuevas de verdad: Estadísticas → Clientes).
+- **Top clientes (Analytics)**: excluye Consumidor final (id 1 o NIT 222222222222, función `is_consumidor_final`) y lo informa aparte en `consumidor_final {total, invoices}`. `summary.total_revenue` ahora es solo de clientes identificados.
+- Tests: `tests/test_estadisticas_fase_a.py` (+15) con las 14 facturas reales del 30-sep-2026 en formato `/api/v1`; cuadran con Alegra (Rita $568.200 / 9, Mónica $323.745 / 5). **106/106**.
+- Revisado en el navegador con un Alegra simulado local (backend y Vite locales): Totales (vendedoras por nombre, aviso de día faltante y de anulada), Documentos, Inventario (Alertas ve los 64 productos = resumen), Top Clientes y Retención.
+- Pendiente detectado (no tocado): `is_invoice_void` también marca como anulada una factura cuya nota diga "cancela"/"anul"/"void"; `AlegraClient.get_all_invoices_in_range` (Productos, Analytics, Ventas mensuales) también salta días con error en silencio.
+
 ## [2026-10-02] (continuación) - Fase 4 cerrada + marca de ex vendedoras
 
 Revisado con el usuario en producción (Carreño, "Este año", 2-oct-2026 15:05):

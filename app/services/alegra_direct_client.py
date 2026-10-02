@@ -2,12 +2,18 @@
 Cliente para APIs directas de Alegra (no documentadas)
 Estas APIs se descubrieron mediante inspección de red en la plataforma
 """
+import time
 import requests
 from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Facturas día por día (Totales de Ventas / Documentos): intentos por página
+# antes de dar el día por fallido, con espera creciente (1 s, 2 s, ...).
+INVOICE_PAGE_ATTEMPTS = 3
+INVOICE_RETRY_BASE_SECONDS = 1.0
 
 
 class AlegraDirectClient:
@@ -104,6 +110,7 @@ class AlegraDirectClient:
         total_filtered_asterisk = 0
         total_filtered_disabled = 0
         current_page = 1
+        failed_error = None  # si una página falla, el inventario queda incompleto
 
         logger.info(f"Iniciando consulta paginada de inventario (max: {max_items}, page_size: {page_size})")
 
@@ -125,6 +132,7 @@ class AlegraDirectClient:
 
                 if not page_result.get('success'):
                     logger.error(f"Error en página {current_page}: {page_result.get('error')}")
+                    failed_error = page_result.get('error') or 'Error desconocido'
                     break
 
                 page_data = page_result.get('data', [])
@@ -150,6 +158,7 @@ class AlegraDirectClient:
 
             except Exception as e:
                 logger.error(f"Error obteniendo página {current_page}: {str(e)}")
+                failed_error = str(e)
                 break
 
         logger.info(
@@ -158,6 +167,9 @@ class AlegraDirectClient:
             f"{total_filtered_disabled} filtrados (deshabilitados), "
             f"{len(all_items)} válidos retornados"
         )
+
+        if failed_error and not all_items:
+            return {'success': False, 'error': failed_error, 'data': []}
 
         return {
             'success': True,
@@ -172,7 +184,11 @@ class AlegraDirectClient:
                 'total_filtered_disabled': total_filtered_disabled,
                 'total_filtered': total_filtered_asterisk + total_filtered_disabled,
                 'total_returned': len(all_items),
-                'pages_fetched': current_page
+                'pages_fetched': current_page,
+                # Antes se cortaba en silencio: ahora el frontend avisa que faltan productos.
+                'incomplete': failed_error is not None,
+                'failed_page': current_page if failed_error else None,
+                'error': failed_error,
             }
         }
 
@@ -359,6 +375,10 @@ class AlegraDirectClient:
         Este método itera día por día y hace múltiples llamadas de 30 en 30 hasta obtener
         todas las facturas del día, ya que Alegra solo retorna máximo 30 por defecto.
 
+        Cada página se reintenta (INVOICE_PAGE_ATTEMPTS). Si un día sigue fallando se
+        deja por fuera COMPLETO (nunca medio día) y se reporta en `failed_days`: antes
+        se saltaba en silencio y la respuesta decía éxito con días faltantes.
+
         Args:
             from_date: Fecha de inicio (YYYY-MM-DD)
             to_date: Fecha de fin (YYYY-MM-DD)
@@ -372,77 +392,39 @@ class AlegraDirectClient:
                     'from_date': str,
                     'to_date': str,
                     'total_invoices': int,
-                    'days_processed': int
+                    'days_processed': int,
+                    'failed_days': [str],   # días que no se pudieron traer
+                    'complete': bool
                 }
             }
         """
         from datetime import datetime, timedelta
 
         try:
-            # Convertir fechas a objetos datetime
             start_date = datetime.strptime(from_date, '%Y-%m-%d')
             end_date = datetime.strptime(to_date, '%Y-%m-%d')
 
             all_invoices = []
+            failed_days = []
             days_processed = 0
             current_date = start_date
 
-            # Iterar día por día
             while current_date <= end_date:
                 date_str = current_date.strftime('%Y-%m-%d')
-                logger.info(f"Obteniendo facturas para la fecha: {date_str}")
-
-                # Para cada día, obtener todas las facturas con paginación
-                start = 0
-                limit = 30
-                day_invoices = []
-
-                while True:
-                    params = {
-                        'date': date_str,
-                        'limit': limit,
-                        'start': start
-                    }
-
-                    try:
-                        # Llamar al endpoint /invoices con parámetro date para obtener facturas completas
-                        response = self._make_request('/invoices', params)
-
-                        # La respuesta puede ser una lista directamente o un objeto con data
-                        invoices_batch = response if isinstance(response, list) else response.get('data', [])
-
-                        # Log de debugging para ver si las facturas tienen items
-                        if invoices_batch and len(invoices_batch) > 0:
-                            first_invoice = invoices_batch[0]
-                            logger.info(f"Primera factura de {date_str}: ID={first_invoice.get('id')}, tiene items={bool(first_invoice.get('items'))}, items count={len(first_invoice.get('items', []))}")
-                            logger.debug(f"Estructura de primera factura: {list(first_invoice.keys())}")
-
-                        if not invoices_batch or len(invoices_batch) == 0:
-                            # No hay más facturas para este día
-                            break
-
-                        day_invoices.extend(invoices_batch)
-
-                        # Si recibimos menos de 'limit' facturas, es la última página
-                        if len(invoices_batch) < limit:
-                            break
-
-                        # Incrementar el offset para la siguiente página
-                        start += limit
-
-                    except Exception as e:
-                        logger.error(f"Error obteniendo facturas para {date_str} (start={start}): {str(e)}")
-                        # Continuar con el siguiente día si hay un error
-                        break
-
-                logger.info(f"Obtenidas {len(day_invoices)} facturas para {date_str}")
-                all_invoices.extend(day_invoices)
-                days_processed += 1
-
-                # Avanzar al siguiente día
+                try:
+                    day_invoices = self._get_invoices_for_day(date_str)
+                    logger.info(f"Obtenidas {len(day_invoices)} facturas para {date_str}")
+                    all_invoices.extend(day_invoices)
+                    days_processed += 1
+                except Exception as e:
+                    logger.error(f"Día {date_str} sin datos tras {INVOICE_PAGE_ATTEMPTS} intentos: {e}")
+                    failed_days.append(date_str)
                 current_date += timedelta(days=1)
 
-            logger.info(f"Total de facturas obtenidas: {len(all_invoices)} en {days_processed} días")
+            logger.info(
+                f"Total de facturas obtenidas: {len(all_invoices)} en {days_processed} días"
+                + (f"; días fallidos: {failed_days}" if failed_days else "")
+            )
 
             return {
                 'success': True,
@@ -451,7 +433,9 @@ class AlegraDirectClient:
                     'from_date': from_date,
                     'to_date': to_date,
                     'total_invoices': len(all_invoices),
-                    'days_processed': days_processed
+                    'days_processed': days_processed,
+                    'failed_days': failed_days,
+                    'complete': not failed_days,
                 }
             }
 
@@ -462,6 +446,38 @@ class AlegraDirectClient:
                 'error': str(e),
                 'data': []
             }
+
+    def _get_invoices_for_day(self, date_str: str) -> List[Dict[str, Any]]:
+        """Todas las facturas de un día (páginas de 30). Lanza excepción si una página falla tras reintentar."""
+        limit = 30
+        start = 0
+        day_invoices: List[Dict[str, Any]] = []
+        seen_ids = set()
+        while True:
+            params = {'date': date_str, 'limit': limit, 'start': start}
+            batch = None
+            for attempt in range(1, INVOICE_PAGE_ATTEMPTS + 1):
+                try:
+                    response = self._make_request('/invoices', params)
+                    batch = response if isinstance(response, list) else response.get('data', [])
+                    break
+                except Exception as e:
+                    logger.warning(f"Facturas {date_str} start={start}: intento {attempt}/{INVOICE_PAGE_ATTEMPTS} falló ({e})")
+                    if attempt == INVOICE_PAGE_ATTEMPTS:
+                        raise
+                    time.sleep(INVOICE_RETRY_BASE_SECONDS * attempt)
+            if not batch:
+                return day_invoices
+            new_invoices = [inv for inv in batch if inv.get('id') not in seen_ids]
+            if not new_invoices:
+                # Alegra ignoró `start` y repitió la página: no quedarse en ciclo
+                logger.warning(f"Alegra repitió la página de facturas de {date_str} (start={start})")
+                return day_invoices
+            seen_ids.update(inv.get('id') for inv in new_invoices)
+            day_invoices.extend(new_invoices)
+            if len(batch) < limit:
+                return day_invoices
+            start += limit
 
     def get_sales_documents(
         self,

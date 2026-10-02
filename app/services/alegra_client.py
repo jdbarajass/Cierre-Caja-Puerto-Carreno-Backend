@@ -2,6 +2,7 @@
 Cliente para la API de Alegra
 """
 import os
+import threading
 import requests
 from requests.auth import HTTPBasicAuth
 from requests.adapters import HTTPAdapter
@@ -34,6 +35,15 @@ logger = logging.getLogger(__name__)
 # deben servirse a otra tienda.
 _invoices_cache = TTLCache()
 ALEGRA_CACHE_TTL_SECONDS = int(os.getenv('ALEGRA_CACHE_TTL_SECONDS', '600'))
+
+# Items activos (pestañas de Inventario): lista completa paginada, cacheada poco
+# tiempo para que las 6 pestañas no repitan ~55 peticiones cada una. Llave por
+# usuario de Alegra = por tienda.
+_items_cache = TTLCache()
+_items_lock = threading.Lock()  # una sola descarga a la vez (pestañas en paralelo)
+ITEMS_CACHE_TTL_SECONDS = 300
+ITEMS_PAGE_SIZE = 30   # máximo que acepta /items de Alegra
+ITEMS_MAX_PAGES = 300  # tope de seguridad: 9.000 ítems
 
 
 class AlegraClient:
@@ -754,12 +764,49 @@ class AlegraClient:
             AlegraAuthError: Si las credenciales son inválidas
             AlegraConnectionError: Para otros errores de conexión
         """
+        # Alegra devuelve máximo 30 ítems por petición: sin paginar, las pestañas de
+        # Inventario veían 30 de ~1.600 productos activos. Se pagina hasta el final
+        # y se cachea unos minutos por tienda (cada pestaña pide la lista completa).
+        cache_key = f"{self.username}|active_items"
+        with _items_lock:
+            cached = _items_cache.get(cache_key)
+            if cached is not None:
+                logger.info(f"[CACHE HIT] {len(cached)} items activos servidos desde caché")
+                return cached
+            items = self._fetch_all_active_items()
+            _items_cache.set(cache_key, items, ITEMS_CACHE_TTL_SECONDS)
+            return items
+
+    def _fetch_all_active_items(self) -> List[Dict]:
+        all_items: List[Dict] = []
+        seen_ids = set()
+        start = 0
+        for _ in range(ITEMS_MAX_PAGES):
+            page = self._get_active_items_page(start, ITEMS_PAGE_SIZE)
+            new_items = [it for it in page if it.get('id') not in seen_ids]
+            if page and not new_items:
+                # Alegra ignoró `start` y repitió la página: no quedarse en ciclo
+                logger.warning(f"Alegra repitió la página de items (start={start}); se detiene la paginación")
+                break
+            seen_ids.update(it.get('id') for it in new_items)
+            all_items.extend(new_items)
+            if len(page) < ITEMS_PAGE_SIZE:
+                break
+            start += ITEMS_PAGE_SIZE
+        else:
+            logger.warning(f"Se alcanzó el tope de {ITEMS_MAX_PAGES} páginas de items")
+
+        logger.info(f"✓ {len(all_items)} items activos obtenidos de Alegra (paginado)")
+        return all_items
+
+    def _get_active_items_page(self, start: int, limit: int) -> List[Dict]:
+        """Una página de /items activos. Si falla, lanza excepción (nunca devuelve una lista a medias)."""
         url = f"{self.base_url}/items"
         params = {
-            "status": "active"
+            "status": "active",
+            "start": start,
+            "limit": limit,
         }
-
-        logger.info("Consultando items activos de Alegra")
 
         try:
             response = self.session.get(
@@ -794,11 +841,12 @@ class AlegraClient:
             response.raise_for_status()
             data = response.json()
 
+            if isinstance(data, dict) and isinstance(data.get('data'), list):
+                data = data['data']
             if not isinstance(data, list):
                 logger.warning(f"Respuesta de Alegra no es una lista: {type(data)}")
                 data = []
 
-            logger.info(f"✓ {len(data)} items activos obtenidos de Alegra")
             return data
 
         except requests.exceptions.Timeout:
