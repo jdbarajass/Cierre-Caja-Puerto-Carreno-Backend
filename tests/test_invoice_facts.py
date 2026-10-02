@@ -158,7 +158,7 @@ def test_estado_de_la_carga_y_calidad_de_los_datos(app):
     svc.sync_day(alegra, 'carreno', D1)
     status = svc.coverage_status('carreno', D1, D3)
     assert status['total_days'] == 3 and status['loaded_days'] == 1 and status['missing_days'] == 2
-    assert status['next_missing_day'] == D2.isoformat() and status['invoices'] == 3
+    assert status['next_missing_day'] == D3.isoformat() and status['invoices'] == 3  # del más reciente al más antiguo
     assert status['quality'] == {
         'active_invoices': 2, 'voided_invoices': 1, 'with_seller': 1, 'with_identification': 1,
         'with_discount': 1, 'total': 140000, 'discount': 10000,
@@ -204,17 +204,25 @@ def _auth(app, role='admin', store=None):
     return {'Authorization': f'Bearer {token}', **({'X-Store': store} if store else {})}
 
 
-def test_sync_carga_la_siguiente_tanda_desde_enero(api):
+def _days_back(n_from, count):
+    """Fechas desde hace `n_from` días hacia atrás (la carga va del más reciente al más antiguo)."""
+    from datetime import timedelta
+    from app.utils.timezone import get_colombia_now
+    today = get_colombia_now().date()
+    return [(today - timedelta(days=n_from + i)).isoformat() for i in range(count)]
+
+
+def test_sync_carga_la_siguiente_tanda_desde_lo_mas_reciente(api):
     app, client, calls = api
     res = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 3}, headers=_auth(app))
     assert res.status_code == 200
     body = res.get_json()
-    assert body['backfill']['synced_days'] == ['2026-01-01', '2026-01-02', '2026-01-03']
-    assert body['status']['loaded_days'] == 3 and body['status']['next_missing_day'] == '2026-01-04'
+    assert body['backfill']['synced_days'] == _days_back(1, 3)  # ayer, antier, ...
+    assert body['status']['loaded_days'] == 3 and body['status']['next_missing_day'] == _days_back(4, 1)[0]
 
     # La siguiente llamada sigue donde quedó
     body = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 2}, headers=_auth(app)).get_json()
-    assert body['backfill']['synced_days'] == ['2026-01-04', '2026-01-05']
+    assert body['backfill']['synced_days'] == _days_back(4, 2)
 
     status = client.get('/api/analytics/invoice-facts/status', headers=_auth(app)).get_json()['data']
     assert status['loaded_days'] == 5 and status['invoices'] == 5 and status['quality']['with_seller'] == 5
@@ -260,7 +268,7 @@ def test_sync_reporta_error_de_alegra_sin_perder_lo_cargado(api, monkeypatch):
     res = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 5}, headers=_auth(app))
     assert res.status_code == 502
     body = res.get_json()
-    assert body['message'] == 'Alegra caído' and body['backfill']['failed_day'] == '2026-01-03'
+    assert body['message'] == 'Alegra caído' and body['backfill']['failed_day'] == _days_back(3, 1)[0]
     assert body['status']['loaded_days'] == 2
 
 

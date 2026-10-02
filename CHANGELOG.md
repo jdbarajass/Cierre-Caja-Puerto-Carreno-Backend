@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-02] (continuación) - Prendas: ajustes tras la revisión en producción
+
+Revisado con el usuario en producción (Carreño, 2-oct 17:20): Prendas carga, la primera tanda guardó enero (31 días, 260 facturas) y "Venta en prendas" de hoy cuadra con la venta del día menos las bolsas ($3.900 = 13 × $300).
+- **Tarjetas de regalo fuera** de Prendas (`is_excluded`: BOLSA PAPEL, TARJETA REGALO, BONO REGALO). Cada tarjeta es un ítem distinto en Alegra y llenaban "agotados". Análisis de Productos no se tocó.
+- **Rotación**: la venta diaria se divide por los días CON prendas guardadas (`coverage.loaded_days`), no por los del rango; con días faltantes inflaba los días de inventario (con 1 de 2 días cargados salía el doble).
+- **Carga del más reciente al más antiguo** (`pending_days` en orden descendente; `next_missing_day` de facturas y de prendas = el más reciente que falta): "Este mes" y "Mes anterior" quedan completos primero. La carga de producción ya llevaba enero.
+- **Blusas, crop tops, faldas y vestidos** sin "MUJER" en el nombre (el SKU no trae departamento) van a MUJER en la curva de tallas; antes caían en "Otros". "Otros" queda para accesorios y similares.
+- Tests ajustados al nuevo orden de carga (usan la fecha de hoy) +3 nuevos. **123/123**.
+- Hallazgo (no es de la plataforma): en Alegra hay una **nota crédito #3 del 1-oct por $324.900** ("Anulación por error de configuración de IVA", tipo anulación de factura electrónica) asociada a la factura no electrónica **8501** del 2-oct, pero **sin aplicar** (saldo abierto $324.900, aplicada $0). La 8501 está cobrada y es venta real (cierre de Alegra del 2-oct la incluye: Principal $324.900 + electrónica $2.527.175). Los reportes de Alegra restan esa nota del 1-oct, así que Alegra muestra el 1-oct $324.900 por debajo de las facturas. La plataforma cuenta las facturas y no las notas crédito: no se cambió nada; el usuario debe revisarla con quien lleva la contabilidad.
+
 ## [2026-10-02] (continuación) - Estadísticas, Fase C: prendas guardadas y pestaña Prendas (C1-C4)
 
 Decisiones del usuario: C1 a C4 (C5 devoluciones/margen queda para cuando se corrijan los costos en Alegra; 0 notas crédito en 2026), pestaña nueva **Estadísticas → Prendas**, la **BOLSA PAPEL no cuenta** en ningún indicador.

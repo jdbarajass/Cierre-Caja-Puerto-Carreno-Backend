@@ -214,8 +214,13 @@ def missing_item_days(store_code: str, start: date, end: date) -> List[date]:
 
 
 def pending_days(store_code: str, start: date, end: date) -> List[date]:
-    """Días a cargar: les falta el resumen de facturas o las prendas."""
-    return sorted(set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end)))
+    """
+    Días a cargar (les falta el resumen de facturas o las prendas), del MÁS
+    RECIENTE al más antiguo: así "Este mes" y "Mes anterior" quedan completos
+    primero (con el orden contrario, octubre esperaba ~9 noches).
+    """
+    return sorted(set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end)),
+                  reverse=True)
 
 
 def sync_range(alegra_client, store_code: str, days: List[date],
@@ -265,14 +270,15 @@ def coverage_status(store_code: str, start: date, end: date) -> Dict[str, Any]:
         'total_days': total_days,
         'loaded_days': total_days - len(missing),
         'missing_days': len(missing),
-        'next_missing_day': missing[0].isoformat() if missing else None,
+        'next_missing_day': missing[-1].isoformat() if missing else None,  # se carga del más reciente al más antiguo
         'last_synced_at': last_sync.isoformat() + 'Z' if last_sync else None,
         'invoices': facts.count(),
         # Prendas (Estadísticas → Prendas): días que ya tienen sus prendas guardadas
         'items': {
             'loaded_days': total_days - len(missing_items),
             'missing_days': len(missing_items),
-            'next_missing_day': missing_items[0].isoformat() if missing_items else None,
+            # La carga va del más reciente al más antiguo
+            'next_missing_day': missing_items[-1].isoformat() if missing_items else None,
         },
         'quality': {
             'active_invoices': active.count(),

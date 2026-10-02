@@ -11,8 +11,9 @@ Indicadores:
   - C3: más vendidos que están agotados; curva de tallas venta vs. stock.
   - C4: rotación por tipo de prenda (días de inventario al ritmo de venta del periodo).
 
-"BOLSA PAPEL" no cuenta en ningún indicador (decisión del usuario 2026-10-02,
-igual que Análisis de Productos). Talla, departamento y tipo de prenda se
+No cuentan en ningún indicador (decisiones del usuario 2026-10-02): la
+"BOLSA PAPEL" y las tarjetas/bonos de regalo (cada tarjeta es un ítem
+distinto en Alegra: llenaban "agotados" y no son prendas). Talla, departamento y tipo de prenda se
 leen del nombre con SKUParser ("CAMISETA MUJER 49900 / 1052499002").
 """
 import logging
@@ -36,8 +37,17 @@ SLOW_ROTATION_DAYS = 180  # más de 6 meses de inventario al ritmo actual
 FAST_ROTATION_DAYS = 15   # se acaba en menos de 2 semanas
 
 
-def is_bag(name: str) -> bool:
-    return 'BOLSA PAPEL' in str(name or '').upper()
+EXCLUDED_KEYWORDS = ('BOLSA PAPEL', 'TARJETA REGALO', 'BONO REGALO')
+
+# Prendas de mujer cuyo nombre no dice "MUJER" y cuyo SKU no trae el código de
+# departamento (ej. "BLUSA 89900 / 1040899001"): sin esto caían en "Otros".
+WOMEN_ONLY_KEYWORDS = ('BLUSA', 'CROPTOP', 'CROP TOP', 'FALDA', 'VESTIDO')
+
+
+def is_excluded(name: str) -> bool:
+    """Bolsa y tarjetas de regalo: se venden, pero no son prendas."""
+    upper = str(name or '').upper()
+    return any(k in upper for k in EXCLUDED_KEYWORDS)
 
 
 @lru_cache(maxsize=8192)
@@ -49,7 +59,8 @@ def parse_garment(name: str) -> Dict[str, str]:
     size = parsed.get('size') or 'UNKNOWN'
     return {
         'product': base,
-        'department': gender if gender in DEPARTMENT_ORDER else OTHER_DEPARTMENT,
+        'department': gender if gender in DEPARTMENT_ORDER
+        else 'MUJER' if any(k in base for k in WOMEN_ONLY_KEYWORDS) else OTHER_DEPARTMENT,
         'size': size if size != 'UNKNOWN' else 'SIN TALLA',
     }
 
@@ -80,7 +91,7 @@ def _pct(part: float, whole: float) -> float:
 
 def garment_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Renglones vendidos sin la bolsa y con cantidad positiva."""
-    return [r for r in rows if not is_bag(r.get('name')) and (r.get('quantity') or 0) > 0]
+    return [r for r in rows if not is_excluded(r.get('name')) and (r.get('quantity') or 0) > 0]
 
 
 # ─── C2: prendas por factura y precio promedio ──────────────────────────────
@@ -127,7 +138,7 @@ def stock_variants(items: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]
     out = {}
     for item in items:
         name = str(item.get('name') or '')
-        if item.get('type') != 'variant' or name.strip().startswith('*') or is_bag(name):
+        if item.get('type') != 'variant' or name.strip().startswith('*') or is_excluded(name):
             continue
         inventory = item.get('inventory') or {}
         if not inventory:
@@ -216,7 +227,9 @@ def rotation(rows: List[Dict[str, Any]], stock: Dict[str, Dict[str, Any]], days:
     """
     Por tipo de prenda ("CAMISETA MUJER"): vendidas en el periodo, venta por
     día, stock actual y días de inventario (stock ÷ venta diaria). Sin ventas
-    en el periodo → días = None ("sin ventas").
+    en el periodo → días = None ("sin ventas"). `days` = días CON prendas
+    guardadas (no los del rango): si faltan días, dividir por todo el rango
+    bajaba la venta diaria e inflaba los días de inventario.
     """
     acc: Dict[str, Dict[str, int]] = defaultdict(lambda: {'sold': 0, 'stock': 0})
     for r in rows:
@@ -277,6 +290,7 @@ class GarmentInsightsService:
             'rows': garment_rows(rows),
             'coverage': {
                 'days': days,
+                'loaded_days': days - len(missing),
                 'missing_days': len(missing),
                 'first_missing_day': missing[0].isoformat() if missing else None,
                 'complete': not missing,
@@ -307,6 +321,6 @@ class GarmentInsightsService:
             'stock_units': sum(max(v['stock'], 0) for v in stock.values()),
             'best_sellers': best_sellers_stock(rows, stock),
             'size_curve': size_curve(rows, stock),
-            'rotation': rotation(rows, stock, data['coverage']['days']),
+            'rotation': rotation(rows, stock, data['coverage']['loaded_days']),
             'thresholds': {'slow_days': SLOW_ROTATION_DAYS, 'fast_days': FAST_ROTATION_DAYS},
         }

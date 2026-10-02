@@ -105,7 +105,7 @@ def test_dias_viejos_sin_prendas_se_cargan_sin_afectar_a_clientes(app):
         start, end = date(2026, 9, 29), date(2026, 9, 30)
         assert svc.missing_days('carreno', start, end) == [date(2026, 9, 30)]  # Clientes: solo falta el 30
         assert svc.missing_item_days('carreno', start, end) == [old, date(2026, 9, 30)]
-        assert svc.pending_days('carreno', start, end) == [old, date(2026, 9, 30)]
+        assert svc.pending_days('carreno', start, end) == [date(2026, 9, 30), old]  # lo más reciente primero
         status = svc.coverage_status('carreno', start, end)
         assert status['missing_days'] == 1 and status['items']['missing_days'] == 2
 
@@ -146,7 +146,9 @@ def test_curva_de_tallas_venta_vs_stock():
                         if g['department'] == 'MUJER' and g['family'] == 'Letras')
     by_size = {s['size']: s for s in mujer_letras['sizes']}
     assert [s['size'] for s in mujer_letras['sizes']] == ['XS', 'M', 'XL']  # orden de tallas
-    assert by_size['XS']['sold_pct'] == 50.0 and by_size['XS']['stock_pct'] == 25.0
+    # 3 vendidas: camiseta XS, blusa M (sin "MUJER" en el nombre) y camiseta XL
+    assert by_size['XS']['sold_pct'] == 33.3 and by_size['XS']['stock_pct'] == 25.0
+    assert by_size['M']['sold_units'] == 1
     assert by_size['XL']['sold_units'] == 1 and by_size['XL']['stock_units'] == 0
 
 
@@ -185,7 +187,8 @@ def test_endpoints_prendas(client, app, monkeypatch):
     assert res.status_code == 200, res.get_json()
     data = res.get_json()['data']
     assert data['totals']['units'] == 11 and data['totals']['invoices'] == 5
-    assert data['coverage'] == {'days': 2, 'missing_days': 1, 'first_missing_day': '2026-09-29', 'complete': False}
+    assert data['coverage'] == {'days': 2, 'loaded_days': 1, 'missing_days': 1,
+                                'first_missing_day': '2026-09-29', 'complete': False}
     assert data['top_products'][0]['product'] == 'MEDIAS'
 
     res = client.get(url.format('stock'), headers=_headers(app))
@@ -204,3 +207,35 @@ def test_prendas_de_hoy_en_vivo(app):
         service = gi.GarmentInsightsService('carreno', today, FakeAlegra({'2026-10-02': SEP_30[:1]}))
         data = service.summary(today, today)
         assert data['totals']['units'] == 1 and data['coverage']['complete'] is True
+
+
+# ─── Ajustes tras la revisión en producción (2026-10-02) ────────────────────
+
+def test_tarjetas_de_regalo_no_cuentan():
+    regalo = [inv(13001, RITA, [item('TARJETA REGALO 100000 / 2001', '3001', 100000),
+                                item('SOBRE TARJETA REGALO 2000', '3002', 2000),
+                                item('CAMISETA MUJER 36900 / 1052369003', '1087', 36900), BOLSA])]
+    rows = _rows(regalo)
+    assert [r['name'] for r in rows] == ['CAMISETA MUJER 36900 / 1052369003']
+    stock = gi.stock_variants([
+        {'id': '3001', 'name': 'TARJETA REGALO 100000 / 2001', 'type': 'variant', 'inventory': {'availableQuantity': 0}},
+        {'id': '1087', 'name': 'CAMISETA MUJER 36900 / 1052369003', 'type': 'variant', 'inventory': {'availableQuantity': 3}},
+    ])
+    assert list(stock) == ['1087']
+
+
+def test_blusas_sin_genero_van_a_mujer():
+    assert gi.parse_garment('BLUSA 89900 / 1040899001')['department'] == 'MUJER'
+    assert gi.parse_garment('MEDIAS 7900 / 10487900')['department'] == 'OTROS'
+
+
+def test_rotacion_divide_por_dias_cargados(app):
+    with app.app_context():
+        svc.sync_day(FakeAlegra({'2026-09-30': SEP_30}), 'carreno', date(2026, 9, 30))
+        service = gi.GarmentInsightsService('carreno', date(2026, 10, 2), FakeAlegra({}))
+        service.client.get_active_items = lambda: [
+            {'id': '1', 'name': 'MEDIAS 7900 / 10487900', 'type': 'variant', 'inventory': {'availableQuantity': 50}}]
+        data = service.stock_analysis(date(2026, 9, 29), date(2026, 9, 30))  # el 29 no está cargado
+        medias = next(r for r in data['rotation'] if r['product'] == 'MEDIAS')
+        assert data['coverage']['loaded_days'] == 1
+        assert medias['daily_units'] == 5 and medias['days_of_inventory'] == 10  # antes: 2,5/día y 20 días
