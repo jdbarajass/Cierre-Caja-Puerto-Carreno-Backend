@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-02] Fix: dashboard de clientes mostraba todos los montos en $0
+
+- **Visto en producción** (fase 3): las compras salían bien pero todos los montos en $0, y la página decía "Todavía no hay ventas".
+- **Causa:** `/api/v1/reports/sales-by-client` (lo que usa la plataforma, con Basic) trae el monto en `total`; reports-api v2 (la web de Alegra y el conector MCP, con los que se diseñó) lo llama `afterTaxes`. El código solo leía `afterTaxes`. Las pruebas no lo detectaron porque los datos simulados copiaban el formato de v2.
+- **Solución:** `customer_insights.py` lee el monto de `afterTaxes` o `total`, el subtotal de `subTotal`/`subtotal` y el descuento de `discount`/`totalDiscount` (también en la validación del filtro por vendedora). Registra una vez en el log los nombres de campo que manda Alegra (`Campos de sales-by-client en Alegra: [...]`) para confirmar el formato.
+- Test nuevo con filas en el formato de v1. **71/71.**
+- Lección: los datos simulados de los tests deben copiar la respuesta del servidor que usa la plataforma (v1), no la del conector.
+
 ## [2026-10-01] (continuación) - Seguridad: credenciales fuera del repositorio
 
 El repo es **público**. Se quitaron todas las credenciales escritas en archivos versionados (a pedido del usuario, sin cambiar las contraseñas):

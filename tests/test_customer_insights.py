@@ -296,3 +296,30 @@ def test_contacto_con_error_no_se_guarda_en_cache():
     service._contact_info('353')
     assert attempts['n'] == 2                                       # la buena sí quedó en caché
     ci.clear_cache()
+
+
+def v1_row(row):
+    """Misma fila con los nombres de /api/v1 (Basic): el monto viene en `total`, no en `afterTaxes`."""
+    out = {k: v for k, v in row.items() if k not in ('afterTaxes', 'beforeTaxes')}
+    out['total'] = row['afterTaxes']
+    return out
+
+
+def test_formato_de_api_v1_con_total_en_vez_de_afterTaxes():
+    # Bug visto en producción 2026-10-02: con filas de /api/v1 todo salía en $0.
+    period = [v1_row(r) for r in PERIOD]
+    sellers_sales = [v1_row(r) for r in SELLER_SALES]
+    by_seller = {k: [v1_row(r) for r in rows] for k, rows in BY_SELLER.items()}
+    data = ci.build_summary(period, sellers_sales, SELLERS, by_seller, {'353'})
+    assert data['kpis']['total_sales'] == 2_000_000
+    assert data['kpis']['identified_pct'] == 50.0
+    assert data['top_by_amount'][0]['total'] == 400_000
+    assert {s['id']: s['identified_pct'] for s in data['sellers']} == {'1': 50.0, '12': 50.0}
+
+    # La validación del filtro por vendedora también lee `total`
+    service = ci.CustomerInsightsService(None, 'carreno', date(2026, 10, 1))
+    service._clients = lambda s, e, seller_id=None: by_seller[seller_id]
+    assert service._seller_clients_checked(date(2026, 1, 1), date(2026, 9, 30), sellers_sales[0]) is not None
+
+    # Un 0 real en `afterTaxes` no debe caer al otro campo
+    assert ci.row_amount({'afterTaxes': 0, 'total': 999}) == 0

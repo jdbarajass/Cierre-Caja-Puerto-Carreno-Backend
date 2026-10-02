@@ -65,6 +65,34 @@ def _num(value) -> int:
         return 0
 
 
+# El mismo reporte trae nombres distintos según el servidor de Alegra:
+# reports-api v2 (web / conector) usa afterTaxes; /api/v1 (la plataforma,
+# Basic) usa total. Verificado 2026-10-02 en producción: leer solo
+# afterTaxes dejaba todos los montos en 0.
+AMOUNT_KEYS = ('afterTaxes', 'total')
+SUBTOTAL_KEYS = ('subTotal', 'subtotal')
+DISCOUNT_KEYS = ('discount', 'totalDiscount')
+
+_warned_missing_amount = False
+
+
+def _field(row: Dict[str, Any], keys) -> int:
+    """Primer campo presente (aunque valga 0) entre los nombres posibles."""
+    for key in keys:
+        if row.get(key) is not None:
+            return _num(row.get(key))
+    return 0
+
+
+def row_amount(row: Dict[str, Any]) -> int:
+    """Monto después de impuestos de una fila de sales-by-client / sales-by-seller."""
+    global _warned_missing_amount
+    if not any(row.get(k) is not None for k in AMOUNT_KEYS) and not _warned_missing_amount:
+        _warned_missing_amount = True
+        logger.warning(f'Fila de Alegra sin monto ({"/".join(AMOUNT_KEYS)}); campos: {sorted(row)}')
+    return _field(row, AMOUNT_KEYS)
+
+
 def _clean_name(name) -> str:
     return re.sub(r'\s+', ' ', str(name or '')).strip()
 
@@ -80,9 +108,9 @@ def _pct(part, whole) -> Optional[float]:
 
 def normalize_client(row: Dict[str, Any]) -> Dict[str, Any]:
     documents = _num(row.get('totalDocuments'))
-    subtotal = _num(row.get('subTotal'))
-    discount = _num(row.get('discount'))
-    total = _num(row.get('afterTaxes'))
+    subtotal = _field(row, SUBTOTAL_KEYS)
+    discount = _field(row, DISCOUNT_KEYS)
+    total = row_amount(row)
     return {
         'id': str(row.get('idLocal') or ''),
         'name': _clean_name(row.get('clientName') or row.get('name')),
@@ -181,14 +209,14 @@ def build_summary(
     seller_blocks = []
     for row in seller_rows:
         seller_id = str(row.get('idLocal') or '')
-        total = _num(row.get('afterTaxes'))
+        total = row_amount(row)
         documents = _num(row.get('totalDocuments'))
         block = {
             'id': seller_id,
             'name': _clean_name(row.get('sellerName') or row.get('name')),
             'total': total,
             'documents': documents,
-            'discount': _num(row.get('discount')),
+            'discount': _field(row, DISCOUNT_KEYS),
             'identified_available': False,
         }
         rows = seller_client_rows.get(seller_id)
@@ -310,8 +338,8 @@ class CustomerInsightsService:
         except Exception as e:
             logger.warning(f'[{self.store}] Clientes de la vendedora {seller_id}: {e}')
             return None
-        expected = _num(seller_row.get('afterTaxes'))
-        got = sum(_num(r.get('afterTaxes')) for r in rows)
+        expected = row_amount(seller_row)
+        got = sum(row_amount(r) for r in rows)
         if abs(got - expected) > max(1, expected * 0.005):
             logger.warning(f'[{self.store}] Filtro por vendedora {seller_id} no cuadra '
                            f'(esperado {expected}, recibido {got}); se omite su % identificado')
@@ -347,6 +375,8 @@ class CustomerInsightsService:
                        for r in active_sellers}
             seller_client_rows = {sid: f.result() for sid, f in futures.items()}
 
+        if client_rows:
+            logger.info(f'[{self.store}] Campos de sales-by-client en Alegra: {sorted(client_rows[0])}')
         data = build_summary(client_rows, seller_rows, sellers, seller_client_rows, history_ids, top_limit)
         data['history_since'] = HISTORY_START.isoformat()
         return data
