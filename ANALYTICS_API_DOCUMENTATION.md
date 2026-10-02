@@ -466,6 +466,7 @@ A diferencia de los endpoints 1-7 (que descargan las facturas día por día), es
 - `data.employees`: clientes que son vendedoras (misma cédula o todos los nombres de la vendedora en el del cliente). **Siguen en los rankings** con `employee` lleno y además se resumen aquí.
 - `data.sellers`: por vendedora, venta y documentos. `identified_available` sale en `false`: /api/v1 no filtra sales-by-client por vendedora, así que el % identificado por vendedora no se calcula aquí (ver MEJORAS_PENDIENTES.md).
 - `data.discounts_available`: `false` con /api/v1, que no trae descuento ni cédula por cliente; los campos `discount` y `identification` llegan en 0 / vacío.
+- `data.source` (fase 4.3): `'facts'` cuando todos los días cerrados del periodo están en las facturas guardadas (`invoice_facts`, ver `/api/analytics/invoice-facts/*`): entonces sí trae % identificado por vendedora, descuentos (por cliente, vendedora y equipo), cédula y `data.discount_invoices` (50 facturas con más descuento). `'report'` si falta algún día: se usa el reporte agregado con sus límites.
 - `data.new_vs_returning`: clientes sin compras antes del periodo (historia desde 2015) vs recurrentes. `null` si no se pudo consultar la historia.
 
 **`GET /api/analytics/customers/inactive?days=90`**

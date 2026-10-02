@@ -22,12 +22,20 @@ LÍMITES de /api/v1 (verificado 2026-10-02 con las credenciales reales):
 sales-by-client solo trae idLocal, name, totalDocuments, subTotal y total.
 NO trae cédula ni descuento, y NO filtra por vendedora (sellerId, seller_id,
 idSeller... se ignoran). Por eso `discounts_available` sale en False y el %
-identificado por vendedora no se calcula aquí: necesita el detalle de las
-facturas (ver MEJORAS_PENDIENTES.md).
+identificado por vendedora no se calcula con ese reporte.
+
+FASE 4.3: si el periodo está completo en las facturas guardadas
+(InvoiceFact, ver app/services/invoice_facts.py), el resumen se calcula con
+ellas — días cerrados desde la base + las ventas de HOY en vivo — y trae lo
+que el reporte no da: cédula, descuento por cliente y por factura, y el %
+identificado por vendedora (`source = 'facts'`). Si falta algún día, se usa
+el reporte agregado como antes (`source = 'report'`). Clientes nuevos e
+inactivas siguen con el reporte: miran compras anteriores a 2026.
 """
 import logging
 import re
 import unicodedata
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
@@ -42,6 +50,7 @@ HISTORY_START = date(2015, 1, 1)
 INACTIVE_LOOKBACK_DAYS = 365
 INACTIVE_ENRICH_LIMIT = 50  # teléfono + última compra: una consulta por clienta
 NEW_CLIENTS_LIST_LIMIT = 10
+DISCOUNT_INVOICES_LIMIT = 50
 
 # Un rango ya cerrado casi no cambia; uno que incluye hoy, sí.
 CLOSED_RANGE_TTL = 12 * 3600
@@ -176,6 +185,62 @@ def contact_phone(contact: Dict[str, Any]) -> Optional[str]:
 
 
 # ─── Cálculos puros (sin red) ────────────────────────────────────────────────
+
+def _bump(rows: Dict[str, Dict[str, Any]], key: str, name, identification, fact: Dict[str, Any]):
+    row = rows.setdefault(key, {
+        'idLocal': key, 'name': name, 'identification': identification,
+        'totalDocuments': 0, 'subTotal': 0, 'discount': 0, 'total': 0,
+    })
+    row['totalDocuments'] += 1
+    row['subTotal'] += fact['subtotal']
+    row['discount'] += fact['discount']
+    row['total'] += fact['total']
+
+
+def aggregate_facts(facts: List[Dict[str, Any]]):
+    """
+    Facturas activas -> (filas por cliente, filas por vendedora, filas por
+    cliente de cada vendedora), con la misma forma que los reportes de Alegra
+    para reutilizar build_summary. Factura sin cliente = Consumidor final.
+    """
+    clients: Dict[str, Dict[str, Any]] = {}
+    sellers: Dict[str, Dict[str, Any]] = {}
+    by_seller: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    for f in facts:
+        if f.get('client_id'):
+            key, name, ident = f['client_id'], f.get('client_name'), f.get('client_identification')
+        else:
+            key, name, ident = '1', 'Consumidor final', ANONYMOUS_IDENTIFICATION
+        _bump(clients, key, name, ident, f)
+        if f.get('seller_id'):
+            _bump(sellers, f['seller_id'], f.get('seller_name'), None, f)
+            _bump(by_seller[f['seller_id']], key, name, ident, f)
+    return (list(clients.values()), list(sellers.values()),
+            {sid: list(rows.values()) for sid, rows in by_seller.items()})
+
+
+def discount_invoices(facts: List[Dict[str, Any]], sellers: List[Dict[str, Any]],
+                      limit: int = DISCOUNT_INVOICES_LIMIT) -> List[Dict[str, Any]]:
+    """Facturas con descuento, de mayor a menor descuento."""
+    rows = []
+    for f in sorted((f for f in facts if f['discount'] > 0), key=lambda f: f['discount'], reverse=True)[:limit]:
+        client = {'name': _clean_name(f.get('client_name') or 'Consumidor final'),
+                  'identification': str(f.get('client_identification') or '')}
+        seller = match_employee(client, sellers) if not is_anonymous(client) else None
+        rows.append({
+            'date': f['date'].isoformat() if hasattr(f['date'], 'isoformat') else str(f['date']),
+            'number': f.get('number'),
+            'client_id': f.get('client_id'),
+            'client_name': client['name'],
+            'seller_name': _clean_name(f.get('seller_name')) or None,
+            'subtotal': f['subtotal'],
+            'discount': f['discount'],
+            'discount_pct': _pct(f['discount'], f['subtotal']),
+            'total': f['total'],
+            'employee': {'seller_id': str(seller.get('id')), 'seller_name': _clean_name(seller.get('name'))} if seller else None,
+        })
+    return rows
+
 
 def _rank(clients, key, limit):
     return sorted(clients, key=key, reverse=True)[:limit]
@@ -313,10 +378,51 @@ def build_inactive(before_rows: List[Dict[str, Any]], recent_rows: List[Dict[str
 class CustomerInsightsService:
     """Arma el dashboard de clientes de UNA tienda."""
 
-    def __init__(self, client, store_code: str, today: date):
+    def __init__(self, client, store_code: str, today: date, invoices_client=None):
         self.client = client
         self.store = store_code
         self.today = today
+        # AlegraClient (facturas del día) para sumar las ventas de hoy a las guardadas.
+        self.invoices_client = invoices_client
+
+    def _stored_facts(self, start: date, end: date) -> Optional[List[Dict[str, Any]]]:
+        """
+        Facturas activas del rango desde InvoiceFact (+ las de hoy en vivo), o
+        None si falta algún día cerrado en la copia (entonces se usa el reporte).
+        Corre en el hilo del request (usa la base de datos).
+        """
+        from app.models.invoice_fact import InvoiceFact
+        from app.services.invoice_facts import invoice_to_fact, missing_days
+
+        closed_end = min(end, self.today - timedelta(days=1))
+        if closed_end >= start and missing_days(self.store, start, closed_end):
+            return None
+        includes_today = end >= self.today
+        if includes_today and self.invoices_client is None:
+            return None
+
+        facts = []
+        if closed_end >= start:
+            rows = InvoiceFact.query.filter(
+                InvoiceFact.store_code == self.store,
+                InvoiceFact.date >= start, InvoiceFact.date <= closed_end,
+                InvoiceFact.voided.is_(False),
+            ).all()
+            facts = [{
+                'date': r.date, 'number': r.number, 'client_id': r.client_id, 'client_name': r.client_name,
+                'client_identification': r.client_identification, 'seller_id': r.seller_id,
+                'seller_name': r.seller_name, 'subtotal': r.subtotal or 0, 'discount': r.discount or 0,
+                'total': r.total or 0,
+            } for r in rows]
+        if includes_today:
+            for invoice in self.invoices_client.get_invoices_by_date(self.today.isoformat()):
+                if invoice.get('id') is None:
+                    continue
+                fact = invoice_to_fact(invoice)
+                if not fact['voided']:
+                    fact['date'] = self.today
+                    facts.append(fact)
+        return facts
 
     def _ttl(self, end: date) -> float:
         return CLOSED_RANGE_TTL if end < self.today else OPEN_RANGE_TTL
@@ -336,14 +442,16 @@ class CustomerInsightsService:
 
     def summary(self, start: date, end: date, top_limit: int = 25) -> Dict[str, Any]:
         history_end = start - timedelta(days=1)
+        facts = self._stored_facts(start, end)  # base de datos: en el hilo del request
         with ThreadPoolExecutor(max_workers=4) as pool:
-            f_clients = pool.submit(self._clients, start, end)
-            f_seller_sales = pool.submit(self._seller_sales, start, end)
+            f_clients = pool.submit(self._clients, start, end) if facts is None else None
+            f_seller_sales = pool.submit(self._seller_sales, start, end) if facts is None else None
             f_sellers = pool.submit(self._sellers)
             f_history = pool.submit(self._clients, HISTORY_START, history_end) if history_end >= HISTORY_START else None
 
-            client_rows = f_clients.result()
-            seller_rows = f_seller_sales.result()
+            if facts is None:
+                client_rows = f_clients.result()
+                seller_rows = f_seller_sales.result()
             # Vendedoras e historia son complementos: si fallan, el resto sale igual.
             try:
                 sellers = f_sellers.result()
@@ -358,14 +466,18 @@ class CustomerInsightsService:
                     logger.warning(f'[{self.store}] No se pudo leer la historia de clientes: {e}')
                     history_ids = None
 
-
-        # /api/v1 no filtra sales-by-client por vendedora (ver arriba): no se
-        # pide, y cada vendedora sale con identified_available=False.
-        seller_client_rows = {}
-        if client_rows:
-            logger.info(f'[{self.store}] Campos de sales-by-client en Alegra: {sorted(client_rows[0])}')
+        if facts is not None:
+            client_rows, seller_rows, seller_client_rows = aggregate_facts(facts)
+        else:
+            # /api/v1 no filtra sales-by-client por vendedora (ver arriba): sin
+            # facturas guardadas, cada vendedora sale con identified_available=False.
+            seller_client_rows = {}
+            if client_rows:
+                logger.info(f'[{self.store}] Campos de sales-by-client en Alegra: {sorted(client_rows[0])}')
         data = build_summary(client_rows, seller_rows, sellers, seller_client_rows, history_ids, top_limit)
         data['history_since'] = HISTORY_START.isoformat()
+        data['source'] = 'facts' if facts is not None else 'report'
+        data['discount_invoices'] = discount_invoices(facts, sellers) if facts is not None else []
         return data
 
     def _contact_info(self, client_id: str) -> Dict[str, Any]:

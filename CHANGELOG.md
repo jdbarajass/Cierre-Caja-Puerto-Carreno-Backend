@@ -2,6 +2,20 @@
 
 ---
 
+## [2026-10-02] (continuación) - Fase 4.3: el dashboard de clientes usa las facturas guardadas
+
+Carga completa de Carreño verificada en producción: 274/274 días (1-ene a 1-oct), 3.093 facturas (2 anuladas), venta $380.986.649 = igual al peso al reporte de Alegra; 99,7 % con vendedora, 100 % con cédula, 107 facturas con descuento ($3.184.751).
+
+- `GET /api/analytics/customers/summary`: si **todos los días cerrados** del periodo están en `invoice_facts`, calcula con ellos (desde la base, sin consultar Alegra) **+ las ventas de hoy en vivo** (`AlegraClient.get_invoices_by_date(hoy)`), sin anuladas. Si falta algún día, usa el reporte agregado como antes. Campo nuevo `data.source`: `'facts'` o `'report'`.
+- Con facturas guardadas el resumen trae lo que el reporte no daba:
+  - **% de venta con cliente por vendedora** (`sellers[].identified_pct`, `identified_documents_pct`) y **descuentos dados** por cada una (`sellers[].discount`).
+  - **Descuento por cliente** (`discount`, `discount_pct`), ranking "Por descuento", total del periodo y del equipo (`discounts_available: true`).
+  - **Cédula** de cada cliente; el equipo se reconoce por cédula además de por nombre.
+  - Nuevo `data.discount_invoices`: las 50 facturas con más descuento (fecha, número, cliente, vendedora, subtotal, descuento, %, total, si es del equipo).
+- Factura sin cliente = Consumidor final. Clientes nuevos/recurrentes e inactivas siguen con el reporte (miran compras de 2025, fuera de la copia).
+- `CustomerInsightsService` recibe `invoices_client` (AlegraClient) para las ventas de hoy; nuevas funciones puras `aggregate_facts` y `discount_invoices`.
+- Tests: +3 (agrupación, resumen con facturas guardadas + hoy en vivo con % por vendedora/descuentos/cédula/equipo, y respaldo al reporte si falta un día). **92/92** (con el parche WMI local; repetir en el PC personal).
+
 ## [2026-10-02] (continuación) - Fase 4.2: corrección tras la prueba en producción
 
 **Prueba controlada (Carreño):** 1-ene = 0 facturas (Año Nuevo, sin ventas). Con la primera tanda: 24 días / 173 facturas; **con vendedora 98,8 %, con cédula 100 %, 10 facturas con descuento por $253.795** (igual al peso al descuento de enero que mostró el conector de Alegra). Confirmado: /api/v1/invoices trae vendedora, cédula y descuento → la fase 4.3 es viable.

@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request
 from app.exceptions import ConfigurationError
 from app.middlewares.auth import token_required, role_required
 from app.services.customer_insights import CustomerInsightsService, INACTIVE_LOOKBACK_DAYS
-from app.stores import get_alegra_direct_client, get_current_store
+from app.stores import get_alegra_client, get_alegra_direct_client, get_current_store
 from app.utils.timezone import get_colombia_now, get_colombia_timestamp
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,8 @@ def _parse_range(today: date):
 def _service(today):
     """(servicio, None) o (None, respuesta de error) si la tienda no tiene Alegra configurado."""
     try:
-        return CustomerInsightsService(get_alegra_direct_client(), get_current_store(), today), None
+        return CustomerInsightsService(get_alegra_direct_client(), get_current_store(), today,
+                                       invoices_client=get_alegra_client()), None
     except ConfigurationError as e:
         return None, _error(e.message, 503, 'alegra_not_configured')
 

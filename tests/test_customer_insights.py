@@ -342,3 +342,115 @@ def test_respuesta_real_de_api_v1():
         'id': '1', 'name': 'MONICA VARGAS', 'total': 201012695, 'documents': 1622,
         'discount': 0, 'identified_available': False,
     }
+
+
+# ─── Fase 4.3: resumen con las facturas guardadas ────────────────────────────
+
+def _inv(id_, day, total, client, seller, discount=0, status='closed'):
+    return {'id': id_, 'date': day, 'status': status, 'subtotal': total + discount, 'discount': discount,
+            'total': total, 'numberTemplate': {'fullNumber': f'KPC{id_}'},
+            'client': {'id': client[0], 'name': client[1], 'identification': client[2]} if client else None,
+            'seller': {'id': seller[0], 'name': seller[1]} if seller else None}
+
+
+CF = ('1', 'Consumidor final', '222222222222')
+HEIDY = ('353', 'Barrios Heidy', '20230261')
+RITA_CLIENT = ('821', 'INFANTE RITA', '17105692')
+MONICA = ('1', 'MONICA VARGAS')
+RITA = ('12', 'RITA INFANTE')
+
+
+class FakeInvoices:
+    def __init__(self, by_day):
+        self.by_day, self.calls = by_day, []
+
+    def get_invoices_by_date(self, day):
+        self.calls.append(day)
+        return self.by_day.get(day, [])
+
+
+class FakeDirect:
+    def __init__(self):
+        self.report_calls = []
+
+    def get_sellers(self):
+        return SELLERS
+
+    def get_sales_by_client(self, from_date, to_date, seller_id=None):
+        self.report_calls.append((from_date, to_date))
+        if from_date == ci.HISTORY_START.isoformat():
+            return [client_row('353', 'Barrios Heidy', '20230261', 3, 300_000)]
+        return PERIOD
+
+    def get_sales_by_seller(self, from_date, to_date):
+        return SELLER_SALES
+
+
+def test_aggregate_facts_agrupa_por_cliente_y_vendedora():
+    facts = [
+        {'client_id': None, 'client_name': None, 'client_identification': None, 'seller_id': '1',
+         'seller_name': 'MONICA', 'subtotal': 100, 'discount': 0, 'total': 100},
+        {'client_id': '353', 'client_name': 'Heidy', 'client_identification': '2023', 'seller_id': '1',
+         'seller_name': 'MONICA', 'subtotal': 60, 'discount': 10, 'total': 50},
+        {'client_id': '353', 'client_name': 'Heidy', 'client_identification': '2023', 'seller_id': None,
+         'seller_name': None, 'subtotal': 30, 'discount': 0, 'total': 30},
+    ]
+    clients, sellers, by_seller = ci.aggregate_facts(facts)
+    by_id = {c['idLocal']: c for c in clients}
+    assert by_id['1']['identification'] == ci.ANONYMOUS_IDENTIFICATION  # sin cliente = Consumidor final
+    assert by_id['353']['totalDocuments'] == 2 and by_id['353']['discount'] == 10 and by_id['353']['total'] == 80
+    assert sellers == [{'idLocal': '1', 'name': 'MONICA', 'identification': None, 'totalDocuments': 2,
+                        'subTotal': 160, 'discount': 10, 'total': 150}]
+    assert {c['idLocal'] for c in by_seller['1']} == {'1', '353'}
+
+
+def test_resumen_con_facturas_guardadas_mas_las_de_hoy(app):
+    from app.services import invoice_facts as facts_svc
+    d1, d2, today = date(2026, 1, 2), date(2026, 1, 3), date(2026, 1, 4)
+    with app.app_context():
+        stored = FakeInvoices({
+            d1.isoformat(): [_inv('1', '2026-01-02', 100_000, CF, MONICA),
+                             _inv('2', '2026-01-02', 90_000, HEIDY, MONICA, discount=10_000),
+                             _inv('3', '2026-01-02', 50_000, CF, RITA, status='void')],
+            d2.isoformat(): [_inv('4', '2026-01-03', 80_000, RITA_CLIENT, RITA, discount=20_000),
+                             _inv('5', '2026-01-03', 40_000, CF, None)],
+        })
+        facts_svc.sync_day(stored, 'carreno', d1)
+        facts_svc.sync_day(stored, 'carreno', d2)
+        live = FakeInvoices({today.isoformat(): [_inv('6', '2026-01-04', 60_000, CF, RITA)]})
+        direct = FakeDirect()
+        data = ci.CustomerInsightsService(direct, 'carreno', today, invoices_client=live).summary(d1, today)
+
+    assert data['source'] == 'facts'
+    assert live.calls == [today.isoformat()]                     # hoy en vivo
+    assert all(c[0] == ci.HISTORY_START.isoformat() for c in direct.report_calls)  # solo la historia
+    k = data['kpis']
+    assert k['total_sales'] == 100_000 + 90_000 + 80_000 + 40_000 + 60_000  # sin la anulada
+    assert k['total_documents'] == 5 and k['total_discount'] == 30_000
+    assert data['discounts_available'] is True
+
+    sellers = {s['id']: s for s in data['sellers']}
+    assert sellers['1']['identified_pct'] == round(90_000 * 100 / 190_000, 1)   # Mónica: Heidy sí, CF no
+    assert sellers['12']['identified_pct'] == round(80_000 * 100 / 140_000, 1)  # Rita: ella sí, CF de hoy no
+    assert sellers['12']['discount'] == 20_000
+    assert data['unassigned_sales'] == 40_000
+
+    heidy = next(c for c in data['top_by_amount'] if c['id'] == '353')
+    assert heidy['identification'] == '20230261' and heidy['discount'] == 10_000
+    rita = next(c for c in data['employees']['clients'] if c['id'] == '821')
+    assert rita['employee']['seller_name'] == 'RITA INFANTE' and rita['discount_pct'] == 20.0
+    assert data['new_vs_returning']['returning_clients'] == 1  # Heidy ya había comprado
+
+    assert [(r['number'], r['discount']) for r in data['discount_invoices']] == [('KPC4', 20_000), ('KPC2', 10_000)]
+    assert data['discount_invoices'][0]['employee']['seller_name'] == 'RITA INFANTE'
+
+
+def test_si_falta_un_dia_usa_el_reporte(app):
+    from app.services import invoice_facts as facts_svc
+    with app.app_context():
+        facts_svc.sync_day(FakeInvoices({}), 'carreno', date(2026, 1, 2))  # falta el 3
+        direct = FakeDirect()
+        data = ci.CustomerInsightsService(direct, 'carreno', date(2026, 1, 10),
+                                          invoices_client=FakeInvoices({})).summary(date(2026, 1, 2), date(2026, 1, 4))
+    assert data['source'] == 'report' and data['discount_invoices'] == []
+    assert ('2026-01-02', '2026-01-04') in direct.report_calls
