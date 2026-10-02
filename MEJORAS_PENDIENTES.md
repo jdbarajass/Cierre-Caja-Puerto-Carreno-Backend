@@ -80,6 +80,6 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 
 **Estado:** aprobada 2026-10-02, carga desde el 1-ene-2026.
 - [x] 4.1 Tablas `invoice_facts` / `invoice_sync_days` + servicio de carga (`app/services/invoice_facts.py`).
-- [ ] 4.2 Endpoint de carga inicial en tandas + cron diario de las 9 pm (re-cargar los últimos días).
+- [x] 4.2 Endpoints `invoice-facts/status` y `/sync` + paso en el cron de las 9 pm (últimos 3 días + 31 faltantes por noche) + panel "Facturas guardadas" en Clientes.
 - [ ] 4.3 El dashboard usa las facturas guardadas cuando el rango está completo.
 

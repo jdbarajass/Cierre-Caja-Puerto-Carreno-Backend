@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-02] (continuación) - Fase 4.2: carga del resumen de facturas (endpoints + cron)
+
+- **`app/routes/invoice_facts.py`** (tienda activa por `X-Store`):
+  - `GET /api/analytics/invoice-facts/status` (admin): días cargados desde el 1-ene-2026 hasta ayer, faltantes, siguiente día, facturas, y **calidad de los datos** (cuántas facturas activas traen vendedora, cédula y descuento; anuladas aparte). Sirve para verificar el formato real de Alegra antes de usar los datos en el dashboard.
+  - `POST /api/analytics/invoice-facts/sync` (admin **o** cron con `X-Sync-Token`): `recent_days` (0-7) vuelve a cargar los últimos días hasta hoy; `max_days` (0-31) carga la siguiente tanda de días faltantes, del más antiguo al más nuevo. Se detiene solo a los 150 s (gunicorn corta a 240 s) y devuelve hasta dónde llegó; si Alegra falla, responde 502 con lo cargado intacto. Tienda sin Alegra → 503 `alegra_not_configured`.
+- **`.github/workflows/daily-accounts-sync.yml`**: paso nuevo al final, por tienda: `{"recent_days": 3, "max_days": 31}`. Con `if: always()` + `continue-on-error: true`: corre aunque falle Cuentas y, si falla él, NO dispara la alerta de Cuentas (se recupera sola la noche siguiente). Con 31 días por noche, la carga desde enero se completa sola en ~9 noches; desde Clientes se puede adelantar.
+- `sync_range` acepta `deadline`; `coverage_status` calcula el estado.
+- Tests: +7 (tanda y continuación, cron con token y `X-Store` de otra tienda, permisos, validación, tienda sin Alegra, error de Alegra a mitad, límite de tiempo). **86/86.**
+- **Nota de entorno local (no del proyecto):** en esta máquina el servicio WMI de Windows dejó de responder y Python 3.14 (`platform._wmi_query`, llamado por SQLAlchemy y pytest-flask al importarse) se quedaba esperando para siempre: hasta `pytest --version` se colgaba. Las pruebas se corrieron con un parche local que omite WMI (no va al repo). Ver TROUBLESHOOTING.md.
+
 ## [2026-10-02] (continuación) - Fase 4.1: resumen de facturas por tienda (sin cambios visibles)
 
 Base para el % con cliente por vendedora, los descuentos y la cédula, que el reporte agregado de /api/v1 no entrega. Decisión del usuario: cargar desde el **1 de enero de 2026**.

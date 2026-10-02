@@ -58,3 +58,22 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"message": "El cron de sincronización diaria (9pm Colombia) falló después de 3 reintentos. Revisa Render y sincroniza manualmente desde Cuentas."}' \
             || echo "No se pudo reportar el fallo al sistema (revisar Render/DAILY_SYNC_TOKEN manualmente)"
+
+      # Dashboard de clientes (fase 4): guarda el resumen de las facturas de la
+      # tienda. Vuelve a cargar los últimos 3 días (recoge anulaciones y
+      # ediciones) y sigue la carga desde el 1-ene-2026 con hasta 31 días que
+      # falten. Va al final y con continue-on-error: si falla, NO marca el job
+      # como fallido (no dispara la alerta de Cuentas de arriba) y se recupera
+      # sola la noche siguiente. Primavera responde 503 hasta tener Alegra.
+      - name: Cargar resumen de facturas (${{ matrix.store }})
+        if: always()
+        continue-on-error: true
+        env:
+          SYNC_TOKEN: ${{ secrets.DAILY_SYNC_TOKEN }}
+        run: |
+          curl --fail --show-error --max-time 200 \
+            -X POST "https://cierre-caja-api.onrender.com/api/analytics/invoice-facts/sync" \
+            -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            -H "X-Store: ${{ matrix.store }}" \
+            -H "Content-Type: application/json" \
+            -d '{"recent_days": 3, "max_days": 31}'

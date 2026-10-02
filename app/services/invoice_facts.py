@@ -15,8 +15,11 @@ Reglas:
     llegó; se puede volver a llamar y sigue con los días que falten.
 """
 import logging
+import time
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
+
+from sqlalchemy import func
 
 from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay
 from app.models.user import db
@@ -120,18 +123,58 @@ def missing_days(store_code: str, start: date, end: date) -> List[date]:
     return [d for d in _days(start, end) if d not in loaded]
 
 
-def sync_range(alegra_client, store_code: str, days: List[date]) -> Dict[str, Any]:
+def sync_range(alegra_client, store_code: str, days: List[date],
+               deadline: Optional[float] = None) -> Dict[str, Any]:
     """
-    Carga los días indicados en orden. Se detiene en el primer error y
-    devuelve lo que alcanzó a cargar, para continuar en otra llamada.
+    Carga los días indicados en orden. Se detiene en el primer error, o al
+    pasar `deadline` (time.monotonic()), y devuelve lo que alcanzó a cargar
+    para continuar en otra llamada.
     """
     synced, invoices = [], 0
     for day in days:
+        if deadline is not None and time.monotonic() >= deadline:
+            return {'synced_days': synced, 'invoices': invoices, 'failed_day': None,
+                    'error': None, 'stopped_by_time': True}
         try:
             invoices += sync_day(alegra_client, store_code, day)
             synced.append(day.isoformat())
         except Exception as e:
             logger.error(f'[{store_code}] Carga de facturas del {day}: {e}', exc_info=True)
             return {'synced_days': synced, 'invoices': invoices, 'failed_day': day.isoformat(),
-                    'error': getattr(e, 'message', None) or str(e) or e.__class__.__name__}
-    return {'synced_days': synced, 'invoices': invoices, 'failed_day': None, 'error': None}
+                    'error': getattr(e, 'message', None) or str(e) or e.__class__.__name__,
+                    'stopped_by_time': False}
+    return {'synced_days': synced, 'invoices': invoices, 'failed_day': None, 'error': None,
+            'stopped_by_time': False}
+
+
+def coverage_status(store_code: str, start: date, end: date) -> Dict[str, Any]:
+    """
+    Cuánto del rango está cargado y qué tan completos vienen los datos de
+    Alegra (sirve para verificar que las facturas traen vendedora, cédula y
+    descuento).
+    """
+    total_days = (end - start).days + 1 if end >= start else 0
+    missing = missing_days(store_code, start, end) if total_days else []
+    facts = InvoiceFact.query.filter(
+        InvoiceFact.store_code == store_code, InvoiceFact.date >= start, InvoiceFact.date <= end)
+    active = facts.filter(InvoiceFact.voided.is_(False))
+    last_sync = InvoiceSyncDay.query.filter(InvoiceSyncDay.store_code == store_code)         .with_entities(func.max(InvoiceSyncDay.synced_at)).scalar()
+    return {
+        'start': start.isoformat(),
+        'end': end.isoformat(),
+        'total_days': total_days,
+        'loaded_days': total_days - len(missing),
+        'missing_days': len(missing),
+        'next_missing_day': missing[0].isoformat() if missing else None,
+        'last_synced_at': last_sync.isoformat() + 'Z' if last_sync else None,
+        'invoices': facts.count(),
+        'quality': {
+            'active_invoices': active.count(),
+            'voided_invoices': facts.filter(InvoiceFact.voided.is_(True)).count(),
+            'with_seller': active.filter(InvoiceFact.seller_id.isnot(None)).count(),
+            'with_identification': active.filter(InvoiceFact.client_identification.isnot(None)).count(),
+            'with_discount': active.filter(InvoiceFact.discount > 0).count(),
+            'total': int(active.with_entities(func.coalesce(func.sum(InvoiceFact.total), 0)).scalar() or 0),
+            'discount': int(active.with_entities(func.coalesce(func.sum(InvoiceFact.discount), 0)).scalar() or 0),
+        },
+    }

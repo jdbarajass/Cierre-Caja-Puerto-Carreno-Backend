@@ -139,5 +139,133 @@ def test_rango_se_detiene_en_el_primer_error_y_se_puede_continuar(app):
     alegra.by_day[D2.isoformat()] = []  # día sin ventas
     result = svc.sync_range(alegra, 'carreno', svc.missing_days('carreno', D1, D3))
     assert result == {'synced_days': [D2.isoformat(), D3.isoformat()], 'invoices': 1,
-                      'failed_day': None, 'error': None}
+                      'failed_day': None, 'error': None, 'stopped_by_time': False}
     assert svc.missing_days('carreno', D1, D3) == []
+
+
+def test_rango_se_detiene_al_llegar_al_limite_de_tiempo(app):
+    alegra = FakeAlegra({})
+    result = svc.sync_range(alegra, 'carreno', [D1, D2], deadline=0)  # ya vencido
+    assert result['stopped_by_time'] is True and result['synced_days'] == [] and alegra.calls == []
+
+
+def test_estado_de_la_carga_y_calidad_de_los_datos(app):
+    alegra = FakeAlegra({D1.isoformat(): [
+        invoice('1', D1.isoformat(), 90000, discount=10000),
+        invoice('2', D1.isoformat(), 50000, client=('1', 'Consumidor final', None), seller=None),
+        invoice('3', D1.isoformat(), 70000, status='void'),
+    ]})
+    svc.sync_day(alegra, 'carreno', D1)
+    status = svc.coverage_status('carreno', D1, D3)
+    assert status['total_days'] == 3 and status['loaded_days'] == 1 and status['missing_days'] == 2
+    assert status['next_missing_day'] == D2.isoformat() and status['invoices'] == 3
+    assert status['quality'] == {
+        'active_invoices': 2, 'voided_invoices': 1, 'with_seller': 1, 'with_identification': 1,
+        'with_discount': 1, 'total': 140000, 'discount': 10000,
+    }
+    assert svc.coverage_status('primavera', D1, D3)['loaded_days'] == 0
+
+
+# ─── Endpoints ───────────────────────────────────────────────────────────────
+
+from app.config import Config  # noqa: E402
+from app.routes import invoice_facts as routes  # noqa: E402
+from app.services.alegra_client import AlegraClient  # noqa: E402
+
+
+@pytest.fixture
+def api(tmp_path, monkeypatch):
+    monkeypatch.setenv('ALEGRA_USER_CARRENO', 'carreno@test.com')
+    monkeypatch.setenv('ALEGRA_PASS_CARRENO', 'tok-carreno')
+    monkeypatch.delenv('ALEGRA_USER_PRIMAVERA', raising=False)
+    monkeypatch.delenv('ALEGRA_PASS_PRIMAVERA', raising=False)
+    monkeypatch.setattr(Config, 'DAILY_SYNC_TOKEN', 'cron-secret')
+    calls = []
+
+    def fake_invoices(self, day):
+        calls.append((self.username, day))
+        return [invoice(f'{day}-1', day, 10000)]
+
+    monkeypatch.setattr(AlegraClient, 'get_invoices_by_date', fake_invoices)
+
+    class ApiTestConfig(TestingConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{(tmp_path / 'facts_api.db').as_posix()}"
+        SQLALCHEMY_ENGINE_OPTIONS = {}
+
+    from app import create_app
+    application = create_app(ApiTestConfig)
+    return application, application.test_client(), calls
+
+
+def _auth(app, role='admin', store=None):
+    from app.services.jwt_service import JWTService
+    with app.app_context():
+        token = JWTService.generate_token(1, f'{role}@test.com', role, None)
+    return {'Authorization': f'Bearer {token}', **({'X-Store': store} if store else {})}
+
+
+def test_sync_carga_la_siguiente_tanda_desde_enero(api):
+    app, client, calls = api
+    res = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 3}, headers=_auth(app))
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['backfill']['synced_days'] == ['2026-01-01', '2026-01-02', '2026-01-03']
+    assert body['status']['loaded_days'] == 3 and body['status']['next_missing_day'] == '2026-01-04'
+
+    # La siguiente llamada sigue donde quedó
+    body = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 2}, headers=_auth(app)).get_json()
+    assert body['backfill']['synced_days'] == ['2026-01-04', '2026-01-05']
+
+    status = client.get('/api/analytics/invoice-facts/status', headers=_auth(app)).get_json()['data']
+    assert status['loaded_days'] == 5 and status['invoices'] == 5 and status['quality']['with_seller'] == 5
+
+
+def test_cron_con_token_recarga_los_dias_recientes_de_su_tienda(api, monkeypatch):
+    app, client, calls = api
+    monkeypatch.setenv('ALEGRA_USER_PRIMAVERA', 'primavera@test.com')
+    monkeypatch.setenv('ALEGRA_PASS_PRIMAVERA', 'tok-primavera')
+    headers = {'X-Sync-Token': 'cron-secret', 'X-Store': 'primavera'}
+    res = client.post('/api/analytics/invoice-facts/sync', json={'recent_days': 3, 'max_days': 0}, headers=headers)
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['store'] == 'primavera' and len(body['recent']['synced_days']) == 3
+    assert body['backfill']['synced_days'] == []
+    assert {u for u, _ in calls} == {'primavera@test.com'}
+    with app.app_context():
+        assert InvoiceFact.query.filter_by(store_code='carreno').count() == 0
+
+    # Token equivocado: pide JWT admin
+    bad = client.post('/api/analytics/invoice-facts/sync', json={}, headers={'X-Sync-Token': 'otro'})
+    assert bad.status_code == 401
+
+
+def test_sync_validaciones_permisos_y_tienda_sin_alegra(api):
+    app, client, _ = api
+    assert client.post('/api/analytics/invoice-facts/sync', json={}, headers=_auth(app, 'sales')).status_code == 403
+    assert client.get('/api/analytics/invoice-facts/status', headers=_auth(app, 'sales')).status_code == 403
+    assert client.post('/api/analytics/invoice-facts/sync', json={'max_days': 99},
+                       headers=_auth(app)).status_code == 400
+    res = client.post('/api/analytics/invoice-facts/sync', json={}, headers=_auth(app, store='primavera'))
+    assert res.status_code == 503 and res.get_json()['code'] == 'alegra_not_configured'
+
+
+def test_sync_reporta_error_de_alegra_sin_perder_lo_cargado(api, monkeypatch):
+    app, client, _ = api
+    client.post('/api/analytics/invoice-facts/sync', json={'max_days': 2}, headers=_auth(app))
+
+    def broken(self, day):
+        raise AlegraConnectionError('Alegra caído')
+
+    monkeypatch.setattr(AlegraClient, 'get_invoices_by_date', broken)
+    res = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 5}, headers=_auth(app))
+    assert res.status_code == 502
+    body = res.get_json()
+    assert body['message'] == 'Alegra caído' and body['backfill']['failed_day'] == '2026-01-03'
+    assert body['status']['loaded_days'] == 2
+
+
+def test_sync_respeta_el_limite_de_tiempo(api, monkeypatch):
+    app, client, _ = api
+    monkeypatch.setattr(routes, 'TIME_BUDGET_SECONDS', 0)
+    body = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 5}, headers=_auth(app)).get_json()
+    assert body['backfill']['stopped_by_time'] is True and body['backfill']['synced_days'] == []

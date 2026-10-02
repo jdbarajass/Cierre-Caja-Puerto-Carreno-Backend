@@ -352,3 +352,16 @@ Si continúas teniendo problemas después de seguir esta guía:
 
 **Última actualización:** 2025-11-28
 **Versión del documento:** 1.0.0
+
+## Python / pytest se cuelgan al arrancar (Windows, WMI)
+
+**Síntoma (2026-10-02):** `pytest`, incluso `pytest --version`, o cualquier script que importe la app se queda esperando sin mostrar nada.
+
+**Causa:** el servicio WMI de Windows (`winmgmt`) no responde. Desde Python 3.12, `platform.uname()` / `platform.machine()` / `platform.system()` consultan WMI (`platform._wmi_query`) y se quedan esperando para siempre. SQLAlchemy (`sqlalchemy/util/compat.py`) y el plugin `pytest-flask` (`live_server.py`) llaman a `platform` al importarse. No es un problema del código del proyecto.
+
+**Cómo confirmarlo:** con `faulthandler.dump_traceback_later(30, file=open('trace.log','w'))` antes de importar; el rastreo termina en `platform.py ... _wmi_query`.
+
+**Solución:**
+- Lo correcto: reiniciar el servicio "Instrumental de administración de Windows" (WMI) o reiniciar el computador.
+- Mientras tanto, para correr las pruebas: un script local que antes de importar pytest haga `platform._wmi_query = lambda *a, **k: (_ for _ in ()).throw(OSError())` (Python usa `sys.getwindowsversion()` como respaldo) y luego `pytest.main([...])`. No se agrega al repo porque Render (Linux) no tiene este problema.
+
