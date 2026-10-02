@@ -27,6 +27,15 @@ from app.utils.timezone import get_colombia_today_string
 
 logger = logging.getLogger(__name__)
 
+
+def _report_failed_days(days: List[str]) -> None:
+    """Anota en el request los días que Alegra no entregó (sale en el header
+    X-Alegra-Failed-Days, ver app/__init__.py). Fuera de un request (hilos del
+    comparativo de tiendas, cron) no hace nada: ahí se usa last_failed_days."""
+    from flask import g, has_request_context
+    if has_request_context():
+        g.alegra_failed_days = set(getattr(g, 'alegra_failed_days', set())) | set(days)
+
 # Caché compartida entre todas las instancias del cliente (se crea una por request).
 # Solo se usa para fechas PASADAS: las facturas de un día que ya cerró no cambian,
 # mientras que las del día en curso siguen llegando y nunca deben servirse desde caché.
@@ -90,6 +99,8 @@ class AlegraClient:
         self.session.mount("http://", adapter)
 
         logger.info(f"Cliente Alegra inicializado para usuario: {username}")
+
+    last_failed_days: List[str] = []  # días que falló el último get_all_invoices_in_range
 
     def _invoices_cache_key(self, date) -> str:
         return f"{self.username}|{date}"
@@ -613,6 +624,7 @@ class AlegraClient:
         print(f"[DEBUG CONSOLE] Iniciando consulta día por día desde {start_date} hasta {end_date}")
 
         all_invoices = []
+        failed_days = []
         current_date = start_dt
         days_processed = 0
 
@@ -632,14 +644,20 @@ class AlegraClient:
                     logger.info(f"  0 facturas para {date_str}")
 
             except Exception as e:
+                # get_invoices_by_date ya reintentó y nunca devuelve medio día:
+                # el día queda fuera completo y se reporta (antes, en silencio).
                 logger.error(f"Error consultando facturas para {date_str}: {str(e)}")
-                # Continuar con el siguiente día en caso de error
+                failed_days.append(date_str)
 
             # Avanzar al siguiente día
             current_date += timedelta(days=1)
             days_processed += 1
 
         logger.info(f"[OK] Consulta completa finalizada. {days_processed} días procesados. Total de facturas: {len(all_invoices)}")
+        self.last_failed_days = failed_days
+        if failed_days:
+            logger.warning(f"Días sin datos de Alegra: {failed_days}")
+            _report_failed_days(failed_days)
         return all_invoices
 
     def get_monthly_sales_summary(

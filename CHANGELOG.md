@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-02] (continuación) - Estadísticas, Fase B + días faltantes en Productos/Analytics
+
+- **`AlegraClient.get_all_invoices_in_range`** (Análisis de Productos, Analytics, Ventas Mensuales, metas YoY, Comparativo de tiendas) ya no salta días con error en silencio: los guarda en `client.last_failed_days` y, dentro de un request, en `g.alegra_failed_days`. `after_request` los manda en el header **`X-Alegra-Failed-Days`** (fechas separadas por coma, expuesto por CORS) y el frontend muestra un aviso en cualquier pantalla. `get_invoices_by_date` ya reintenta (urllib3) y nunca devuelve medio día, así que el día queda fuera completo.
+- **Comparativo de tiendas**: cada tienda trae `sales.failed_days` (corre en hilos, sin request: usa `last_failed_days`).
+- El resto de la Fase B (fechas, medios de pago reales, ingresos con descuento, hora en iPhone, paginación de Documentos, no reintentar por $0) es solo frontend: ver su CHANGELOG.
+- Tests: `tests/test_estadisticas_fase_b.py` (+5: rango con día fallido, header en Analytics y Productos con CORS, sin header si no hay fallos, comparativo). **111/111**.
+- Revisado en el navegador con backend local + Alegra simulado (un día con 503): aviso en Analytics y "Incompleto" en el Comparativo.
+
 ## [2026-10-02] (continuación) - Estadísticas, Fase A: errores que cambiaban números
 
 Plan: `docs/PLAN_ESTADISTICAS.md`. Antes de cambiar código se verificó contra Alegra con el conector (solo lectura): factura de `/invoices` trae `seller` como objeto `{id, name, ...}`, anuladas con `status: "void"`, `items[].discount` en **porcentaje** y `items[].total` con el descuento ya aplicado (sin IVA). En 2026 hay solo 2 anuladas (24-feb $379.900 y 19-mar $36.900) y 0 notas crédito; 1.608 productos activos.

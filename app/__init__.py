@@ -110,7 +110,8 @@ def create_app(config_class=Config):
                 "Content-Type",
                 "X-Total-Count",
                 "X-Page",
-                "X-Per-Page"
+                "X-Per-Page",
+                "X-Alegra-Failed-Days"
             ],
             "supports_credentials": True,  # Cambiado a True para cookies/auth
             "max_age": 3600
@@ -141,6 +142,11 @@ def create_app(config_class=Config):
     def after_request(response):
         """Agregar headers CORS a todas las respuestas como medida de seguridad"""
         response.headers['X-Request-Id'] = getattr(g, 'request_id', '')
+        # Días que Alegra no entregó al armar esta respuesta (ver
+        # AlegraClient.get_all_invoices_in_range): el frontend muestra un aviso.
+        failed_days = getattr(g, 'alegra_failed_days', None)
+        if failed_days:
+            response.headers['X-Alegra-Failed-Days'] = ','.join(sorted(failed_days))
         origin = request.headers.get('Origin')
 
         # Si el origen está en la lista permitida, agregarlo
@@ -149,7 +155,7 @@ def create_app(config_class=Config):
             response.headers['Access-Control-Allow-Credentials'] = 'true'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With, X-HTTP-Method-Override, Accept-Language, Cache-Control, X-Store'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count, X-Page, X-Per-Page'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count, X-Page, X-Per-Page, X-Alegra-Failed-Days'
             response.headers['Access-Control-Max-Age'] = '3600'
 
         return response

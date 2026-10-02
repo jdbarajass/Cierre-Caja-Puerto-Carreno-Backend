@@ -85,6 +85,8 @@ def _sales_metrics(client, start, end):
             for key, data in summary['payment_methods'].items()
         },
         'daily': [{'date': d.isoformat(), 'total': int(by_day.get(d.isoformat(), 0))} for d in days],
+        # Días que Alegra no entregó: el total de esta tienda está incompleto
+        'failed_days': list(getattr(client, 'last_failed_days', []) or []),
     }
 
 

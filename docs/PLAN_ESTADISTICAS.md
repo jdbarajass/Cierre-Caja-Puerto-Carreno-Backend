@@ -1,6 +1,6 @@
 # Plan: revisión y arreglos de la sección Estadísticas
 
-Estado al 2026-10-02. Auditoría inicial solo de lectura del código; luego verificado con el conector de Alegra. **Fase A hecha** (errores 1-6, ver CHANGELOG). Las fases se hacen en orden, cada una con aprobación del usuario.
+Estado al 2026-10-02. Auditoría inicial solo de lectura del código; luego verificado con el conector de Alegra. **Fases A y B hechas** (errores 1-11 y los 2 pendientes que salieron en la A, ver CHANGELOG). Las fases se hacen en orden, cada una con aprobación del usuario.
 
 Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Venta, Analytics Avanzado, Análisis de Productos, Análisis de Inventario. (Clientes y Comparativo de tiendas son nuevos y ya fueron revisados en producción: ver CHANGELOG.)
 
@@ -14,11 +14,11 @@ Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Vent
 | ✅ 4 | Totales / Documentos / Productos | Suman **facturas anuladas** (`status: void`). Cierre de caja y Analytics sí las filtran (`app/utils/formatters.py::filter_voided_invoices`). | Front: `DirectSalesTotals.jsx`, `DirectSalesDocuments.jsx`. Back: `app/routes/products.py` + `app/services/product_analytics.py` |
 | ✅ 5 | Analytics → Retención | `if recency > 90 ... elif recency > 180` → "Inactivo" nunca se asigna. "Nuevo" = 1 compra en el rango (no primera vez en la tienda). | Back: `app/services/sales_analytics.py::get_customer_retention_analysis` |
 | ✅ 6 | Analytics → Top clientes | No excluye "Consumidor final" (client id 1 / NIT 222222222222): sale #1 con ~45 %. | Back: `sales_analytics.py::get_top_customers_analysis` |
-| 7 | Totales de Ventas | Fecha inicial por defecto `new Date(); setDate(1); toISOString()` → después de las 7 pm (Colombia) sale el día 2. | Front: `DirectSalesTotals.jsx` (estados `quickFromDate`, `monthlyFromDate`) |
-| 8 | Totales de Ventas | Ingresos por producto = `quantity * price` (sin descuento). "Métodos de pago" usa `paymentMethod` crudo (ej. `DEBIT_TRANSFER`) y es el declarado en la factura, no los pagos reales (`payments[]`). | Front: `DirectSalesTotals.jsx` |
-| 9 | Documentos de Venta | Paginación falsa: el front no envía `limit/start` y el backend devuelve todo. | Front: `DirectSalesDocuments.jsx`, `src/services/directApiService.js::getSalesDocuments` |
-| 10 | Totales de Ventas | Probable: `new Date("YYYY-MM-DD HH:MM:SS")` es inválido en Safari/iPhone → análisis por hora vacío. | Front: `DirectSalesTotals.jsx` (ventas por hora) |
-| 11 | Totales de Ventas | Reintenta 3 veces (~24 s) cuando `total_sales === 0` (lo confunde con servidor dormido). | Front: `DirectSalesTotals.jsx::fetchQuickSummary` |
+| ✅ 7 | Totales de Ventas | Fecha inicial por defecto `new Date(); setDate(1); toISOString()` → después de las 7 pm (Colombia) sale el día 2. | Front: `DirectSalesTotals.jsx` (estados `quickFromDate`, `monthlyFromDate`) |
+| ✅ 8 | Totales de Ventas | Ingresos por producto = `quantity * price` (sin descuento). "Métodos de pago" usa `paymentMethod` crudo (ej. `DEBIT_TRANSFER`) y es el declarado en la factura, no los pagos reales (`payments[]`). | Front: `DirectSalesTotals.jsx` |
+| ✅ 9 | Documentos de Venta | Paginación falsa: el front no envía `limit/start` y el backend devuelve todo. | Front: `DirectSalesDocuments.jsx`, `src/services/directApiService.js::getSalesDocuments` |
+| ✅ 10 | Totales de Ventas | Probable: `new Date("YYYY-MM-DD HH:MM:SS")` es inválido en Safari/iPhone → análisis por hora vacío. | Front: `DirectSalesTotals.jsx` (ventas por hora) |
+| ✅ 11 | Totales de Ventas | Reintenta 3 veces (~24 s) cuando `total_sales === 0` (lo confunde con servidor dormido). | Front: `DirectSalesTotals.jsx::fetchQuickSummary` |
 
 ## Verificado con el conector (2026-10-02, solo lectura, Carreño)
 
@@ -39,7 +39,7 @@ Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Vent
 ## Fases
 
 - ✅ **Fase A — errores que cambian números (1-6)** (2026-10-02, sin push). Inventario con los datos completos (las pestañas reciben `data` o el backend pagina `get_active_items`); vendedores por `seller.id`/`seller.name`; no saltar días en silencio (reintentar y/o devolver `failed_days` y avisar); quitar anuladas donde falta; corregir Retención (orden de condiciones; "nuevo" = primera compra registrada, o renombrar); excluir Consumidor final del Top clientes viejo.
-- **Fase B — menores (7-11).** Fechas sin `toISOString` (usar `getColombiaTodayString`), ingresos con descuento, etiquetas de medios de pago (y, si se puede, pagos reales), paginación real o quitarla, parseo de hora compatible con Safari, no reintentar por $0.
+- ✅ **Fase B — menores (7-11)** (2026-10-02, sin push). Además: Productos/Analytics/Ventas Mensuales/Comparativo avisan los días que Alegra no entregó (header `X-Alegra-Failed-Days`), e Inventario con archivo muestra el análisis del archivo. Fechas sin `toISOString` (usar `getColombiaTodayString`), ingresos con descuento, etiquetas de medios de pago (y, si se puede, pagos reales), paginación real o quitarla, parseo de hora compatible con Safari, no reintentar por $0.
 - **Fase C — opcional.** Guardar las prendas de cada factura (como `invoice_facts`, por tienda) para calcular sin descargas día por día: unidades por factura, precio promedio por prenda, más vendidos agotados, curva de tallas venta vs. stock, rotación/días de inventario, devoluciones, margen por categoría (cuando se corrijan los costos en Alegra).
 
 ## Reglas para quien continúe
