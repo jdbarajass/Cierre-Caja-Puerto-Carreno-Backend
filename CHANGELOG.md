@@ -2,6 +2,20 @@
 
 ---
 
+## [2026-10-02] (continuación) - Clientes: límites reales de /api/v1
+
+Prueba con las credenciales reales (script de solo lectura, ya borrado):
+- `/api/v1/reports/sales-by-client` trae **solo** `idLocal`, `name`, `totalDocuments`, `subTotal`, `total`. **No trae cédula ni descuento** (`subTotal` = `total`).
+- `sales-by-seller` trae `idLocal`, `name`, `total`, `subTotal`, `totalPayed`, `totalDocuments`.
+- **No filtra por vendedora**: `sellerId`, `seller_id`, `idSeller`, `seller`, `sellers`, `id_seller` y `sellerIds` devuelven los 1.110 clientes de toda la tienda.
+
+Cambios:
+- Se dejaron de pedir las 3 consultas por vendedora (no servían y alargaban la carga). Las vendedoras salen con `identified_available: false`.
+- Nuevo `discounts_available` en el resumen: `false` cuando Alegra no manda el campo de descuento (así el frontend no muestra $0 como si fuera real).
+- Las vendedoras-clientas se siguen reconociendo por nombre (Mónica y Rita, verificado en producción); por cédula no se puede porque v1 no la trae.
+- Tests ajustados + uno con la respuesta real de v1. **72/72.**
+- Propuesta para lo que falta (% por vendedora, descuentos, cédula): `MEJORAS_PENDIENTES.md` → "Dashboard de clientes: detalle de facturas".
+
 ## [2026-10-02] Fix: dashboard de clientes mostraba todos los montos en $0
 
 - **Visto en producción** (fase 3): las compras salían bien pero todos los montos en $0, y la página decía "Todavía no hay ventas".

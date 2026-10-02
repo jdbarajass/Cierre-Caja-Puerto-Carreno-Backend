@@ -17,6 +17,13 @@ Indicadores:
 
 Todo es por tienda: el cliente de Alegra ya viene con las credenciales de
 la tienda del request y la caché lleva la tienda en la clave.
+
+LÍMITES de /api/v1 (verificado 2026-10-02 con las credenciales reales):
+sales-by-client solo trae idLocal, name, totalDocuments, subTotal y total.
+NO trae cédula ni descuento, y NO filtra por vendedora (sellerId, seller_id,
+idSeller... se ignoran). Por eso `discounts_available` sale en False y el %
+identificado por vendedora no se calcula aquí: necesita el detalle de las
+facturas (ver MEJORAS_PENDIENTES.md).
 """
 import logging
 import re
@@ -189,6 +196,8 @@ def build_summary(
     con compras ANTES del periodo (None si no se pudo consultar).
     """
     clients = [normalize_client(r) for r in client_rows]
+    # /api/v1 no trae descuento: sin el campo, los $0 no son reales.
+    discounts_available = any(any(r.get(k) is not None for k in DISCOUNT_KEYS) for r in client_rows)
     anonymous = [c for c in clients if is_anonymous(c)]
     identified = [c for c in clients if not is_anonymous(c)]
 
@@ -278,6 +287,7 @@ def build_summary(
         },
         'sellers': seller_blocks,
         'unassigned_sales': unassigned_sales if unassigned_sales > 0 else 0,
+        'discounts_available': discounts_available,
         'new_vs_returning': new_vs_returning,
     }
 
@@ -324,28 +334,6 @@ class CustomerInsightsService:
     def _sellers(self):
         return _cached(f'{self.store}:sellers', CONTACT_TTL, self.client.get_sellers)
 
-    def _seller_clients_checked(self, start, end, seller_row) -> Optional[List[Dict[str, Any]]]:
-        """
-        sales-by-client filtrado por vendedora, solo si el filtro funcionó: la
-        suma debe dar la venta de la vendedora (si Alegra ignorara el filtro
-        devolvería la de toda la tienda y el % saldría mal sin avisar).
-        """
-        seller_id = str(seller_row.get('idLocal') or '')
-        if not seller_id:
-            return None
-        try:
-            rows = self._clients(start, end, seller_id)
-        except Exception as e:
-            logger.warning(f'[{self.store}] Clientes de la vendedora {seller_id}: {e}')
-            return None
-        expected = row_amount(seller_row)
-        got = sum(row_amount(r) for r in rows)
-        if abs(got - expected) > max(1, expected * 0.005):
-            logger.warning(f'[{self.store}] Filtro por vendedora {seller_id} no cuadra '
-                           f'(esperado {expected}, recibido {got}); se omite su % identificado')
-            return None
-        return rows
-
     def summary(self, start: date, end: date, top_limit: int = 25) -> Dict[str, Any]:
         history_end = start - timedelta(days=1)
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -370,11 +358,10 @@ class CustomerInsightsService:
                     logger.warning(f'[{self.store}] No se pudo leer la historia de clientes: {e}')
                     history_ids = None
 
-            active_sellers = [r for r in seller_rows if _num(r.get('totalDocuments')) > 0]
-            futures = {str(r.get('idLocal') or ''): pool.submit(self._seller_clients_checked, start, end, r)
-                       for r in active_sellers}
-            seller_client_rows = {sid: f.result() for sid, f in futures.items()}
 
+        # /api/v1 no filtra sales-by-client por vendedora (ver arriba): no se
+        # pide, y cada vendedora sale con identified_available=False.
+        seller_client_rows = {}
         if client_rows:
             logger.info(f'[{self.store}] Campos de sales-by-client en Alegra: {sorted(client_rows[0])}')
         data = build_summary(client_rows, seller_rows, sellers, seller_client_rows, history_ids, top_limit)

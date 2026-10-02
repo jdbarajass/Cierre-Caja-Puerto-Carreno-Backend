@@ -670,10 +670,11 @@ class AlegraDirectClient:
 
     def get_sales_by_client(self, from_date: str, to_date: str, seller_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Ventas agregadas por cliente en el rango (una fila por cliente):
-        idLocal (= id del contacto), clientName, identification,
-        totalDocuments, subTotal, discount, creditNote, afterTaxes...
-        seller_id filtra a los documentos de una vendedora.
+        Ventas agregadas por cliente en el rango (una fila por cliente).
+        En /api/v1 (verificado 2026-10-02) cada fila trae SOLO idLocal (= id
+        del contacto), name, totalDocuments, subTotal y total: sin cédula ni
+        descuento. seller_id se manda como `sellerId`, pero v1 lo IGNORA
+        (devuelve toda la tienda); solo sirve contra reports-api v2.
         """
         params = {'from': from_date, 'to': to_date, 'creditNoteFilter': 'creditNote'}
         if seller_id:

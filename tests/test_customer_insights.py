@@ -164,12 +164,12 @@ def test_summary_endpoint(client, app, fake_alegra):
     assert body['store'] == 'carreno'
     assert body['data']['kpis']['identified_pct'] == 50.0
     assert body['data']['new_vs_returning']['returning_clients'] == 1
-    # Una consulta por periodo, una por historia y una por vendedora con ventas
-    assert sorted(c[4] or '' for c in fake_alegra) == ['', '', '1', '12']
+    # Una consulta por periodo y una por historia (v1 no filtra por vendedora: no se pide)
+    assert len(fake_alegra) == 2 and all(c[4] is None for c in fake_alegra)
 
     # Segunda vez: sale de caché
     client.get('/api/analytics/customers/summary?start_date=2026-01-01&end_date=2026-09-30', headers=_headers(app))
-    assert len(fake_alegra) == 4
+    assert len(fake_alegra) == 2
 
 
 def test_summary_permisos_y_validacion(client, app, fake_alegra):
@@ -316,10 +316,29 @@ def test_formato_de_api_v1_con_total_en_vez_de_afterTaxes():
     assert data['top_by_amount'][0]['total'] == 400_000
     assert {s['id']: s['identified_pct'] for s in data['sellers']} == {'1': 50.0, '12': 50.0}
 
-    # La validación del filtro por vendedora también lee `total`
-    service = ci.CustomerInsightsService(None, 'carreno', date(2026, 10, 1))
-    service._clients = lambda s, e, seller_id=None: by_seller[seller_id]
-    assert service._seller_clients_checked(date(2026, 1, 1), date(2026, 9, 30), sellers_sales[0]) is not None
 
     # Un 0 real en `afterTaxes` no debe caer al otro campo
     assert ci.row_amount({'afterTaxes': 0, 'total': 999}) == 0
+
+
+def test_respuesta_real_de_api_v1():
+    """Filas copiadas de la respuesta real de /api/v1 (2026-10-02): sin cédula ni descuento."""
+    period = [
+        {'idLocal': '1', 'name': 'Consumidor final', 'totalDocuments': 1486, 'subTotal': 170175819, 'total': 170175819},
+        {'idLocal': '353', 'name': 'Barrios Heidy', 'totalDocuments': 14, 'subTotal': 2459900, 'total': 2459900},
+        {'idLocal': '4', 'name': 'MONICA  ALEJANDRA VARGAS ', 'totalDocuments': 13, 'subTotal': 1311470, 'total': 1311470},
+    ]
+    sellers_sales = [
+        {'idLocal': '1', 'name': 'MONICA VARGAS', 'totalPayed': 201012695, 'subTotal': 201012695,
+         'total': 201012695, 'totalDocuments': 1622, 'decimalPrecision': 0},
+    ]
+    data = ci.build_summary(period, sellers_sales, SELLERS, {}, set())
+    assert data['kpis']['total_sales'] == 170175819 + 2459900 + 1311470
+    assert data['anonymous']['documents'] == 1486
+    assert data['discounts_available'] is False
+    assert data['top_by_amount'][0]['identification'] == ''
+    assert data['top_by_amount'][1]['employee']['seller_name'] == 'MONICA VARGAS'  # por nombre
+    assert data['sellers'][0] == {
+        'id': '1', 'name': 'MONICA VARGAS', 'total': 201012695, 'documents': 1622,
+        'discount': 0, 'identified_available': False,
+    }

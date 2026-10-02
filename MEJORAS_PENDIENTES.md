@@ -65,3 +65,18 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 - Documento creado el 2026-08-24 a partir de la auditoría técnica y las mejoras ya implementadas el 2026-08-19 (ver [CHANGELOG.md](CHANGELOG.md))
 - Ítem 3 agregado el 2026-09-02 tras reproducir en producción un timeout de Gunicorn en "Consultar Inventario" durante una revisión de la sección Estadísticas
 - Ver también la lista de mejoras pendientes del frontend en `MEJORAS_PENDIENTES.md` del repo `Cierre-Caja-Puerto-Carreno-Frontend`
+
+---
+
+## Dashboard de clientes: detalle de facturas (propuesto 2026-10-02)
+
+**Problema:** el reporte agregado de Alegra que usa la plataforma (`/api/v1/reports/sales-by-client`) no trae cédula ni descuento y no filtra por vendedora. Faltan: % de venta con cliente **por vendedora** (la meta), descuentos por cliente y del equipo, y cédula.
+
+**Propuesta:** guardar en la base de datos (por tienda, `store_code`) un resumen de cada factura: fecha, número, cliente (id, nombre, cédula), vendedora, total, descuento, anulada. Una tabla nueva, por ejemplo `invoice_facts`.
+- **De dónde:** de las mismas facturas que la plataforma ya descarga día por día para el cierre de caja (`AlegraClient.get_invoices_by_date`, que traen `client`, `seller` y descuentos por ítem). No se agrega una fuente nueva.
+- **Cuándo:** al final del día, en el cron que ya existe por tienda (`daily-accounts-sync.yml`, 9 pm). Una carga inicial del año (~275 días por tienda, una sola vez, en tandas).
+- **Qué se gana:** % identificado por vendedora y por mes, descuentos reales por cliente y del equipo, fecha exacta de última compra sin consultar contacto por contacto, y una base propia para los siguientes reportes (por ítem, por talla, por hora).
+- **Riesgos:** la carga inicial tarda (consultas día por día a Alegra); hay que manejar facturas anuladas o editadas después (re-sincronizar los últimos días).
+
+Requiere aprobación antes de implementar (fase 4).
+
