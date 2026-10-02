@@ -479,6 +479,13 @@ A diferencia de los endpoints 1-7 (que descargan las facturas día por día), es
 
 ---
 
+### 9. Prendas (Estadísticas → Prendas)
+
+Solo admin, por tienda (`X-Store`). Rango `start_date` / `end_date` (YYYY-MM-DD, máx. 1 año; por defecto el mes en curso). Fuente: prendas guardadas por tienda (`invoice_item_facts`, se cargan con las facturas guardadas) + las de hoy en vivo. La BOLSA PAPEL no cuenta.
+
+- `GET /api/analytics/garments/summary` → `data.totals` y `data.sellers[]` con `invoices`, `units`, `revenue`, `units_per_invoice`, `avg_price_per_unit`; `data.top_products[]`; `data.coverage {days, missing_days, first_missing_day, complete}` (si `complete` es false, faltan días por cargar y las cifras se quedan cortas).
+- `GET /api/analytics/garments/stock` → cruce con el stock actual de Alegra: `best_sellers {out_of_stock[], low_stock[]}` (prenda + talla), `size_curve[]` (por departamento y familia de tallas: `sold_pct` vs `stock_pct`), `rotation[]` (`days_of_inventory` = stock ÷ venta diaria; `status`: agotado, se agota pronto, normal, lenta, sin ventas). La primera consulta descarga el inventario completo (~1 min); luego caché de 5 min.
+
 ## Códigos de Estado HTTP
 
 - **200 OK**: Petición exitosa

@@ -1,6 +1,6 @@
 # Plan: revisión y arreglos de la sección Estadísticas
 
-Estado al 2026-10-02. Auditoría inicial solo de lectura del código; luego verificado con el conector de Alegra. **Fases A y B hechas** (errores 1-11 y los 2 pendientes que salieron en la A, ver CHANGELOG). Las fases se hacen en orden, cada una con aprobación del usuario.
+Estado al 2026-10-02. Auditoría inicial solo de lectura del código; luego verificado con el conector de Alegra. **Fases A, B y C (C1-C4) hechas** (errores 1-11 y los 2 pendientes que salieron en la A, ver CHANGELOG). Las fases se hacen en orden, cada una con aprobación del usuario.
 
 Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Venta, Analytics Avanzado, Análisis de Productos, Análisis de Inventario. (Clientes y Comparativo de tiendas son nuevos y ya fueron revisados en producción: ver CHANGELOG.)
 
@@ -40,7 +40,7 @@ Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Vent
 
 - ✅ **Fase A — errores que cambian números (1-6)** (2026-10-02, sin push). Inventario con los datos completos (las pestañas reciben `data` o el backend pagina `get_active_items`); vendedores por `seller.id`/`seller.name`; no saltar días en silencio (reintentar y/o devolver `failed_days` y avisar); quitar anuladas donde falta; corregir Retención (orden de condiciones; "nuevo" = primera compra registrada, o renombrar); excluir Consumidor final del Top clientes viejo.
 - ✅ **Fase B — menores (7-11)** (2026-10-02, sin push). Además: Productos/Analytics/Ventas Mensuales/Comparativo avisan los días que Alegra no entregó (header `X-Alegra-Failed-Days`), e Inventario con archivo muestra el análisis del archivo. Fechas sin `toISOString` (usar `getColombiaTodayString`), ingresos con descuento, etiquetas de medios de pago (y, si se puede, pagos reales), paginación real o quitarla, parseo de hora compatible con Safari, no reintentar por $0.
-- **Fase C — opcional.** Guardar las prendas de cada factura (como `invoice_facts`, por tienda) para calcular sin descargas día por día: unidades por factura, precio promedio por prenda, más vendidos agotados, curva de tallas venta vs. stock, rotación/días de inventario, devoluciones, margen por categoría (cuando se corrijan los costos en Alegra).
+- ✅ **Fase C — C1 a C4 hechas** (2026-10-02, sin push; pestaña Estadísticas → Prendas, sin BOLSA PAPEL). C5 (devoluciones y margen por categoría) pendiente: 0 notas crédito en 2026 y costos de Alegra poco confiables. Plan original: Guardar las prendas de cada factura (como `invoice_facts`, por tienda) para calcular sin descargas día por día: unidades por factura, precio promedio por prenda, más vendidos agotados, curva de tallas venta vs. stock, rotación/días de inventario, devoluciones, margen por categoría (cuando se corrijan los costos en Alegra).
 
 ## Reglas para quien continúe
 - Multi-tienda: todo por `store_code` / header `X-Store` (`app/stores.py`).

@@ -7,7 +7,8 @@ Ver app/services/invoice_facts.py.
   descuento). Solo admin.
 - POST /api/analytics/invoice-facts/sync: vuelve a cargar los últimos
   `recent_days` días (para recoger anulaciones/ediciones) y luego carga la
-  siguiente tanda de días faltantes (`max_days`, máx. 31). Admin o el cron
+  siguiente tanda de días faltantes (`max_days`, máx. 31): sin resumen de
+  facturas o sin prendas (Estadísticas → Prendas). Admin o el cron
   de las 9 pm (X-Sync-Token). Se detiene antes del límite de tiempo de
   Render; si quedan días, se vuelve a llamar.
 """
@@ -140,7 +141,9 @@ def _run_sync(client, store, max_days, recent_days):
 
     backfill = {'synced_days': [], 'invoices': 0, 'failed_day': None, 'error': None, 'stopped_by_time': False}
     if max_days and not recent['error']:
-        pending = svc.missing_days(store, FACTS_START, yesterday)[:max_days]
+        # Días sin resumen de facturas o sin prendas (las prendas llegaron
+        # después: los días viejos se completan en estas mismas tandas)
+        pending = svc.pending_days(store, FACTS_START, yesterday)[:max_days]
         backfill = svc.sync_range(client, store, pending, deadline)
 
     status = svc.coverage_status(store, FACTS_START, yesterday)

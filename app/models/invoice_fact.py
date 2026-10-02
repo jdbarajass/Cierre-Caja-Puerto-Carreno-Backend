@@ -11,7 +11,13 @@ consultar Alegra.
 - `InvoiceFact`: una fila por factura (anuladas incluidas, marcadas).
 - `InvoiceSyncDay`: qué días de cada tienda ya están cargados. Un rango solo
   se calcula con InvoiceFact si TODOS sus días están aquí; si no, el
-  dashboard sigue con el reporte agregado.
+  dashboard sigue con el reporte agregado. `items_synced` marca si ese día
+  también tiene sus prendas en InvoiceItemFact (las prendas llegaron
+  después, Fase C de Estadísticas: los días viejos se completan en la
+  siguiente carga sin afectar al dashboard de clientes).
+- `InvoiceItemFact`: una fila por prenda (renglón) de cada factura NO anulada,
+  para la pestaña Estadísticas → Prendas. Talla, departamento y tipo de
+  prenda se calculan al leer desde el nombre (SKUParser), no se guardan.
 
 Montos en pesos enteros (COP, sin decimales en estas tiendas). synced_at en UTC,
 como created_at en los demás modelos.
@@ -57,3 +63,26 @@ class InvoiceSyncDay(StoreScopedMixin, db.Model):
     date = db.Column(db.Date, nullable=False)
     invoice_count = db.Column(db.Integer, nullable=False, default=0)
     synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # NULL en los días cargados antes de existir las prendas = faltan prendas
+    items_synced = db.Column(db.Boolean)
+
+
+class InvoiceItemFact(StoreScopedMixin, db.Model):
+    __tablename__ = 'invoice_item_facts'
+    __table_args__ = (
+        db.Index('uq_invoice_item_facts_store_invoice_line', 'store_code', 'invoice_alegra_id', 'line', unique=True),
+        db.Index('ix_invoice_item_facts_store_date', 'store_code', 'date'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_alegra_id = db.Column(db.String(30), nullable=False)
+    line = db.Column(db.Integer, nullable=False)  # posición del renglón en la factura
+    date = db.Column(db.Date, nullable=False)
+    seller_id = db.Column(db.String(30))
+    seller_name = db.Column(db.String(120))
+    item_id = db.Column(db.String(30))
+    name = db.Column(db.String(200), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+    unit_price = db.Column(db.BigInteger, nullable=False, default=0)
+    discount_pct = db.Column(db.Float, nullable=False, default=0)
+    total = db.Column(db.BigInteger, nullable=False, default=0)  # con descuento (items[].total de Alegra)

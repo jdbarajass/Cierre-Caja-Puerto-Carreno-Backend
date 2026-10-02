@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-10-02] (continuación) - Estadísticas, Fase C: prendas guardadas y pestaña Prendas (C1-C4)
+
+Decisiones del usuario: C1 a C4 (C5 devoluciones/margen queda para cuando se corrijan los costos en Alegra; 0 notas crédito en 2026), pestaña nueva **Estadísticas → Prendas**, la **BOLSA PAPEL no cuenta** en ningún indicador.
+
+- **C1 – Prendas guardadas** (`InvoiceItemFact`, tabla `invoice_item_facts`, por tienda): una fila por renglón de cada factura NO anulada (vendedora, ítem, nombre, cantidad, precio, % de descuento, total con descuento). Se llenan en `invoice_facts.sync_day` con la **misma descarga** del resumen de facturas (sin consultas extra a Alegra), con el mismo reemplazo completo del día. Talla/departamento/tipo se calculan al leer con `SKUParser`.
+  - `invoice_sync_days.items_synced` (columna nueva, migración en `_migrate_employee_tables`, sin DEFAULT): los 274 días ya cargados quedan en NULL = faltan prendas. `missing_days` (dashboard de Clientes) **no cambia**; `missing_item_days` y `pending_days` (unión) deciden qué recargar. `POST /api/analytics/invoice-facts/sync` y el cron de las 9 pm usan `pending_days`: las prendas de 2026 se completan solas en ~9 noches (31 días por noche) o con los botones. `coverage_status` trae `items {loaded_days, missing_days, next_missing_day}`.
+- **C2-C4 – `app/services/garment_insights.py`** + `app/routes/garment_insights.py` (solo admin, por tienda, rango máx. 1 año, por defecto el mes en curso; prendas guardadas + las de hoy en vivo):
+  - `GET /api/analytics/garments/summary`: prendas vendidas, **prendas por factura**, **precio promedio por prenda** (con descuento), total y por vendedora; tipos de prenda más vendidos; `coverage` (días sin prendas → la página avisa que las cifras se quedan cortas).
+  - `GET /api/analytics/garments/stock`: cruza con el stock actual (`get_active_items`, paginado desde la Fase A): **más vendidos agotados** y **por agotarse** (≤ 2 unidades) por referencia (prenda + talla); **curva de tallas** % vendido vs. % en stock por departamento y familia de tallas; **rotación** por tipo de prenda (días de inventario = stock ÷ venta diaria del periodo; lenta > 180, se agota pronto < 15, agotado, sin ventas).
+- Tests: `tests/test_estadisticas_fase_c.py` (+9) con facturas reales del 30-sep (bolsas y 45 % de descuento). **120/120**.
+- Revisado en el navegador (backend local + Alegra simulado; la migración agregó `items_synced` sobre la base que ya existía).
+
 ## [2026-10-02] (continuación) - Estadísticas, Fase B + días faltantes en Productos/Analytics
 
 - **`AlegraClient.get_all_invoices_in_range`** (Análisis de Productos, Analytics, Ventas Mensuales, metas YoY, Comparativo de tiendas) ya no salta días con error en silencio: los guarda en `client.last_failed_days` y, dentro de un request, en `g.alegra_failed_days`. `after_request` los manda en el header **`X-Alegra-Failed-Days`** (fechas separadas por coma, expuesto por CORS) y el frontend muestra un aviso en cualquier pantalla. `get_invoices_by_date` ya reintenta (urllib3) y nunca devuelve medio día, así que el día queda fuera completo.
