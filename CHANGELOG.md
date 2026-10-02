@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-02] (continuación) - Fase 4 cerrada + marca de ex vendedoras
+
+Revisado con el usuario en producción (Carreño, "Este año", 2-oct-2026 15:05):
+- Fuente: facturas guardadas + hoy. % con cliente: **Mónica 65,1 %, Rita 46,2 %, Astrid 0 %** (coincide con lo calculado con el conector de Alegra).
+- Descuentos $3.212.176 = $3.184.751 guardados + $27.425 de hoy. Por vendedora: Mónica $2.082.230 + Rita $1.020.046; la diferencia ($109.900) es exactamente la factura 8423 (2-ene) sin vendedora.
+- Equipo por cédula: aparecieron 2 ex vendedoras (Neiby Femayor 12,7 %, Cristhian Muñoz 20 % — esta última facturada a un cliente "Koaj" con su cédula). Mónica 14,4 %, Rita 18,9 %. Total equipo $458.875.
+- Descuentos altos a clientes visibles en "Facturas con descuento" (41,4 % y 50 %): para revisar si fueron autorizados.
+
+Ajuste: `employee` (en rankings, equipo, inactivas y facturas con descuento) trae `active` (False si la vendedora está inactiva en Alegra); nueva función `employee_info`. +1 test (**93/93**, con el parche WMI local).
+
 ## [2026-10-02] (continuación) - Fase 4.3: el dashboard de clientes usa las facturas guardadas
 
 Carga completa de Carreño verificada en producción: 274/274 días (1-ene a 1-oct), 3.093 facturas (2 anuladas), venta $380.986.649 = igual al peso al reporte de Alegra; 99,7 % con vendedora, 100 % con cédula, 107 facturas con descuento ($3.184.751).

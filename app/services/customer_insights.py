@@ -164,6 +164,17 @@ def match_employee(client: Dict[str, Any], sellers: List[Dict[str, Any]]) -> Opt
     return None
 
 
+def employee_info(seller: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Datos de la vendedora que es este cliente; `active` False = ya no está activa en Alegra."""
+    if not seller:
+        return None
+    return {
+        'seller_id': str(seller.get('id')),
+        'seller_name': _clean_name(seller.get('name')),
+        'active': str(seller.get('status') or 'active').lower() != 'inactive',
+    }
+
+
 def whatsapp_number(phone) -> Optional[str]:
     """Celular colombiano en formato internacional para wa.me (573001234567), o None."""
     digits = re.sub(r'\D', '', str(phone or ''))
@@ -237,7 +248,7 @@ def discount_invoices(facts: List[Dict[str, Any]], sellers: List[Dict[str, Any]]
             'discount': f['discount'],
             'discount_pct': _pct(f['discount'], f['subtotal']),
             'total': f['total'],
-            'employee': {'seller_id': str(seller.get('id')), 'seller_name': _clean_name(seller.get('name'))} if seller else None,
+            'employee': employee_info(seller),
         })
     return rows
 
@@ -268,7 +279,7 @@ def build_summary(
 
     for c in identified:
         seller = match_employee(c, sellers)
-        c['employee'] = {'seller_id': str(seller.get('id')), 'seller_name': _clean_name(seller.get('name'))} if seller else None
+        c['employee'] = employee_info(seller)
 
     total_sales = sum(c['total'] for c in clients)
     total_documents = sum(c['documents'] for c in clients)
@@ -367,7 +378,7 @@ def build_inactive(before_rows: List[Dict[str, Any]], recent_rows: List[Dict[str
         if is_anonymous(c) or c['id'] in recent_ids:
             continue
         seller = match_employee(c, sellers)
-        c['employee'] = {'seller_id': str(seller.get('id')), 'seller_name': _clean_name(seller.get('name'))} if seller else None
+        c['employee'] = employee_info(seller)
         inactive.append(c)
     inactive.sort(key=lambda c: (c['total'], c['documents']), reverse=True)
     return inactive

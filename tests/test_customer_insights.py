@@ -454,3 +454,11 @@ def test_si_falta_un_dia_usa_el_reporte(app):
                                           invoices_client=FakeInvoices({})).summary(date(2026, 1, 2), date(2026, 1, 4))
     assert data['source'] == 'report' and data['discount_invoices'] == []
     assert ('2026-01-02', '2026-01-04') in direct.report_calls
+
+
+def test_ex_vendedora_queda_marcada_como_inactiva():
+    assert ci.employee_info({'id': '11', 'name': 'neiby femayor', 'status': 'inactive'}) == {
+        'seller_id': '11', 'seller_name': 'neiby femayor', 'active': False}
+    assert ci.employee_info({'id': '1', 'name': 'MONICA VARGAS', 'status': 'active'})['active'] is True
+    assert ci.employee_info({'id': '1', 'name': 'MONICA VARGAS'})['active'] is True  # sin status = activa
+    assert ci.employee_info(None) is None
