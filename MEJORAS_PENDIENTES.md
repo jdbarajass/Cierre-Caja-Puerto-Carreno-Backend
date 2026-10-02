@@ -78,5 +78,8 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 - **Qué se gana:** % identificado por vendedora y por mes, descuentos reales por cliente y del equipo, fecha exacta de última compra sin consultar contacto por contacto, y una base propia para los siguientes reportes (por ítem, por talla, por hora).
 - **Riesgos:** la carga inicial tarda (consultas día por día a Alegra); hay que manejar facturas anuladas o editadas después (re-sincronizar los últimos días).
 
-Requiere aprobación antes de implementar (fase 4).
+**Estado:** aprobada 2026-10-02, carga desde el 1-ene-2026.
+- [x] 4.1 Tablas `invoice_facts` / `invoice_sync_days` + servicio de carga (`app/services/invoice_facts.py`).
+- [ ] 4.2 Endpoint de carga inicial en tandas + cron diario de las 9 pm (re-cargar los últimos días).
+- [ ] 4.3 El dashboard usa las facturas guardadas cuando el rango está completo.
 

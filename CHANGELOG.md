@@ -2,6 +2,19 @@
 
 ---
 
+## [2026-10-02] (continuación) - Fase 4.1: resumen de facturas por tienda (sin cambios visibles)
+
+Base para el % con cliente por vendedora, los descuentos y la cédula, que el reporte agregado de /api/v1 no entrega. Decisión del usuario: cargar desde el **1 de enero de 2026**.
+
+- **Tablas nuevas** (`app/models/invoice_fact.py`), por tienda (`store_code`). `db.create_all()` las crea al arrancar; no se toca ninguna tabla existente:
+  - `invoice_facts`: una fila por factura: id de Alegra, fecha, número, cliente (id, nombre, cédula), vendedora (id, nombre), subtotal, descuento, total, anulada. Única por (tienda, id de Alegra).
+  - `invoice_sync_days`: qué días de cada tienda ya están cargados y cuántas facturas tenían.
+- **`app/services/invoice_facts.py`**: `sync_day` reemplaza un día completo (borrar e insertar en una transacción) usando `AlegraClient.get_invoices_by_date`, el mismo método y la misma caché que ya usa el cierre de caja. Las facturas se piden **antes** de tocar la base: si Alegra falla, lo que había queda intacto. `sync_range` carga varios días y se detiene en el primer error (se puede continuar después); `missing_days` dice qué días faltan.
+  - Descuento: el de la factura (`discount`); si no viene, se calcula por ítem (% sobre precio × cantidad). Anuladas: `is_invoice_void`.
+  - Una factura a la que le cambian la fecha en Alegra se mueve de día, sin duplicarse.
+- Aún **no hay endpoint ni carga**: eso es la fase 4.2 (carga inicial en tandas + cron de las 9 pm).
+- Tests: +7 en `tests/test_invoice_facts.py` (formato de /api/v1/invoices, recarga, fallo de Alegra, cambio de fecha, tiendas separadas, rango con error y continuación).
+
 ## [2026-10-02] Dashboard de clientes: fase 3 cerrada (revisión en producción)
 
 Revisado con el usuario en producción (Carreño, "Este año", 1-ene a 2-oct-2026):
