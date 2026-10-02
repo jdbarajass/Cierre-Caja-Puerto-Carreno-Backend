@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-10-02] (continuación) - Fase 4.2: corrección tras la prueba en producción
+
+**Prueba controlada (Carreño):** 1-ene = 0 facturas (Año Nuevo, sin ventas). Con la primera tanda: 24 días / 173 facturas; **con vendedora 98,8 %, con cédula 100 %, 10 facturas con descuento por $253.795** (igual al peso al descuento de enero que mostró el conector de Alegra). Confirmado: /api/v1/invoices trae vendedora, cédula y descuento → la fase 4.3 es viable.
+
+**Error visto:** el usuario dio "Cargar siguiente tanda", salió del módulo (la carga siguió en el servidor) y volvió a darle: dos cargas simultáneas procesaron el mismo día (24-ene) y la segunda chocó con la unicidad (tienda, alegra_id) (`psycopg.errors.UniqueViolation`). No se perdió ni duplicó nada (el día fallido se deshizo completo), pero el panel mostró el error técnico de SQL.
+
+**Correcciones:**
+- **Una carga a la vez por tienda**: `store_sync_lock` (pg_try_advisory_lock con conexión propia, compartido entre los 2 workers y el cron). Si ya hay una, `POST /sync` responde **409 `sync_in_progress`** con el estado actual, sin tocar nada. En SQLite (tests) no bloquea.
+- Errores internos (base de datos, etc.) ya no exponen el detalle técnico: mensaje "No se pudieron guardar las facturas de ese día" (el detalle va al log). Los de Alegra conservan su mensaje (conexión, timeout, credenciales).
+- `sync_day` guarda una sola vez una factura que Alegra repita en la misma respuesta.
+- Tests: +3 (409 sin tocar nada, factura repetida, mensaje sin detalle técnico). **89/89** (con el parche WMI local; repetir en el PC personal). El candado real se verifica en producción (no hay Postgres local en este PC).
+
 ## [2026-10-02] (continuación) - Fase 4.2: carga del resumen de facturas (endpoints + cron)
 
 - **`app/routes/invoice_facts.py`** (tienda activa por `X-Store`):

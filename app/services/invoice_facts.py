@@ -13,15 +13,22 @@ Reglas:
     que ya había de ese día quedan intactos.
   - Al primer error se detiene la carga del rango y devuelve hasta dónde
     llegó; se puede volver a llamar y sigue con los días que falten.
+  - Una sola carga a la vez por tienda (`store_sync_lock`): dos cargas al
+    mismo tiempo sobre el mismo día chocaban con la unicidad (tienda,
+    alegra_id) — visto en producción 2026-10-02 al dar clic otra vez
+    mientras la primera seguía corriendo en el servidor.
 """
 import logging
 import time
+import zlib
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay
+from app.exceptions import CierreCajaException
 from app.models.user import db
 from app.utils.formatters import is_invoice_void, safe_number
 
@@ -81,7 +88,9 @@ def invoice_to_fact(invoice: Dict[str, Any]) -> Dict[str, Any]:
 def sync_day(alegra_client, store_code: str, day: date) -> int:
     """Reemplaza las facturas guardadas de `day` por las que tiene Alegra. Devuelve cuántas."""
     invoices = alegra_client.get_invoices_by_date(day.isoformat())  # si falla, no se toca nada
-    facts = [invoice_to_fact(i) for i in invoices if i.get('id') is not None]
+    # Si Alegra repitiera una factura entre páginas, se guarda una sola vez.
+    facts = list({f['alegra_id']: f for f in
+                  (invoice_to_fact(i) for i in invoices if i.get('id') is not None)}.values())
 
     try:
         base = InvoiceFact.query.filter(InvoiceFact.store_code == store_code)
@@ -104,6 +113,37 @@ def sync_day(alegra_client, store_code: str, day: date) -> int:
         db.session.rollback()
         raise
     return len(facts)
+
+
+# Base de las llaves de pg_advisory_lock (una por tienda). Distinta de la
+# de la migración multi-tienda (app/__init__.py).
+SYNC_LOCK_KEY_BASE = 7420261002_000_000
+
+
+@contextmanager
+def store_sync_lock(store_code: str):
+    """
+    Candado de la carga de facturas de UNA tienda, compartido entre los
+    workers de gunicorn y el cron. Entrega True si se obtuvo y False si ya
+    hay otra carga corriendo (no espera). Usa una conexión propia para que
+    el candado no dependa de las transacciones de la sesión (se hace commit
+    por día). Si el proceso muere, Postgres lo suelta al cerrarse la conexión.
+    Fuera de Postgres (tests con SQLite) no bloquea.
+    """
+    if db.engine.dialect.name != 'postgresql':
+        yield True
+        return
+    key = SYNC_LOCK_KEY_BASE + zlib.crc32(store_code.encode()) % 1_000_000
+    conn = db.engine.connect()
+    try:
+        acquired = bool(conn.execute(text('SELECT pg_try_advisory_lock(:k)'), {'k': key}).scalar())
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                conn.execute(text('SELECT pg_advisory_unlock(:k)'), {'k': key})
+    finally:
+        conn.close()
 
 
 def _days(start: date, end: date) -> Iterable[date]:
@@ -139,10 +179,14 @@ def sync_range(alegra_client, store_code: str, days: List[date],
             invoices += sync_day(alegra_client, store_code, day)
             synced.append(day.isoformat())
         except Exception as e:
+            # El detalle técnico va al log; al usuario, un mensaje que se entienda.
             logger.error(f'[{store_code}] Carga de facturas del {day}: {e}', exc_info=True)
+            if isinstance(e, CierreCajaException):
+                message = e.message  # errores de Alegra (conexión, timeout, credenciales)
+            else:
+                message = 'No se pudieron guardar las facturas de ese día'
             return {'synced_days': synced, 'invoices': invoices, 'failed_day': day.isoformat(),
-                    'error': getattr(e, 'message', None) or str(e) or e.__class__.__name__,
-                    'stopped_by_time': False}
+                    'error': message, 'stopped_by_time': False}
     return {'synced_days': synced, 'invoices': invoices, 'failed_day': None, 'error': None,
             'stopped_by_time': False}
 

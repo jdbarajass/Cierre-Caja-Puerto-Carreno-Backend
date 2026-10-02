@@ -269,3 +269,38 @@ def test_sync_respeta_el_limite_de_tiempo(api, monkeypatch):
     monkeypatch.setattr(routes, 'TIME_BUDGET_SECONDS', 0)
     body = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 5}, headers=_auth(app)).get_json()
     assert body['backfill']['stopped_by_time'] is True and body['backfill']['synced_days'] == []
+
+
+# ─── Correcciones tras la prueba en producción (2026-10-02) ──────────────────
+
+def test_segunda_carga_simultanea_recibe_409_sin_tocar_nada(api, monkeypatch):
+    # En producción: clic en "Cargar siguiente tanda" mientras la primera
+    # seguía corriendo en el servidor -> choque por unicidad (tienda, alegra_id).
+    from contextlib import contextmanager
+    app, client, calls = api
+
+    @contextmanager
+    def busy(store_code):
+        yield False
+
+    monkeypatch.setattr(svc, 'store_sync_lock', busy)
+    res = client.post('/api/analytics/invoice-facts/sync', json={'max_days': 3}, headers=_auth(app))
+    assert res.status_code == 409
+    body = res.get_json()
+    assert body['code'] == 'sync_in_progress' and body['status']['loaded_days'] == 0
+    assert calls == []
+
+
+def test_factura_repetida_en_la_respuesta_se_guarda_una_vez(app):
+    repeated = [invoice('9', D1.isoformat(), 1000), invoice('9', D1.isoformat(), 1000)]
+    assert svc.sync_day(FakeAlegra({D1.isoformat(): repeated}), 'carreno', D1) == 1
+
+
+def test_error_interno_no_expone_detalle_tecnico(app, monkeypatch):
+    def boom(alegra_client, store_code, day):
+        raise RuntimeError('(psycopg.errors.UniqueViolation) duplicate key value ... SQL: INSERT ...')
+
+    monkeypatch.setattr(svc, 'sync_day', boom)
+    result = svc.sync_range(FakeAlegra({}), 'carreno', [D1])
+    assert result['error'] == 'No se pudieron guardar las facturas de ese día'
+    assert result['failed_day'] == D1.isoformat()

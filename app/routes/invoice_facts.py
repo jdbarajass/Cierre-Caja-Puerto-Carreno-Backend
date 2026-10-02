@@ -97,6 +97,8 @@ def invoice_facts_sync():
         description: Lo que se cargó y el estado actualizado
       400:
         description: Parámetro inválido
+      409:
+        description: Ya hay una carga en curso para esta tienda
       503:
         description: La tienda no tiene cuenta de Alegra configurada
     """
@@ -116,6 +118,17 @@ def invoice_facts_sync():
     except ConfigurationError as e:
         return jsonify({'success': False, 'message': e.message, 'code': 'alegra_not_configured'}), 503
 
+    with svc.store_sync_lock(store) as acquired:
+        if not acquired:
+            return jsonify({
+                'success': False, 'code': 'sync_in_progress',
+                'message': 'Ya hay una carga de facturas en curso para esta tienda. Espera a que termine.',
+                'status': svc.coverage_status(store, FACTS_START, get_colombia_now().date() - timedelta(days=1)),
+            }), 409
+        return _run_sync(client, store, max_days, recent_days)
+
+
+def _run_sync(client, store, max_days, recent_days):
     today = get_colombia_now().date()
     yesterday = today - timedelta(days=1)
     deadline = time.monotonic() + TIME_BUDGET_SECONDS
