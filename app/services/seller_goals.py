@@ -257,6 +257,12 @@ class SellerGoalsService:
         for sid in ids:
             s = sales.get(sid, {})
             override = overrides.get(sid)
+            # Activa en Alegra pero sin ventas en los 3 meses anteriores ni en
+            # este mes (ej. Astrid, visto en producción 2026-10-03): su parte
+            # automática es $0 y salía como "Meta sin definir". Se oculta hasta
+            # que venda o el admin le ponga meta.
+            if auto.get(sid) == 0 and not override and not s.get('sales'):
+                continue
             goal = override.amount if override else auto.get(sid)
             seller_sales = s.get('sales', 0)
             invoices = s.get('invoices', 0)

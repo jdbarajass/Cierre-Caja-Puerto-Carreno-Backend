@@ -316,6 +316,7 @@ def coverage_status(store_code: str, start: date, end: date) -> Dict[str, Any]:
         'hours': {
             'loaded_days': total_days - len(outdated),
             'missing_days': len(outdated),
+            'next_missing_day': outdated[-1].isoformat() if outdated else None,
         },
         'quality': {
             'active_invoices': active.count(),

@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-10-03] (continuación) - Revisión en producción de la Fase D
+
+Revisado con capturas del usuario (Carreño, 3-oct 10:00): **Totales de Ventas sep = $42.239.140 (30 días) y 1-31 ago = $51.909.564 (31 días): cuadran con Alegra** (verificación pendiente desde la Fase A cerrada). Llegadas: 131 compras cargadas desde /api/v1/bills, 18 llegadas en 90 días, 59,5 % vendido. Metas: octubre 2025 $47.838.020 → meta $55.014.000; Mónica + Rita + $324.900 sin vendedora (factura 8501) = vendido $8.090.175.
+- `coverage_status.hours` trae `next_missing_day` (para el panel "Horas guardadas" del frontend).
+- Metas: una vendedora **activa en Alegra sin ventas** en los 3 meses anteriores ni en el mes, y sin meta ajustada, ya no sale (Astrid salía con "Meta sin definir" y $0). Aparece en cuanto venda o el admin le ponga meta. +1 test. **198/198**.
+
 ## [2026-10-03] (continuación) - Estadísticas, Fase D4: alertas diarias en la plataforma
 
 Decisión del usuario: dentro de la plataforma (Dashboard, admin).

@@ -40,7 +40,7 @@ def test_dias_viejos_sin_hora_se_vuelven_a_cargar_sin_afectar_a_clientes(app):
         assert svc.missing_item_days('carreno', old, old) == []   # Prendas: completo
         assert svc.pending_days('carreno', old, old) == [old]     # pero se recarga para la hora
         status = svc.coverage_status('carreno', old, old)
-        assert status['hours'] == {'loaded_days': 0, 'missing_days': 1}
+        assert status['hours'] == {'loaded_days': 0, 'missing_days': 1, 'next_missing_day': '2026-09-29'}
 
 
 def test_promedio_por_dia_de_la_semana():

@@ -164,3 +164,19 @@ def test_endpoints_metas(client, app, monkeypatch):
     assert client.put('/api/analytics/seller-goals', json={'seller_id': '12', 'amount': 1}, headers=h).status_code == 400
     assert client.put('/api/analytics/seller-goals', json={'month': '2026-01', 'seller_id': '12', 'amount': 1},
                       headers=_headers(app, 'sales')).status_code == 403
+
+
+def test_activa_sin_ventas_no_sale(app):
+    # Revisión en producción 2026-10-03: Astrid (activa en Alegra, sin ventas en 3 meses) salía con "Meta sin definir"
+    sellers = SELLERS[:2] + [{'id': '7', 'name': 'ASTRID PEREZ', 'identification': '1', 'status': 'active'}]
+    with app.app_context():
+        direct = FakeDirect()
+        direct.get_sellers = lambda: sellers
+        history = [r for r in HISTORY if r['idLocal'] != '7']
+        direct.get_sales_by_seller = lambda a, b: history
+        data = sg.SellerGoalsService('carreno', date(2026, 10, 3), direct, FakeAlegra({})).summary(date(2026, 10, 1))
+        assert {r['id'] for r in data['sellers']} == {'1', '12'}
+        # Con meta ajustada por el admin sí aparece
+        sg.set_goal('carreno', date(2026, 10, 1), '7', 'ASTRID PEREZ', 1_000_000, 'admin@test.com')
+        data = sg.SellerGoalsService('carreno', date(2026, 10, 3), direct, FakeAlegra({})).summary(date(2026, 10, 1))
+        assert '7' in {r['id'] for r in data['sellers']}
