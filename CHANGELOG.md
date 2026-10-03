@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-03] (continuación) - Estadísticas, Fase D3: metas por vendedora
+
+Decisión del usuario: reparto automático con +15 % que el admin puede ajustar.
+- `app/services/seller_goals.py`: meta de la tienda = **mismo mes completo del año anterior × 1,15** (`get_all_sales_totals_by_day`); se reparte entre las vendedoras **activas** según su venta de los **3 meses completos anteriores** (sales-by-seller; sin historia = partes iguales; redondeado a miles). Meta mostrada de la tienda = suma de las de las vendedoras. Caché de 12 h para meses cerrados.
+- Nuevo `SellerGoal` (`seller_goals`, por tienda): solo los montos **ajustados** por el admin (borrar = volver a la automática).
+- Avance: facturas guardadas (días cerrados) + hoy en vivo → venta, facturas, ticket, prendas por factura (sin bolsa) y % de la venta con cliente; proyección al cierre al ritmo actual, cuánto necesita por día (hoy cuenta) y si va bien. Si al mes le faltan días en la copia: venta del reporte de Alegra, sin prendas ni % con cliente (`source='report'`).
+- `GET /api/analytics/seller-goals?month=YYYY-MM` (2026-01 hasta el mes siguiente) y `PUT` {month, seller_id, seller_name, amount|null}; solo admin.
+- `tests/test_estadisticas_fase_d3.py` (+8).
+- Nota: la meta del cierre de caja (año anterior hasta el mismo día + 25 %) no se tocó; son metas distintas.
+
 ## [2026-10-03] (continuación) - Estadísticas, Fase D2: ventas por día de la semana y hora
 
 - `invoice_facts.hour` (SMALLINT): hora de cada factura leída de `datetime` de Alegra (`invoice_hour`). `invoice_sync_days.fact_version` (INTEGER) + `FACT_VERSION = 2`: los días cargados antes (NULL) se **vuelven a cargar en las tandas** (`outdated_days` entra en `pending_days`, del más reciente al más antiguo), igual que pasó con las prendas. Clientes y Prendas no se afectan (`missing_days` / `missing_item_days` no cambian). `coverage_status` trae `hours`. Migración en `app/__init__.py` (sin DEFAULT).
