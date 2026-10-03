@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-03] (continuación) - Estadísticas, Fase D4: alertas diarias en la plataforma
+
+Decisión del usuario: dentro de la plataforma (Dashboard, admin).
+- `DailyAlert` (`daily_alerts`, por tienda): una fila por (día, tipo); recalcular actualiza y **respeta las descartadas**; si la condición desaparece, se borra.
+- `app/services/daily_alerts.py`: **día flojo** (< 60 % del promedio del mismo día de la semana en las 8 semanas anteriores, mínimo 4 días con venta), **más vendidos agotados** (de las 30 prendas más vendidas en 30 días, las que tienen 0 en Alegra; marca las nuevas), **meta atrasada** (más de 10 puntos por debajo del ritmo, Fase D3) y **descuentos altos** (informativa, desde 40 %: en la tienda hay descuentos del 50 % a clientas, ej. KPC4396). Cada tipo aparte: si uno falla, los demás se guardan.
+- `POST /api/analytics/alerts/generate` (admin o X-Sync-Token; día por defecto: hoy desde las 8 pm de Colombia, si no ayer — la última venta suele ser ~7:40 pm), `GET /api/analytics/alerts` (sin descartar, 7 días), `POST /api/analytics/alerts/<id>/dismiss`.
+- Cron de las 9 pm: paso nuevo "Calcular alertas del día" después de cargar las facturas (`continue-on-error`).
+- `tests/test_estadisticas_fase_d4.py` (+7). **197/197** (parche WMI).
+- Revisión visual local (backend con Alegra simulado + Chromium, escritorio y celular) de Llegadas, Día y hora, Metas y alertas del Dashboard: sin errores de consola propios ni scroll horizontal (tras el ajuste de las tarjetas en el frontend).
+
 ## [2026-10-03] (continuación) - Estadísticas, Fase D3: metas por vendedora
 
 Decisión del usuario: reparto automático con +15 % que el admin puede ajustar.

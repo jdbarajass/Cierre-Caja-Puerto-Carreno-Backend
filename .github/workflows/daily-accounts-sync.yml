@@ -77,3 +77,20 @@ jobs:
             -H "X-Store: ${{ matrix.store }}" \
             -H "Content-Type: application/json" \
             -d '{"recent_days": 3, "max_days": 31}'
+
+      # Alertas diarias del Dashboard (Fase D4): día flojo, más vendidos
+      # agotados, meta atrasada y descuentos altos del día (a las 9 pm la
+      # tienda ya cerró). Va después de cargar las facturas porque las usa.
+      # continue-on-error: si falla no dispara la alerta de Cuentas.
+      - name: Calcular alertas del día (${{ matrix.store }})
+        if: always()
+        continue-on-error: true
+        env:
+          SYNC_TOKEN: ${{ secrets.DAILY_SYNC_TOKEN }}
+        run: |
+          curl --fail --show-error --max-time 200 \
+            -X POST "https://cierre-caja-api.onrender.com/api/analytics/alerts/generate" \
+            -H "X-Sync-Token: ${SYNC_TOKEN}" \
+            -H "X-Store: ${{ matrix.store }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'

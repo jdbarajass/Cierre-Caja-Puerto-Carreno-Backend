@@ -65,6 +65,7 @@ def create_app(config_class=Config):
     from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay, InvoiceItemFact  # Clientes (fase 4) y Prendas
     from app.models.purchase_fact import PurchaseItemFact  # Estadísticas → Llegadas (Fase D1)
     from app.models.seller_goal import SellerGoal  # Estadísticas → Metas (Fase D3)
+    from app.models.daily_alert import DailyAlert  # Alertas diarias (Fase D4)
 
     db.init_app(app)
 
@@ -244,6 +245,7 @@ def create_app(config_class=Config):
     from app.routes.arrivals import bp as arrivals_bp
     from app.routes.sales_patterns import bp as sales_patterns_bp
     from app.routes.seller_goals import bp as seller_goals_bp
+    from app.routes.daily_alerts import bp as daily_alerts_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -265,6 +267,7 @@ def create_app(config_class=Config):
     app.register_blueprint(arrivals_bp)  # Estadísticas → Llegadas (Fase D1)
     app.register_blueprint(sales_patterns_bp)  # Estadísticas → Día y hora (Fase D2)
     app.register_blueprint(seller_goals_bp)  # Estadísticas → Metas por vendedora (Fase D3)
+    app.register_blueprint(daily_alerts_bp)  # Alertas diarias en el Dashboard (Fase D4)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
