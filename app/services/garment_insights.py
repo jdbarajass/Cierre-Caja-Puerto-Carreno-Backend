@@ -282,12 +282,21 @@ class GarmentInsightsService:
                 'invoice_alegra_id': f.invoice_alegra_id, 'seller_id': f.seller_id, 'seller_name': f.seller_name,
                 'item_id': f.item_id, 'name': f.name, 'quantity': f.quantity, 'total': f.total,
             } for f in query]
+        closed_rows = garment_rows(rows)
+        today_rows: List[Dict[str, Any]] = []
         if end >= self.today and self.client is not None:
             for invoice in self.client.get_invoices_by_date(self.today.isoformat()):
-                rows.extend(invoice_to_items(invoice))
+                today_rows.extend(invoice_to_items(invoice))
+        today_rows = garment_rows(today_rows)
         days = (end - start).days + 1
+        closed_days = (closed_end - start).days + 1 if start <= closed_end else 0
         return {
-            'rows': garment_rows(rows),
+            'rows': closed_rows + today_rows,
+            # Rotación: solo días cerrados (hoy va por la mitad y contarlo como
+            # día completo bajaba la venta diaria). Si el periodo es solo hoy, hoy.
+            'closed_rows': closed_rows,
+            'closed_loaded_days': closed_days - len(missing),
+            'today_rows': today_rows,
             'coverage': {
                 'days': days,
                 'loaded_days': days - len(missing),
@@ -296,6 +305,12 @@ class GarmentInsightsService:
                 'complete': not missing,
             },
         }
+
+    @staticmethod
+    def _rotation(data: Dict[str, Any], stock: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if data['closed_loaded_days']:
+            return rotation(data['closed_rows'], stock, data['closed_loaded_days'])
+        return rotation(data['today_rows'], stock, 1 if data['today_rows'] else 0)
 
     def summary(self, start: date, end: date) -> Dict[str, Any]:
         """C2: canasta total y por vendedora + prendas más vendidas (solo base de datos + hoy)."""
@@ -321,6 +336,6 @@ class GarmentInsightsService:
             'stock_units': sum(max(v['stock'], 0) for v in stock.values()),
             'best_sellers': best_sellers_stock(rows, stock),
             'size_curve': size_curve(rows, stock),
-            'rotation': rotation(rows, stock, data['coverage']['loaded_days']),
+            'rotation': self._rotation(data, stock),
             'thresholds': {'slow_days': SLOW_ROTATION_DAYS, 'fast_days': FAST_ROTATION_DAYS},
         }

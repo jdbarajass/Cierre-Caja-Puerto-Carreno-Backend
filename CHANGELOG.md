@@ -7,7 +7,10 @@
 Revisión completa del módulo Estadísticas pedida por el usuario (lectura de código + conector de Alegra, solo lectura). Dos errores de robustez corregidos:
 - **Totales rápidos** (`/api/sales/quick-summary`: Totales de Ventas y comparativo del Dashboard) pedían a `/invoices/sales-totals` una sola página con `limit=100`: un rango de más de 100 días (o de 31 si /api/v1 corta en 30, aún sin verificar) salía **incompleto sin aviso**. Nuevo `AlegraDirectClient.get_all_sales_totals_by_day`: pagina hasta tener todos los días del rango, cuenta cada fecha una vez y no se queda en ciclo si Alegra ignora `start`.
 - **Facturas de un día** (`AlegraClient.get_invoices_by_date`, usado por el cierre de caja, Prendas, Clientes y la copia de facturas): con más de 30 facturas, si entraba una venta mientras se paginaba, una factura llegaba dos veces y **se sumaba doble** en el cierre del día. Ahora cada factura cuenta una vez. Además, un día pasado que llega con menos facturas de las que anuncia Alegra (`metadata.total`) **no se guarda en caché** (se vuelve a pedir).
-- `tests/test_estadisticas_revision.py` (+8). **164/164** (con el parche de WMI en el PC de la entidad).
+- **Stock por tienda sin esperas**: el candado de la descarga de ítems activos era uno solo para todas las tiendas; ahora es uno por tienda (`_items_lock_for`), así una tienda no espera a que la otra baje su stock.
+- **Rotación de Prendas sin hoy**: la venta diaria se calcula solo con días cerrados (hoy va por la mitad y contarlo como día completo la bajaba e inflaba los días de inventario). Si el periodo es solo hoy, se usa hoy. Agotados, curva de tallas y canasta siguen incluyendo hoy.
+- Anuladas después de 3 días: el usuario decidió dejarlo así (2 anuladas en 2026).
+- `tests/test_estadisticas_revision.py` (+11). **167/167** (con el parche de WMI en el PC de la entidad).
 - Propuestas de mejora (sin implementar, esperan decisión del usuario): ver `docs/PLAN_ESTADISTICAS.md`, sección "Revisión 2026-10-03".
 
 ## [2026-10-02] (continuación) - Tallas: lectura desde el precio del nombre

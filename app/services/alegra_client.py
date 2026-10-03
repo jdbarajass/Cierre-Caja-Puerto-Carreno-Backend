@@ -49,7 +49,16 @@ ALEGRA_CACHE_TTL_SECONDS = int(os.getenv('ALEGRA_CACHE_TTL_SECONDS', '600'))
 # tiempo para que las 6 pestañas no repitan ~55 peticiones cada una. Llave por
 # usuario de Alegra = por tienda.
 _items_cache = TTLCache()
-_items_lock = threading.Lock()  # una sola descarga a la vez (pestañas en paralelo)
+# Una sola descarga a la vez POR TIENDA (pestañas en paralelo). Antes era un
+# único candado para todas: mientras una tienda bajaba su stock (~1 min), la
+# otra esperaba aunque tuviera la lista en caché.
+_items_locks: Dict[str, threading.Lock] = {}
+_items_locks_guard = threading.Lock()
+
+
+def _items_lock_for(key: str) -> threading.Lock:
+    with _items_locks_guard:
+        return _items_locks.setdefault(key, threading.Lock())
 ITEMS_CACHE_TTL_SECONDS = 300
 ITEMS_PAGE_SIZE = 30   # máximo que acepta /items de Alegra
 ITEMS_MAX_PAGES = 300  # tope de seguridad: 9.000 ítems
@@ -806,7 +815,7 @@ class AlegraClient:
         # Inventario veían 30 de ~1.600 productos activos. Se pagina hasta el final
         # y se cachea unos minutos por tienda (cada pestaña pide la lista completa).
         cache_key = f"{self.username}|active_items"
-        with _items_lock:
+        with _items_lock_for(cache_key):
             cached = _items_cache.get(cache_key)
             if cached is not None:
                 logger.info(f"[CACHE HIT] {len(cached)} items activos servidos desde caché")

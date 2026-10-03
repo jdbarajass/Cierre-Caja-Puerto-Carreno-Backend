@@ -51,10 +51,10 @@ Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Vent
 
 Corregido (ver CHANGELOG 2026-10-03): totales rápidos paginados (`get_all_sales_totals_by_day`) y facturas repetidas entre páginas / días incompletos en caché (`get_invoices_by_date`). Backend 164/164, frontend 6/6.
 
-Menores, sin corregir (bajo impacto):
-- Copia de facturas: el cron recarga solo los últimos 3 días. Una factura anulada o editada en Alegra después de eso sigue igual en `invoice_facts` / prendas (2 anuladas en todo 2026).
-- `_items_lock` de `alegra_client.py` es uno para todas las tiendas: mientras se descarga el stock de una (~1 min), la otra espera aunque tenga caché.
-- Rotación de Prendas: si el rango incluye hoy, hoy cuenta como día completo (venta diaria un poco más baja en la tarde).
+Menores:
+- Copia de facturas: el cron recarga solo los últimos 3 días; una factura anulada o editada en Alegra después de eso sigue igual en `invoice_facts` / prendas. **Decisión del usuario: dejarlo así** (2 anuladas en 2026).
+- ✅ Candado de stock por tienda (antes uno para todas: una tienda esperaba a la otra).
+- ✅ Rotación de Prendas solo con días cerrados (hoy contaba como día completo).
 
 Datos del conector (Carreño, 3-oct): 1 bodega (Principal); 0 ítems con stock negativo; cuentas por cobrar ≈ $0 (1 factura, $100 pendientes); **cuentas por pagar $135.301.250 en 60 facturas de compra** (proveedor KOAJ); compras de mercancía como facturas de proveedor (ej. 607-611, 28-29 sep); **1.702 ajustes de inventario** (los últimos ajustan solo el costo).
 

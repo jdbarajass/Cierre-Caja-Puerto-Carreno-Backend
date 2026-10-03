@@ -14,6 +14,7 @@ from app.services import alegra_client as alegra_client_module
 from app.services.alegra_client import AlegraClient
 from app.services.alegra_direct_client import AlegraDirectClient
 from tests.test_estadisticas_fase_a import FakeResponse
+from tests.test_estadisticas_fase_c import app  # noqa: F401 (base de datos temporal propia)
 
 
 # ─── Totales rápidos por día ────────────────────────────────────────────────
@@ -119,3 +120,45 @@ def test_dia_pasado_completo_si_queda_en_cache(alegra, monkeypatch):
     alegra.get_invoices_by_date('2026-09-30')
     alegra.get_invoices_by_date('2026-09-30')
     assert len(calls) == 1
+
+
+# ─── Ajustes pedidos por el usuario (2026-10-03) ───────────────────────────
+
+def test_stock_de_una_tienda_no_espera_a_la_otra():
+    lock_a = alegra_client_module._items_lock_for('carreno@x|active_items')
+    lock_b = alegra_client_module._items_lock_for('primavera@x|active_items')
+    assert lock_a is not lock_b
+    assert lock_a is alegra_client_module._items_lock_for('carreno@x|active_items')
+    with lock_a:  # Carreño descargando: Primavera puede entrar
+        assert lock_b.acquire(blocking=False)
+        lock_b.release()
+
+
+MEDIAS_STOCK = [{'id': '1', 'name': 'MEDIAS 7900 / 10487900', 'type': 'variant', 'inventory': {'availableQuantity': 50}}]
+
+
+def test_rotacion_no_cuenta_hoy_como_dia_completo(app):
+    from app.services import garment_insights as gi
+    from app.services import invoice_facts as svc
+    from tests.test_estadisticas_fase_c import SEP_30, FakeAlegra
+    with app.app_context():
+        svc.sync_day(FakeAlegra({'2026-09-30': SEP_30}), 'carreno', date(2026, 9, 30))  # 5 medias
+        # Hoy (a medias) ya lleva 10 medias: antes la venta diaria salía (5 + 10) / 2 = 7,5
+        service = gi.GarmentInsightsService('carreno', date(2026, 10, 1), FakeAlegra({'2026-10-01': SEP_30 + SEP_30}))
+        service.client.get_active_items = lambda: MEDIAS_STOCK
+        data = service.stock_analysis(date(2026, 9, 30), date(2026, 10, 1))
+        medias = next(r for r in data['rotation'] if r['product'] == 'MEDIAS')
+        assert medias['daily_units'] == 5 and medias['days_of_inventory'] == 10
+        # Las ventas de hoy sí cuentan en agotados y curva de tallas
+        assert data['size_curve'] is not None
+
+
+def test_rotacion_de_solo_hoy_usa_hoy(app):
+    from app.services import garment_insights as gi
+    from tests.test_estadisticas_fase_c import SEP_30, FakeAlegra
+    with app.app_context():
+        service = gi.GarmentInsightsService('carreno', date(2026, 10, 1), FakeAlegra({'2026-10-01': SEP_30}))
+        service.client.get_active_items = lambda: MEDIAS_STOCK
+        data = service.stock_analysis(date(2026, 10, 1), date(2026, 10, 1))
+        medias = next(r for r in data['rotation'] if r['product'] == 'MEDIAS')
+        assert medias['daily_units'] == 5
