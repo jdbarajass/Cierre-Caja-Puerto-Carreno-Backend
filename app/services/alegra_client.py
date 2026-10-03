@@ -247,9 +247,29 @@ class AlegraClient:
                     all_invoices.extend(page_invoices)
                     logger.info(f"✓ Página {page}/{pages_needed}: {len(page_invoices)} facturas obtenidas. Total acumulado: {len(all_invoices)}")
 
+            # Si entra una venta mientras se pagina (día en curso con más de 30
+            # facturas), las páginas se corren y una factura llega dos veces:
+            # se sumaba doble en el cierre. Cada factura cuenta una sola vez.
+            unique, seen_ids = [], set()
+            for inv in all_invoices:
+                inv_id = inv.get('id') if isinstance(inv, dict) else None
+                if inv_id is not None:
+                    if inv_id in seen_ids:
+                        continue
+                    seen_ids.add(inv_id)
+                unique.append(inv)
+            if len(unique) != len(all_invoices):
+                logger.warning(f"{len(all_invoices) - len(unique)} facturas repetidas entre páginas para {date}; se cuentan una vez")
+            all_invoices = unique
+
             logger.info(f"✓ TOTAL: {len(all_invoices)} facturas obtenidas para {date} (esperadas: {total_invoices})")
 
-            if is_past_date:
+            complete = not total_invoices or len(all_invoices) >= total_invoices
+            if not complete:
+                # No se guarda en caché un día a medias: la próxima consulta lo vuelve a pedir
+                logger.warning(f"Facturas de {date} incompletas: {len(all_invoices)} de {total_invoices}")
+
+            if is_past_date and complete:
                 _invoices_cache.set(self._invoices_cache_key(date), all_invoices, ALEGRA_CACHE_TTL_SECONDS)
 
             return all_invoices

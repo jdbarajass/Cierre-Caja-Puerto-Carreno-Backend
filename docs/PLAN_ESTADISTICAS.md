@@ -46,3 +46,22 @@ Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Vent
 - Multi-tienda: todo por `store_code` / header `X-Store` (`app/stores.py`).
 - Alegra MCP: **solo herramientas de lectura**; nunca crear/editar/borrar en Alegra. El backend NO usa el MCP: usa `/api/v1` con Basic (ver límites en `CLAUDE.md`).
 - Tests sin red en `tests/` (agregar con `git add -f`); documentar en CHANGELOG; commit sí, push solo cuando el usuario lo pida (Render necesita Manual Deploy).
+
+## Revisión 2026-10-03 (código + conector, solo lectura)
+
+Corregido (ver CHANGELOG 2026-10-03): totales rápidos paginados (`get_all_sales_totals_by_day`) y facturas repetidas entre páginas / días incompletos en caché (`get_invoices_by_date`). Backend 164/164, frontend 6/6.
+
+Menores, sin corregir (bajo impacto):
+- Copia de facturas: el cron recarga solo los últimos 3 días. Una factura anulada o editada en Alegra después de eso sigue igual en `invoice_facts` / prendas (2 anuladas en todo 2026).
+- `_items_lock` de `alegra_client.py` es uno para todas las tiendas: mientras se descarga el stock de una (~1 min), la otra espera aunque tenga caché.
+- Rotación de Prendas: si el rango incluye hoy, hoy cuenta como día completo (venta diaria un poco más baja en la tarde).
+
+Datos del conector (Carreño, 3-oct): 1 bodega (Principal); 0 ítems con stock negativo; cuentas por cobrar ≈ $0 (1 factura, $100 pendientes); **cuentas por pagar $135.301.250 en 60 facturas de compra** (proveedor KOAJ); compras de mercancía como facturas de proveedor (ej. 607-611, 28-29 sep); **1.702 ajustes de inventario** (los últimos ajustan solo el costo).
+
+Propuestas (esperan decisión del usuario):
+1. **Llegadas de mercancía y sell-through**: guardar las facturas de compra (ítems y cantidades) → "de lo que llegó el 28-sep, qué % se vendió en 30 días", prendas que llegaron y no se mueven.
+2. **Alertas diarias** (cron de las 9 pm, ya existe): más vendidos que se agotaron hoy, día con venta muy por debajo de lo normal, factura con descuento alto.
+3. **Metas por vendedora** con la copia de facturas (venta, prendas por factura, % con cliente) y avance diario.
+4. **Ventas por día de la semana y hora**, y mapa de calor, desde la copia de facturas (sin descargar día por día).
+5. **Cuentas por pagar al proveedor** (vencimientos) junto al flujo de caja.
+6. Verificaciones pendientes en producción: Totales sep = 42.239.140 y 1-31 ago = 51.909.564; luego repetir las pruebas en el PC personal.

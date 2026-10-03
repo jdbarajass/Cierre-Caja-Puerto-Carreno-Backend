@@ -364,6 +364,41 @@ class AlegraDirectClient:
                 'data': []
             }
 
+    # Página de /invoices/sales-totals por día. No se sabe si /api/v1 corta en
+    # 30 filas (verificación pendiente en producción, docs/PLAN_ESTADISTICAS.md):
+    # se pagina hasta tener todos los días del rango, sin depender del tope.
+    SALES_TOTALS_PAGE_SIZE = 30
+    SALES_TOTALS_MAX_PAGES = 30  # ~2,5 años de días
+
+    def get_all_sales_totals_by_day(self, from_date: str, to_date: str) -> Dict[str, Any]:
+        """
+        Totales por día de TODO el rango. Antes se pedía una sola página con
+        limit=100: un rango de más de 100 días (o de 31 si Alegra cortara en
+        30) salía incompleto sin aviso. Cada fecha se cuenta una sola vez
+        (si Alegra ignorara `start` y repitiera la página, no se duplica).
+        """
+        expected_days = (datetime.strptime(to_date, '%Y-%m-%d') - datetime.strptime(from_date, '%Y-%m-%d')).days + 1
+        by_date: Dict[str, Dict[str, Any]] = {}
+        start = 0
+        for _ in range(self.SALES_TOTALS_MAX_PAGES):
+            page = self.get_sales_totals(from_date, to_date, group_by='day',
+                                         limit=self.SALES_TOTALS_PAGE_SIZE, start=start)
+            if not page.get('success'):
+                return page
+            rows = page.get('data') or []
+            new_rows = [r for r in rows if str(r.get('date')) not in by_date]
+            for r in new_rows:
+                by_date[str(r.get('date'))] = r
+            # Fin: página vacía, repetida o ya están todos los días del rango
+            if not new_rows or len(by_date) >= expected_days:
+                break
+            start += len(rows)
+        return {
+            'success': True,
+            'data': list(by_date.values()),
+            'metadata': {'from_date': from_date, 'to_date': to_date, 'group_by': 'day'},
+        }
+
     def get_all_invoices_for_date_range(
         self,
         from_date: str,

@@ -367,13 +367,9 @@ def get_quick_sales_summary():
 
         # Obtener totales de ventas usando el endpoint rápido de Alegra
         # Este endpoint retorna totales agregados sin detalles de facturas (mucho más rápido)
-        result = get_alegra_direct_client().get_sales_totals(
-            from_date=from_date,
-            to_date=to_date,
-            group_by='day',  # Agrupa por día
-            limit=100,       # Suficiente para 100 días
-            start=0
-        )
+        # Todas las páginas por día (antes una sola con limit=100: rangos largos
+        # salían incompletos sin aviso)
+        result = get_alegra_direct_client().get_all_sales_totals_by_day(from_date, to_date)
 
         if not result.get('success'):
             return jsonify({
