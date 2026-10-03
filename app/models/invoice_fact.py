@@ -50,6 +50,10 @@ class InvoiceFact(StoreScopedMixin, db.Model):
     discount = db.Column(db.BigInteger, nullable=False, default=0)
     total = db.Column(db.BigInteger, nullable=False, default=0)
     voided = db.Column(db.Boolean, nullable=False, default=False)
+    # Hora de la factura (0-23, hora de Colombia como la trae Alegra en
+    # `datetime`). NULL en las cargadas antes de la Fase D2: se completan al
+    # recargar su día (ver InvoiceSyncDay.fact_version).
+    hour = db.Column(db.SmallInteger)
     synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -65,6 +69,10 @@ class InvoiceSyncDay(StoreScopedMixin, db.Model):
     synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     # NULL en los días cargados antes de existir las prendas = faltan prendas
     items_synced = db.Column(db.Boolean)
+    # Versión de los datos guardados del día (app/services/invoice_facts.py,
+    # FACT_VERSION). NULL o menor = el día se vuelve a cargar en las tandas
+    # (2 = con la hora de cada factura, Fase D2).
+    fact_version = db.Column(db.Integer)
 
 
 class InvoiceItemFact(StoreScopedMixin, db.Model):

@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-10-03] (continuación) - Estadísticas, Fase D2: ventas por día de la semana y hora
+
+- `invoice_facts.hour` (SMALLINT): hora de cada factura leída de `datetime` de Alegra (`invoice_hour`). `invoice_sync_days.fact_version` (INTEGER) + `FACT_VERSION = 2`: los días cargados antes (NULL) se **vuelven a cargar en las tandas** (`outdated_days` entra en `pending_days`, del más reciente al más antiguo), igual que pasó con las prendas. Clientes y Prendas no se afectan (`missing_days` / `missing_item_days` no cambian). `coverage_status` trae `hours`. Migración en `app/__init__.py` (sin DEFAULT).
+- `GET /api/analytics/sales-patterns` (admin; `start_date`, `end_date`, `seller_id` opcional; 90 días por defecto): venta y facturas **promedio por día** de cada día de la semana (venta ÷ cuántos de ese día hubo), parte de la venta por hora y mapa de calor día × hora. Solo días cerrados (hoy en vivo solo si el periodo es únicamente hoy, mismo criterio que la rotación). Los días sin hora todavía no se cuentan (`coverage`).
+- `tests/test_estadisticas_fase_d2.py` (+6); `test_invoice_facts` ajustado al campo nuevo. **182/182**.
+- Ojo producción: tras el deploy, las noches siguientes recargan ~276 días (31 por noche) o con los botones de "Prendas guardadas"; mientras tanto Día y hora muestra solo los días listos.
+
 ## [2026-10-03] (continuación) - Estadísticas, Fase D1: llegadas de mercancía
 
 Decisiones del usuario (ver `docs/PLAN_ESTADISTICAS.md`, Fase D): D1 llegadas, D2 día/hora, D3 metas por vendedora (reparto con +15 % ajustable), D4 alertas en la plataforma; cuentas por pagar fuera (no son deuda real).

@@ -241,6 +241,7 @@ def create_app(config_class=Config):
     from app.routes.invoice_facts import bp as invoice_facts_bp
     from app.routes.garment_insights import bp as garment_insights_bp
     from app.routes.arrivals import bp as arrivals_bp
+    from app.routes.sales_patterns import bp as sales_patterns_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -260,6 +261,7 @@ def create_app(config_class=Config):
     app.register_blueprint(invoice_facts_bp)  # Resumen de facturas por tienda (fase 4)
     app.register_blueprint(garment_insights_bp)  # Estadísticas → Prendas (Fase C)
     app.register_blueprint(arrivals_bp)  # Estadísticas → Llegadas (Fase D1)
+    app.register_blueprint(sales_patterns_bp)  # Estadísticas → Día y hora (Fase D2)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
@@ -600,6 +602,12 @@ def _migrate_employee_tables(db, app):
         # prendas guardadas. Sin DEFAULT: los días ya cargados quedan en NULL
         # (= faltan prendas) y se completan en las siguientes cargas.
         add_column_if_missing(conn, 'invoice_sync_days', 'items_synced', 'BOOLEAN')
+
+        # Estadísticas → Día y hora (Fase D2, 2026-10-03): hora de cada factura
+        # y versión de los datos del día. Sin DEFAULT: los días ya cargados
+        # quedan en NULL y se vuelven a cargar en las siguientes tandas.
+        add_column_if_missing(conn, 'invoice_facts', 'hour', 'SMALLINT')
+        add_column_if_missing(conn, 'invoice_sync_days', 'fact_version', 'INTEGER')
         conn.commit()
 
 

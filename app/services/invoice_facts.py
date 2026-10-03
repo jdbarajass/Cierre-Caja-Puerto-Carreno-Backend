@@ -19,6 +19,7 @@ Reglas:
     mientras la primera seguía corriendo en el servidor.
 """
 import logging
+import re
 import time
 import zlib
 from contextlib import contextmanager
@@ -64,6 +65,23 @@ def invoice_discount(invoice: Dict[str, Any]) -> int:
     return int(round(total))
 
 
+# Versión de los datos de un día guardado (InvoiceSyncDay.fact_version). Al
+# subirla, los días con una versión menor se vuelven a cargar en las tandas.
+# 2 = hora de cada factura (Estadísticas → Día y hora, Fase D2).
+FACT_VERSION = 2
+
+_HOUR_RE = re.compile(r'(?:^|[ T])(\d{1,2}):\d{2}')
+
+
+def invoice_hour(invoice: Dict[str, Any]) -> Optional[int]:
+    """Hora (0-23) de `datetime` ("2026-09-30 15:42:10"), o None si no viene."""
+    match = _HOUR_RE.search(str(invoice.get('datetime') or ''))
+    if not match:
+        return None
+    hour = int(match.group(1))
+    return hour if 0 <= hour <= 23 else None
+
+
 def invoice_to_fact(invoice: Dict[str, Any]) -> Dict[str, Any]:
     """Campos de InvoiceFact a partir de una factura de /api/v1/invoices."""
     client = invoice.get('client') or {}
@@ -82,6 +100,7 @@ def invoice_to_fact(invoice: Dict[str, Any]) -> Dict[str, Any]:
         'discount': invoice_discount(invoice),
         'total': _money(invoice.get('total')),
         'voided': is_invoice_void(invoice),
+        'hour': invoice_hour(invoice),
     }
 
 
@@ -146,6 +165,7 @@ def sync_day(alegra_client, store_code: str, day: date) -> int:
             db.session.add(sync_row)
         sync_row.invoice_count = len(facts)
         sync_row.items_synced = True
+        sync_row.fact_version = FACT_VERSION
         sync_row.synced_at = datetime.utcnow()
         db.session.commit()
     except Exception:
@@ -213,14 +233,25 @@ def missing_item_days(store_code: str, start: date, end: date) -> List[date]:
     return [d for d in _days(start, end) if d not in with_items]
 
 
+def outdated_days(store_code: str, start: date, end: date) -> List[date]:
+    """Días del rango sin cargar o cargados con datos viejos (fact_version < FACT_VERSION)."""
+    current = {row.date for row in InvoiceSyncDay.query.filter(
+        InvoiceSyncDay.store_code == store_code,
+        InvoiceSyncDay.date >= start,
+        InvoiceSyncDay.date <= end,
+        InvoiceSyncDay.fact_version >= FACT_VERSION,
+    ).with_entities(InvoiceSyncDay.date)}
+    return [d for d in _days(start, end) if d not in current]
+
+
 def pending_days(store_code: str, start: date, end: date) -> List[date]:
     """
     Días a cargar (les falta el resumen de facturas o las prendas), del MÁS
     RECIENTE al más antiguo: así "Este mes" y "Mes anterior" quedan completos
     primero (con el orden contrario, octubre esperaba ~9 noches).
     """
-    return sorted(set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end)),
-                  reverse=True)
+    return sorted(set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end))
+                  | set(outdated_days(store_code, start, end)), reverse=True)
 
 
 def sync_range(alegra_client, store_code: str, days: List[date],
@@ -260,6 +291,7 @@ def coverage_status(store_code: str, start: date, end: date) -> Dict[str, Any]:
     total_days = (end - start).days + 1 if end >= start else 0
     missing = missing_days(store_code, start, end) if total_days else []
     missing_items = missing_item_days(store_code, start, end) if total_days else []
+    outdated = outdated_days(store_code, start, end) if total_days else []
     facts = InvoiceFact.query.filter(
         InvoiceFact.store_code == store_code, InvoiceFact.date >= start, InvoiceFact.date <= end)
     active = facts.filter(InvoiceFact.voided.is_(False))
@@ -279,6 +311,11 @@ def coverage_status(store_code: str, start: date, end: date) -> Dict[str, Any]:
             'missing_days': len(missing_items),
             # La carga va del más reciente al más antiguo
             'next_missing_day': missing_items[-1].isoformat() if missing_items else None,
+        },
+        # Hora de cada factura (Estadísticas → Día y hora): días cargados con la versión actual
+        'hours': {
+            'loaded_days': total_days - len(outdated),
+            'missing_days': len(outdated),
         },
         'quality': {
             'active_invoices': active.count(),
