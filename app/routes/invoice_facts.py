@@ -146,6 +146,10 @@ def _run_sync(client, store, max_days, recent_days):
         pending = svc.pending_days(store, FACTS_START, yesterday)[:max_days]
         backfill = svc.sync_range(client, store, pending, deadline)
 
+    # Compras de mercancía (Estadísticas → Llegadas): pocas, se recargan
+    # completas. Si fallan no se marca error: las facturas ya quedaron.
+    purchases = _sync_purchases(store)
+
     status = svc.coverage_status(store, FACTS_START, yesterday)
     error = recent['error'] or backfill['error']
     logger.info(f'[{store}] invoice-facts/sync: recientes={len(recent["synced_days"])} '
@@ -157,5 +161,16 @@ def _run_sync(client, store, max_days, recent_days):
         'message': error,
         'recent': recent,
         'backfill': backfill,
+        'purchases': purchases,
         'status': status,
     }), 200 if error is None else 502
+
+
+def _sync_purchases(store):
+    from app.services.purchase_facts import sync_purchases
+    from app.stores import get_alegra_direct_client
+    try:
+        return {'success': True, **sync_purchases(get_alegra_direct_client(), store, FACTS_START)}
+    except Exception as e:
+        logger.error(f'[{store}] Carga de compras de mercancía: {e}', exc_info=True)
+        return {'success': False, 'error': 'No se pudieron cargar las compras de Alegra'}

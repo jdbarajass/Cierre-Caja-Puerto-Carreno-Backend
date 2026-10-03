@@ -63,6 +63,7 @@ def create_app(config_class=Config):
     from app.models.account import Account, AccountMovement  # Import to ensure tables are created
     from app.models.app_setting import AppSetting  # Import to ensure table is created
     from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay, InvoiceItemFact  # Clientes (fase 4) y Prendas
+    from app.models.purchase_fact import PurchaseItemFact  # Estadísticas → Llegadas (Fase D1)
 
     db.init_app(app)
 
@@ -239,6 +240,7 @@ def create_app(config_class=Config):
     from app.routes.customer_insights import bp as customer_insights_bp
     from app.routes.invoice_facts import bp as invoice_facts_bp
     from app.routes.garment_insights import bp as garment_insights_bp
+    from app.routes.arrivals import bp as arrivals_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -257,6 +259,7 @@ def create_app(config_class=Config):
     app.register_blueprint(customer_insights_bp)  # Dashboard de clientes (Alegra)
     app.register_blueprint(invoice_facts_bp)  # Resumen de facturas por tienda (fase 4)
     app.register_blueprint(garment_insights_bp)  # Estadísticas → Prendas (Fase C)
+    app.register_blueprint(arrivals_bp)  # Estadísticas → Llegadas (Fase D1)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

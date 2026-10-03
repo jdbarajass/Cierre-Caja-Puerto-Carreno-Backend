@@ -399,6 +399,39 @@ class AlegraDirectClient:
             'metadata': {'from_date': from_date, 'to_date': to_date, 'group_by': 'day'},
         }
 
+    BILLS_PAGE_SIZE = 30   # máximo que acepta /bills
+    BILLS_MAX_PAGES = 200  # tope de seguridad: 6.000 compras
+
+    def get_bills_since(self, since: str) -> List[Dict[str, Any]]:
+        """
+        Compras de mercancía (facturas de proveedor, con sus prendas en
+        `purchases.items`) con fecha >= `since`. Se piden de la más nueva a la
+        más vieja y se para al pasar `since`. Si Alegra no respetara el orden,
+        se recorren todas las páginas y se filtra (nunca se corta antes).
+        Lanza excepción si una página falla (nunca devuelve una lista a medias).
+        """
+        bills: Dict[str, Dict[str, Any]] = {}
+        start = 0
+        for _ in range(self.BILLS_MAX_PAGES):
+            page = self._make_request('/bills', {
+                'start': start, 'limit': self.BILLS_PAGE_SIZE,
+                'order_field': 'id', 'order_direction': 'DESC',
+            })
+            page = page if isinstance(page, list) else page.get('data', []) if isinstance(page, dict) else []
+            new = [b for b in page if str(b.get('id')) not in bills]
+            if not new:
+                break  # página vacía, o Alegra ignoró `start` y la repitió
+            for b in new:
+                bills[str(b.get('id'))] = b
+            ids = [int(b['id']) for b in page if str(b.get('id', '')).isdigit()]
+            descending = ids == sorted(ids, reverse=True)
+            if descending and all(str(b.get('date') or '') < since for b in page):
+                break  # ya se pasó la fecha inicial
+            if len(page) < self.BILLS_PAGE_SIZE:
+                break
+            start += self.BILLS_PAGE_SIZE
+        return [b for b in bills.values() if str(b.get('date') or '') >= since]
+
     def get_all_invoices_for_date_range(
         self,
         from_date: str,

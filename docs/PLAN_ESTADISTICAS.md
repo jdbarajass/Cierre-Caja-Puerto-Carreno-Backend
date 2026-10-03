@@ -65,3 +65,14 @@ Propuestas (esperan decisión del usuario):
 4. **Ventas por día de la semana y hora**, y mapa de calor, desde la copia de facturas (sin descargar día por día).
 5. **Cuentas por pagar al proveedor** (vencimientos) junto al flujo de caja.
 6. Verificaciones pendientes en producción: Totales sep = 42.239.140 y 1-31 ago = 51.909.564; luego repetir las pruebas en el PC personal.
+
+## Fase D — mejoras aprobadas por el usuario (2026-10-03)
+
+Decisiones: la mejora 5 (cuentas por pagar) **queda fuera**: las facturas de compra abiertas son de dic-2024 a 2025, sin pagos, y la compra se registra al precio de venta (no son deuda real). Alertas **dentro de la plataforma**. Metas por vendedora: **reparto automático con +15 % que el admin puede ajustar**.
+
+Hallazgo del conector: `/bills` trae las prendas de cada compra (`purchases.items`: id, nombre, cantidad, precio). El precio es el **de venta** (GORRA 39900 a $39.900): por eso los costos de Alegra no sirven para margen. La factura de venta trae `datetime` (hora).
+
+- ✅ **D1 — Llegadas de mercancía** (2026-10-03): copia por tienda de las compras desde el 1-ene-2026 (`PurchaseItemFact`, se recarga completa en cada carga: son pocas). Pestaña Estadísticas → Llegadas: cada llegada (fecha + proveedor) con prendas que llegaron, cuántas se vendieron desde entonces y % vendido; prendas de una llegada sin ninguna venta. Las ventas de una referencia se asignan primero a la llegada más antigua (aproximado: no se conoce el stock que ya había).
+- **D2 — Ventas por día de la semana y hora**: hora de cada factura en la copia (columna nueva; los días viejos se recargan solos como pasó con las prendas). Mapa de calor día × hora, por vendedora.
+- **D3 — Metas por vendedora**: meta del mes de la tienda = mismo mes del año anterior + 15 %, repartida según la venta de cada vendedora en los últimos 3 meses; el admin puede escribir el monto de cada una. Avance diario, prendas por factura y % con cliente.
+- **D4 — Alertas diarias en la plataforma**: el cron de las 9 pm calcula y guarda: más vendidos que se agotaron, día con venta muy por debajo de lo normal, facturas con descuento alto. Aviso en el Dashboard para el admin.

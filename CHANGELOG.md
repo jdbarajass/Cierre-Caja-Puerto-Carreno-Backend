@@ -2,6 +2,17 @@
 
 ---
 
+## [2026-10-03] (continuación) - Estadísticas, Fase D1: llegadas de mercancía
+
+Decisiones del usuario (ver `docs/PLAN_ESTADISTICAS.md`, Fase D): D1 llegadas, D2 día/hora, D3 metas por vendedora (reparto con +15 % ajustable), D4 alertas en la plataforma; cuentas por pagar fuera (no son deuda real).
+- Nuevo `PurchaseItemFact` (`purchase_item_facts`, por tienda): prendas de cada compra de mercancía de Alegra (`/bills` → `purchases.items`) desde el 1-ene-2026. Anuladas y borradores no cuentan. Cada carga **reemplaza todas** las compras del periodo (son ~140) en una transacción; si Alegra falla no se borra nada.
+- `AlegraDirectClient.get_bills_since`: pide /bills de la más nueva a la más vieja y para al pasar la fecha; si Alegra no respetara el orden, recorre todas las páginas (nunca corta antes).
+- La carga va dentro de `POST /api/analytics/invoice-facts/sync` (cron de las 9 pm y botones): responde `purchases`; si las compras fallan, la carga de facturas sigue saliendo bien. Botón aparte: `POST /api/analytics/arrivals/sync` (admin).
+- `GET /api/analytics/arrivals` (admin, por defecto últimos 90 días): cada llegada (misma fecha + proveedor) con prendas, vendidas desde ese día (prendas guardadas, días cerrados) y % vendido, por prenda y talla; "llegó y no se mueve" (30 días o más sin ninguna venta). Las ventas de una referencia se asignan a la llegada más antigua (aproximado: no se sabe el stock previo). Sin bolsa ni tarjetas de regalo.
+- Ojo: la compra está registrada al **precio de venta**, no al costo (por eso los costos de Alegra no sirven para margen).
+- `tests/test_estadisticas_fase_d1.py` (+9).
+- **Verificar en producción**: que /api/v1/bills con las credenciales de la tienda responda (no probado; el conector usa otra ruta) y que la primera carga traiga ~140 compras de 2026.
+
 ## [2026-10-03] - Revisión de Estadísticas: totales rápidos y facturas repetidas
 
 Revisión completa del módulo Estadísticas pedida por el usuario (lectura de código + conector de Alegra, solo lectura). Dos errores de robustez corregidos:
