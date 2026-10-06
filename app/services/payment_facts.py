@@ -19,8 +19,10 @@ from app.models.month_sheet import PaymentFact
 
 logger = logging.getLogger(__name__)
 
-# Desde aquí se cargan los recibos (arranque de las cuentas diarias)
-PAYMENTS_START = date(2026, 10, 1)
+# Desde aquí se cargan los recibos: las cuentas diarias arrancan el 1-oct,
+# pero el resumen mensual (Fase 3) arranca en septiembre y necesita sus
+# ventas por medio de pago.
+PAYMENTS_START = date(2026, 9, 1)
 RECENT_DAYS = 7          # cada noche se recargan los últimos días
 PAGE_SIZE = 30           # máximo que entrega Alegra por página
 MAX_PAGES = 120
@@ -31,11 +33,13 @@ SALE_MEDIOS = ('efectivo', 'qr', 'ahorro', 'credito', 'nequi', 'addi',
 
 # Medio de venta -> cuenta de Resumen donde termina la plata.
 # Ahorro/crédito (datáfono) y Addi llegan a Bancolombia …6018 (ADDI + DATÁFONO).
-# Bold: por confirmar con el usuario a qué cuenta llega (por ahora sin cuenta).
+# Bold: llega a la misma cuenta del datáfono y Addi (confirmado por el usuario
+# 2026-10-06, "por el momento"); su comisión y días de llegada no se conocen,
+# así que no entra a la plata en tránsito.
 MEDIO_ACCOUNT = {
     'efectivo': 'cash', 'qr': 'qr', 'ahorro': 'addi_datafono', 'credito': 'addi_datafono',
     'addi': 'addi_datafono', 'nequi': 'nequi', 'daviplata': 'daviplata', 'bbva': 'bbva',
-    'sistecredito': 'sistecredito', 'bold': None,
+    'sistecredito': 'sistecredito', 'bold': 'addi_datafono',
 }
 
 DATAFONO_FEE = 0.038             # datáfono débito y crédito

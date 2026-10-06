@@ -43,6 +43,21 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 2. Toca **"Traer ventas de Alegra"**. La primera vez trae todo desde el 1 de octubre (puede tardar un minuto). Después se carga sola cada noche a las 9 pm.
 3. Revisa que la tabla de ventas diarias cuadre con tu Excel (el 5 de octubre ya se comprobó que cuadra al peso).
 
+### 2.3 Cuentas → Año (resumen mensual y anual)
+1. Entra a **Gestión → Cuentas → Año** y toca **"Traer inventario de Alegra"** (trae el inventario al cierre de agosto, septiembre y el de hoy; después se actualiza solo cada noche).
+2. **Comprueba el inventario:** toca "Ver enero a agosto" y, en julio, toca **"Traer"**. Si sale **$174.013.437** (lo mismo de tu Excel), Alegra da el inventario igual que tú y la columna "G. real + inventario" sirve. Si sale distinto, avísame.
+3. **Llena septiembre a mano** (sus gastos están en el Excel, no en la plataforma): en la fila de septiembre toca el lápiz ✎ y escribe (con la nota "Excel"):
+
+| Dato | Valor | De dónde sale |
+|---|---|---|
+| Gastos operativos | **8.201.857** | $5.954.601 de la hoja de septiembre del Excel (arriendo, sueldos, aseo, Alegra, fletes de ropa, 4x1000…) + $2.247.256 de los gastos de septiembre que pagaste en octubre (arriendo parte, Scotiabank, internet, YouTube). |
+| Préstamos | **15.008.881** | Lo que Carreño pagó por Primavera ($14.646.881: herrajería, arriendo de Primavera, fletes y envíos, Julieth, locales, gasolina) + préstamos a Mónica ($362.000). |
+| Inversiones | **6.956.337** | Cámaras, computador, impresora POS, herrajería de Carreño, ganchos/silla/pistola. |
+| Retiros de socios | **200.800** | Ganancia de Jhonatan enviada a Sindy. |
+| Recompras | revisar | El Excel dice **$12.709.593**. Si la plataforma muestra otro valor en septiembre, escribe el del Excel. |
+
+> Esta clasificación la hice leyendo cada gasto de la hoja de septiembre. Si ves alguno distinto (por ejemplo, el envío a la hermana de Julieth no era de Primavera), cambia el valor.
+
 ---
 
 ## Parte 3. El día a día
@@ -62,6 +77,8 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 1. **Cuentas → Mes.** Ahí ves todo como en el Excel: ventas por día y medio de pago (con "venta mala / bajita / buena / alta"), cuánta plata hay en cada cuenta y cuánta está **por llegar** del datáfono y Addi (con la fecha en que llega).
 2. En cada cuenta escribe el **"Saldo real"** que ves en el banco (o lo que hay en efectivo) y toca **Guardar**. Si dice **"Cuadra"**, todo bien; si sale una **diferencia**, falta registrar algo (un gasto, una recompra, una comisión).
 
+**Para ver cómo va el año:** **Cuentas → Año**. Por cada mes: ventas, recompras, gastos, ganancia bruta / neta / real con su %, inventario y cuánto subió o bajó; abajo, ventas por medio de pago y la plata que salió sin ser gasto (inversiones, préstamos, retiros) y lo que tiene Jhonatan. Si un dato está mal, toca el lápiz ✎ del mes y escríbelo a mano (queda marcado con ✎ y se puede volver al calculado).
+
 **A fin de mes:**
 1. En **Cuentas → Mes**, toca **"Registrar en Gastos"** en el cuadro de comisiones: resta de ADDI + DATÁFONO lo que cobran el datáfono (3,8 %) y Addi (7,735 %).
 2. Revisa los gastos fijos del mes en **Gastos**: ninguno debe quedar "Vencido" sin pagar.
@@ -74,4 +91,5 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 - **¿Lo que sobra de un mes pasa al siguiente?** Sí, solo. El "saldo inicial" de cada cuenta es lo que quedó el mes anterior. Ya no hace falta anotar recompras en el mes anterior como hacías en el Excel.
 - **¿Me equivoqué en un gasto?** Edítalo o bórralo con el lápiz / la caneca en Gastos: el saldo de las cuentas se corrige solo.
 - **¿Por qué la venta del mes de Alegra no es igual a "Ventas (cierres)" en una cuenta?** La tabla de ventas viene de Alegra (lo vendido); "Ventas (cierres)" es lo que se abonó a cada cuenta con el cierre de caja (el efectivo ya viene sin lo que se sacó de la caja ese día).
-- **Una cuenta del Excel no aparece (Bold, SisteCrédito):** sus ventas sí salen en la tabla de ventas; a qué cuenta llega la plata de Bold queda por confirmar.
+- **Bold:** sus ventas salen en la tabla y la plata se toma como que llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Su comisión y en cuántos días llega no se conocen, así que no aparece en "por llegar".
+- **¿Qué es cada ganancia?** Bruta = ventas − recompras. Neta = ventas − gastos (como tu Excel). Real = ventas − recompras − gastos. "G. real + inventario" suma lo que subió el inventario: si subió, esa plata está en la tienda en ropa.

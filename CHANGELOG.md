@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-06] (continuación 3) - Cuentas diarias, Fase 3: resumen mensual y anual
+
+- `GET /api/monthly-summary?year`: por mes ventas (copia de facturas), recompras, gastos operativos (por mes al que corresponden, con 4x1000 de gastos y recompras), ganancia bruta/neta/real y %, inventario al cierre del mes y su variación, ganancia real + inventario, inversiones, retiros, préstamos, fletes y saldo de Jhonatan; ventas por medio del año. Desde sep-2026 (los meses anteriores se ven para comparar con el Excel, sin sumar).
+- Valores escritos a mano por mes y dato (`MonthlySummaryOverride`, `PUT /api/monthly-summary/override`), mandan sobre el calculado.
+- Inventario al cierre de cada mes desde `/reports/inventory-value-totals` (`InventorySnapshot`, `POST /api/monthly-summary/inventory`); el cron lo actualiza cada noche dentro de `invoice-facts/sync`.
+- Bold → cuenta ADDI + DATÁFONO. Los recibos de pago se cargan desde el 1-sep-2026.
+- Guía y plan actualizados (valores de septiembre del Excel ya clasificados). `tests/test_monthly_summary.py` (nuevo, 5). **232/232**.
+
 ## [2026-10-06] (continuación 2) - Cuentas diarias, Fase 2: hoja del mes
 
 - **Ventas por medio desde los recibos de pago de Alegra** (`/payments`: `paymentMethod` + `bankAccount`): los 10 medios del Excel (efectivo, QR, ahorro/débito, crédito, Nequi, Addi, BBVA, Daviplata, SisteCrédito, Bold), por fecha de la factura. Modelo `PaymentFact`; `app/services/payment_facts.py` (clasificación, festivos de Colombia, llegada y neto del datáfono −3,8 % D+1 hábil y Addi −7,735 % a 30 días); `AlegraClient.get_payments_page`. Se cargan con el cron de las 9 pm (dentro de `invoice-facts/sync`, sin tocar el workflow) y con `POST /api/month-sheet/sync-payments`.

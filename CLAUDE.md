@@ -29,4 +29,5 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 - Plan, análisis del Excel, criterio contable y estado por fase: **`docs/PLAN_CUENTAS_DIARIAS.md`** (leerlo antes de seguir con la Fase 2).
 - Fase 1 (Gastos): `app/models/expense.py`, `app/routes/expenses.py`, `tests/test_expenses.py`. `account_mode='caja'` = salió de la caja del día (el cierre ya lo descontó de EFECTIVO: no restar otra vez).
 - Fase 2 (Mes): `app/models/month_sheet.py`, `app/services/payment_facts.py` (recibos de Alegra → 10 medios, festivos, llegada datáfono/Addi), `app/services/month_sheet.py`, `app/routes/month_sheet.py`, `tests/test_month_sheet.py`. Los pagos se cargan dentro de `invoice-facts/sync` (cron 9 pm).
+- Fase 3 (Año): `app/models/monthly_summary.py`, `app/services/monthly_summary.py`, `app/routes/monthly_summary.py`, `tests/test_monthly_summary.py`. El inventario de fin de mes también se carga dentro de `invoice-facts/sync`.
 - Guía para el usuario (sin términos técnicos): `docs/GUIA_CUENTAS_DIARIAS.md`.

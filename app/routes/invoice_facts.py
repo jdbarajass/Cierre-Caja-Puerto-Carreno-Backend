@@ -155,6 +155,9 @@ def _run_sync(client, store, max_days, recent_days):
     # recibos de pago de Alegra de los últimos días. Si fallan no se marca
     # error: las facturas ya quedaron y se recupera la noche siguiente.
     payments = _sync_payments(store)
+    # Inventario al cierre de cada mes (Cuentas → Año, Fase 3): el del mes en
+    # curso se actualiza cada noche; los meses cerrados se traen una vez.
+    inventory = _sync_inventory(store)
 
     status = svc.coverage_status(store, FACTS_START, yesterday)
     error = recent['error'] or backfill['error']
@@ -169,6 +172,7 @@ def _run_sync(client, store, max_days, recent_days):
         'backfill': backfill,
         'purchases': purchases,
         'payments': payments,
+        'inventory': inventory,
         'status': status,
     }), 200 if error is None else 502
 
@@ -181,6 +185,16 @@ def _sync_payments(store):
         db.session.rollback()
         logger.error(f'[{store}] Carga de pagos por medio: {e}', exc_info=True)
         return {'success': False, 'error': 'No se pudieron cargar los pagos de Alegra'}
+
+
+def _sync_inventory(store):
+    from app.routes.monthly_summary import refresh_inventory
+    try:
+        return {'success': True, **refresh_inventory(store)}
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'[{store}] Carga del inventario mensual: {e}', exc_info=True)
+        return {'success': False, 'error': 'No se pudo cargar el inventario de Alegra'}
 
 
 def _sync_purchases(store):

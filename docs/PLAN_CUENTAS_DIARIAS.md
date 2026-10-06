@@ -8,7 +8,7 @@ Estado de las fases (actualizar al cerrar cada una):
 |---|---|---|
 | 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | Pendiente |
+| 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 4 | Extras: bonos regalo, regla 70/30, incentivos/metas, gastos en el comparativo de tiendas | Pendiente |
 
 ---
@@ -162,6 +162,19 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - Por mes (desde **sep-2026**): ventas totales y por medio, recompras, gastos por categoría, ganancia neta, ganancia real, % de ganancia, fletes, inventario al último día del mes y su variación, con total y promedio del año, y gráfico.
 - **Inventario a fin de mes**: el sistema ya consulta `/reports/inventory-value-totals` de Alegra con `to_date` (`GET /api/inventory/quick-total?to_date=…`, el "Inventario total" del Dashboard). Llamándolo con el último día de cada mes se tiene el histórico sin digitar; guardarlo en una tabla al cerrar el mes. **Verificar si el valor es a costo o a precio de venta** comparando con el Excel (ene $151.871.964, feb $172.911.621, mar $178.821.276, abr $186.063.892, may $189.017.262, jun $192.873.771, jul $174.013.437).
 - Septiembre: cargar los gastos del Excel como `sin_mover` (no tocan cuentas) para que el resumen arranque en septiembre.
+
+**Cómo quedó (2026-10-06)**
+- Decisiones: Bold llega a ADDI + DATÁFONO (`MEDIO_ACCOUNT['bold']`), sin tránsito ni comisión (desconocidos). `PAYMENTS_START` pasa a **1-sep-2026** para tener ventas por medio de septiembre (el resumen arranca ahí).
+- Backend: `app/models/monthly_summary.py` (`InventorySnapshot` por tienda y mes con `as_of`; `MonthlySummaryOverride` por tienda, mes y dato), `app/services/monthly_summary.py` (`computed_month`, `build_year`, `fetch_inventory`, `months_needing_inventory`), `app/routes/monthly_summary.py`:
+  - `GET /api/monthly-summary?year`: 12 meses (los futuros solo marcados; antes de sep-2026 se calculan pero no suman), totales, promedios, ventas por medio del año.
+  - Definiciones: ventas = `InvoiceFact.total` no anuladas; recompras = `RepurchaseEntry.total_enviado`; gastos operativos = gastos con `period` del mes de categorías operativo/sueldo/flete/financiero/cuota_credito/otro (con 4x1000) + 4x1000 de las recompras; aparte inversiones, retiros, préstamos (empleada + tienda), fletes (incluidos en operativos); Jhonatan al cierre = `_carryover_before(día siguiente)`.
+  - `PUT /api/monthly-summary/override` (`value: null` borra); campos: ventas, recompras, gastos_operativos, inventario, inversiones, retiros, prestamos, fletes.
+  - `POST /api/monthly-summary/inventory` (`{year, month}` o vacío = los que falten desde ago-2026 + el mes en curso; máx. 14 llamadas; errores por mes sin cortar). El cron lo llama dentro de `invoice-facts/sync` (`_sync_inventory`).
+  - Tests: `tests/test_monthly_summary.py` (5). Suite 232/232.
+- Frontend: `src/pages/CuentasAnual.jsx` (pestaña **Cuentas → Año**), `src/services/monthlySummaryService.js`: tarjetas del año, gráfico de barras ventas vs. ganancia real (un eje; colores validados con el validador de dataviz: CVD ΔE 24.7), cierre general con edición a mano (✎ con nota y valor calculado), "Ver enero a agosto" para comparar con el Excel, ventas por medio del año, otras salidas y Jhonatan. En celular, tarjetas.
+- Verificado en Chromium (1366 y 390) con datos de prueba (ventas jul–oct, recompra, gastos de oct/sep e inventarios).
+- **Valores de septiembre** para escribir a mano (clasificación hecha por el asistente sobre la hoja SEPTIEMBRE del Excel, 46 gastos = $28.120.618): operativos con fletes $5.954.601 (+ $2.247.256 de gastos de septiembre pagados en octubre = $8.201.857), Primavera $14.646.881, inversiones $6.956.337, préstamos a Mónica $362.000, retiro $200.800. Están en la guía.
+- **Pendiente de verificar en producción:** que el inventario de julio de Alegra dé $174.013.437 (= Excel). Si no, el valor de Alegra no está al mismo precio que el del Excel y "G. real + inventario" no se debe usar (ver C5 de Estadísticas: costos de Alegra por corregir).
 
 ### Fase 4 — Extras
 Bonos regalo; regla 70/30 (resurtido/utilidad) configurable; metas e incentivos (el sistema usa +15 % en Estadísticas → Metas, el Excel +25 %); gastos en el comparativo de tiendas.

@@ -70,7 +70,7 @@ OCT5 = [
     _pay(16510, '2026-10-05', 109900, 'transfer', 'QR'),
     _pay(16509, '2026-10-05', 139800, 'transfer', 'QR'),
     _pay(16400, '2026-10-04', 5000, 'cash', 'Efectivo POS', status='void'),   # anulado
-    _pay(16300, '2026-09-28', 77000, 'cash', 'Efectivo POS'),                 # antes de since
+    _pay(16300, '2026-08-28', 77000, 'cash', 'Efectivo POS'),                 # antes de since
 ]
 
 
@@ -183,9 +183,9 @@ def test_pagos_separados_por_tienda(app, client, h):
 def test_ruta_de_carga_con_alegra_simulado(app, client, h, monkeypatch):
     import app.routes.month_sheet as ms_routes
     monkeypatch.setattr(ms_routes, 'get_alegra_client', lambda store=None: FakeAlegra(OCT5))
-    resp = client.post('/api/month-sheet/sync-payments', headers=h(), json={'since': '2026-09-01'})
+    resp = client.post('/api/month-sheet/sync-payments', headers=h(), json={'since': '2026-08-01'})
     assert resp.status_code == 200
-    assert resp.get_json()['since'] == '2026-10-01'      # nunca antes del arranque
+    assert resp.get_json()['since'] == '2026-09-01'      # nunca antes del arranque
     assert resp.get_json()['payments'] == 17
 
 
