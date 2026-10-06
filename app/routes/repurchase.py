@@ -21,6 +21,14 @@ MONEY_FIELDS = ['efectivo', 'datafono', 'qr', 'daviplata', 'nequi', 'bbva',
 
 PURCHASE_CATEGORIES = ('ropa', 'operacional')
 
+# Desde este mes el balance de Jhonatan se ARRASTRA solo de un mes al
+# siguiente: lo que le quedó disponible al cerrar un mes (enviado + sobrante
+# manual - compras) se suma al mes siguiente, sin escribirlo a mano. Antes de
+# este mes no hay arrastre (los meses viejos pueden tener compras sin
+# registrar y el saldo saldría inflado). El campo manual
+# 'sobrante_mes_anterior' sigue sumando aparte, para ajustes puntuales.
+CARRYOVER_START = dt_date(2026, 9, 1)
+
 # Campo de envío (RepurchaseEntry) -> payment_key de la cuenta correspondiente
 # en Resumen (Account). El dinero enviado a Jhonatan sale físicamente de estas
 # cuentas, así que se descuenta de ahí automáticamente (ver
@@ -161,6 +169,26 @@ def _month_range(year, month):
     return dt_date(year, month, 1), dt_date(year, month, last_day)
 
 
+def _carryover_before(month_start):
+    """
+    Saldo que Jhonatan trae al empezar el mes que inicia en month_start (de la
+    tienda actual): balance acumulado desde CARRYOVER_START hasta el día antes
+    de month_start = (enviado + sobrante manual) - compras. 0 si el mes es
+    CARRYOVER_START o anterior (ahí no hay arrastre). Puede ser negativo si
+    gastó más de lo que se le envió.
+    """
+    if month_start <= CARRYOVER_START:
+        return 0
+    entries = RepurchaseEntry.for_current_store().filter(
+        RepurchaseEntry.date >= CARRYOVER_START, RepurchaseEntry.date < month_start
+    ).all()
+    purchases = RepurchasePurchase.for_current_store().filter(
+        RepurchasePurchase.date >= CARRYOVER_START, RepurchasePurchase.date < month_start
+    ).all()
+    recibido = sum(e.total_enviado + e.sobrante_mes_anterior for e in entries)
+    return recibido - sum(p.amount for p in purchases)
+
+
 # ─────────────────────────────────────────────
 #  LISTAR
 # ─────────────────────────────────────────────
@@ -207,10 +235,23 @@ def list_entries():
         totals['fee_4mil']      = sum(e.fee_4mil for e in entries)
         totals['valor_sobrante']= totals['total_enviado'] - totals['fee_4mil']
 
+        # Saldo arrastrado del mes anterior (solo al consultar un mes puntual).
+        # carryover_active=False para meses sin arrastre (antes de/igual a
+        # CARRYOVER_START), para que el frontend no muestre la fila.
+        carryover = 0
+        carryover_active = False
+        if year and month:
+            month_start = dt_date(year, month, 1)
+            carryover_active = month_start > CARRYOVER_START
+            carryover = _carryover_before(month_start)
+
         return jsonify({
             'success': True,
             'entries': [e.to_dict() for e in entries],
             'totals':  totals,
+            'saldo_mes_anterior': carryover,
+            'carryover_active': carryover_active,
+            'carryover_start': CARRYOVER_START.isoformat(),
             'count':   len(entries)
         }), 200
 

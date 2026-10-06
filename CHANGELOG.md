@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-06] - Cuentas Recompras: el balance de Jhonatan se arrastra de un mes al siguiente
+
+El balance disponible solo miraba el mes abierto: lo que le sobró a Jhonatan en septiembre no aparecía en octubre (había que escribirlo a mano en "Sobrante mes anterior" cada mes).
+- `app/routes/repurchase.py`: nueva constante `CARRYOVER_START = 2026-09-01` y `_carryover_before(month_start)` = (enviado + sobrante manual) − compras acumulado desde `CARRYOVER_START` hasta el día antes del mes, por tienda. Puede ser negativo.
+- `GET /api/repurchase?year&month` devuelve además `saldo_mes_anterior`, `carryover_active` (False para sep-2026 y anteriores: ahí no hay arrastre) y `carryover_start`. `totals` no cambia.
+- El campo manual `sobrante_mes_anterior` se conserva y suma aparte (ajustes puntuales); también entra en el arrastre del mes siguiente.
+- No toca cuentas de Resumen ni comisión. El comparativo de tiendas (`operations`) sigue mostrando los movimientos del periodo, sin arrastre.
+- `tests/test_repurchase_carryover.py` (nuevo, 4 tests): septiembre sin arrastre, octubre con el sobrante de septiembre, encadenado de meses + manual, saldo negativo, por tienda. Con `test_multi_store.py`: 27/27.
+
 ## [2026-10-03] (continuación) - Revisión en producción de la Fase D
 
 Revisado con capturas del usuario (Carreño, 3-oct 10:00): **Totales de Ventas sep = $42.239.140 (30 días) y 1-31 ago = $51.909.564 (31 días): cuadran con Alegra** (verificación pendiente desde la Fase A cerrada). Llegadas: 131 compras cargadas desde /api/v1/bills, 18 llegadas en 90 días, 59,5 % vendido. Metas: octubre 2025 $47.838.020 → meta $55.014.000; Mónica + Rita + $324.900 sin vendedora (factura 8501) = vendido $8.090.175.
