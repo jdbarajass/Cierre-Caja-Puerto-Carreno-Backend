@@ -127,11 +127,19 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 
 ### Fase 2 — Hoja del mes (estado por medio de pago)
 - Vista "todo de una" como el Excel: días del mes × 10 medios de pago con total y calificación del día (umbrales configurables), recompras y gastos del mes.
-- Fuente de las ventas por medio: **por definir al empezar la fase** (el cierre de caja solo guarda 5 campos: efectivo, Nequi, Daviplata, QR, "Addi + datáfono"; para separar débito/crédito/Addi/Bold/BBVA/SisteCrédito hay que ver qué trae Alegra en los pagos de las facturas o agregar campos al cierre).
+- **Fuente de las ventas por medio: los recibos de pago de Alegra** (`/payments` tipo `in`; verificado 2026-10-06 con el conector de Alegra de Carreño). Cada recibo trae `paymentMethod` **y** `bankAccount`, que es lo que permite separar los 10 medios sin digitar nada:
+  - `bankAccount` **QR** → QR; **ADDI** → Addi (llega con `paymentMethod` transfer o credit-card); **DATAFONO** + `debit-card` → AHORRO (débito), + `credit-card` → CRÉDITO; `cash` (Efectivo POS / Caja general) → EFECTIVO. Nequi, Daviplata, BBVA, Bold y SisteCrédito: confirmar el nombre de su cuenta en Alegra al empezar (no salieron en la muestra).
+  - Ignorar los recibos sin factura ("Apertura de turno", "Cierre de turno", cuentas Caja chica).
+  - **Agrupar por la fecha de la FACTURA**, no la del recibo (ej.: recibo del 6-oct en efectivo de una factura del 5-oct cuenta para el 5).
+  - Caso raro: un recibo `transfer` con cuenta "Caja general" (34.900 el 5-oct) el usuario lo contó como QR → regla: `transfer` sin cuenta de banco = QR, mostrarlo marcado para revisar.
+  - **Prueba del 5-oct-2026 contra el Excel: cuadra exacto** (efectivo 384.500, QR 391.350, ahorro 170.000, crédito 193.950, Addi 204.700 = 1.344.500).
+  - Guardarlo en la copia de facturas que ya carga el cron de las 9 pm (nueva tabla de pagos por factura, por tienda), para no llamar a Alegra cada vez.
 - Plata en tránsito: datáfono (D+1 hábil, −3,8 %) y Addi (~30 días, −7,735 %): fecha estimada de llegada, monto neto, y pasa a disponible al llegar (con confirmación manual o ajuste de la fecha/monto real).
 - Estado por medio: saldo inicial (final del mes anterior) + ventas − comisiones − recompras − gastos ± ajustes/transferencias = saldo final; "saldo real" digitado → diferencia (el "acople debe dar cero"). Día por día al desplegar.
 - Cerrar mes (foto guardada) y reabrir; todo editable con comentarios.
-- Saldos iniciales al 1-oct-2026 por medio: decidir al empezar la fase (Excel F44:F49 al 30-sep o lo que muestre Resumen).
+- **Saldos de partida (decisión del usuario, 2026-10-06): los de Cuentas → Resumen al 5-oct-2026 a las 9 pm son los reales.** El saldo al 1-oct se calcula hacia atrás (saldo − movimientos de octubre). Captura de ese momento: Efectivo $3.485.000, Nequi $397.350, Daviplata $0, QR $3.067.991, ADDI + DATÁFONO $3.506.103 (contempla hasta 5-oct), SisteCrédito $0, BBVA $0, Ahorro $3.924.204, Jhonatan $2.710.000.
+  - Cruce con el Excel de octubre: Efectivo = "valor aún no enviado" del Excel; QR = ventas QR de octubre ($5.198.075) − gastos QR de octubre ($2.130.084) → **esos gastos ya están descontados en Resumen** (probablemente con ajustes manuales); Nequi = ventas de octubre; Ahorro = Excel. **ADDI + DATÁFONO difiere $29.592** del Excel ($3.506.103 vs $3.476.511): revisar en la conciliación.
+  - El efectivo que abona el cierre ya viene sin lo pagado de la caja: 1-oct 1.845.800 + 1.300 excedente − 426.000 arriendo = 1.421.100 consignado; 2-oct 1.007.400 + 700 − 53.200 aseo = 954.900.
 
 ### Fase 3 — Resumen mensual y anual
 - Por mes (desde **sep-2026**): ventas totales y por medio, recompras, gastos por categoría, ganancia neta, ganancia real, % de ganancia, fletes, inventario al último día del mes y su variación, con total y promedio del año, y gráfico.
@@ -144,4 +152,5 @@ Bonos regalo; regla 70/30 (resurtido/utilidad) configurable; metas e incentivos 
 ---
 
 ## 5. Decisiones tomadas
+- 2026-10-06 (2): ventas por medio desde los recibos de pago de Alegra (cuenta + método); saldos de partida = Resumen al 5-oct 9 pm. Los gastos de octubre ya descontados en Resumen se registran en Gastos con "No mover cuentas" (o se borran los ajustes manuales y se registran con "De las cuentas"); arriendo parte de sep. y aseo del 2-oct con "De la caja del día".
 - 2026-10-06: empezar el 1-oct-2026; fases una por una; medios de pago listados arriba; Addi y datáfono separados como medio de venta, pero llegan a la misma cuenta …6018; gastos de Primavera pagados por Carreño = préstamo de Carreño a Primavera; resumen mensual desde septiembre.
