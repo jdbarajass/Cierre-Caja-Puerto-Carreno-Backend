@@ -20,6 +20,7 @@ from flask import Blueprint, jsonify, request
 
 from app.exceptions import ConfigurationError
 from app.middlewares.auth import role_required, token_required
+from app.models.user import db
 from app.routes.accounts import sync_token_or_admin_required
 from app.services import invoice_facts as svc
 from app.stores import get_alegra_client, get_current_store
@@ -150,6 +151,11 @@ def _run_sync(client, store, max_days, recent_days):
     # completas. Si fallan no se marca error: las facturas ya quedaron.
     purchases = _sync_purchases(store)
 
+    # Ventas por medio de pago (Cuentas → Mes, PLAN_CUENTAS_DIARIAS Fase 2):
+    # recibos de pago de Alegra de los últimos días. Si fallan no se marca
+    # error: las facturas ya quedaron y se recupera la noche siguiente.
+    payments = _sync_payments(store)
+
     status = svc.coverage_status(store, FACTS_START, yesterday)
     error = recent['error'] or backfill['error']
     logger.info(f'[{store}] invoice-facts/sync: recientes={len(recent["synced_days"])} '
@@ -162,8 +168,19 @@ def _run_sync(client, store, max_days, recent_days):
         'recent': recent,
         'backfill': backfill,
         'purchases': purchases,
+        'payments': payments,
         'status': status,
     }), 200 if error is None else 502
+
+
+def _sync_payments(store):
+    from app.routes.month_sheet import run_payments_sync
+    try:
+        return {'success': True, **run_payments_sync(store)}
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'[{store}] Carga de pagos por medio: {e}', exc_info=True)
+        return {'success': False, 'error': 'No se pudieron cargar los pagos de Alegra'}
 
 
 def _sync_purchases(store):

@@ -67,6 +67,7 @@ def create_app(config_class=Config):
     from app.models.seller_goal import SellerGoal  # Estadísticas → Metas (Fase D3)
     from app.models.daily_alert import DailyAlert  # Alertas diarias (Fase D4)
     from app.models.expense import Expense, FixedExpense  # Cuentas → Gastos (docs/PLAN_CUENTAS_DIARIAS.md, Fase 1)
+    from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose  # Cuentas → Mes (Fase 2)
 
     db.init_app(app)
 
@@ -248,6 +249,7 @@ def create_app(config_class=Config):
     from app.routes.seller_goals import bp as seller_goals_bp
     from app.routes.daily_alerts import bp as daily_alerts_bp
     from app.routes.expenses import bp as expenses_bp
+    from app.routes.month_sheet import bp as month_sheet_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -271,6 +273,7 @@ def create_app(config_class=Config):
     app.register_blueprint(seller_goals_bp)  # Estadísticas → Metas por vendedora (Fase D3)
     app.register_blueprint(daily_alerts_bp)  # Alertas diarias en el Dashboard (Fase D4)
     app.register_blueprint(expenses_bp)  # Cuentas → Gastos (PLAN_CUENTAS_DIARIAS, Fase 1)
+    app.register_blueprint(month_sheet_bp)  # Cuentas → Mes (PLAN_CUENTAS_DIARIAS, Fase 2)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

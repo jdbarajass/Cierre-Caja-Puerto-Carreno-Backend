@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-06] (continuación 2) - Cuentas diarias, Fase 2: hoja del mes
+
+- **Ventas por medio desde los recibos de pago de Alegra** (`/payments`: `paymentMethod` + `bankAccount`): los 10 medios del Excel (efectivo, QR, ahorro/débito, crédito, Nequi, Addi, BBVA, Daviplata, SisteCrédito, Bold), por fecha de la factura. Modelo `PaymentFact`; `app/services/payment_facts.py` (clasificación, festivos de Colombia, llegada y neto del datáfono −3,8 % D+1 hábil y Addi −7,735 % a 30 días); `AlegraClient.get_payments_page`. Se cargan con el cron de las 9 pm (dentro de `invoice-facts/sync`, sin tocar el workflow) y con `POST /api/month-sheet/sync-payments`.
+- **Hoja del mes** (`app/services/month_sheet.py`, `app/routes/month_sheet.py`): ventas diarias con calificación (mala/bajita/buena/alta, umbrales del Excel), estado por cuenta (saldo inicial + ventas − recompras − gastos + entradas ± ajustes/transferencias = final, día por día, con la fecha de negocio de cada movimiento), plata por llegar, comisiones del mes (botón que las registra como un gasto financiero, una vez por mes), saldo real por cuenta (`AccountReconciliation`) y cerrar/reabrir el mes (`MonthClose`, foto JSON; avisa si algo cambió después).
+- Verificado: el 5-oct-2026 con recibos de formato real cuadra al peso con el Excel; las fechas de pago de Addi coinciden con el reporte de Addi.
+- Guía para el usuario: `docs/GUIA_CUENTAS_DIARIAS.md`. Plan actualizado.
+- `tests/test_month_sheet.py` (nuevo, 12). **227/227**.
+
 ## [2026-10-06] (continuación) - Cuentas diarias, Fase 1: Gastos (reemplazo del Excel)
 
 Inicio del plan `docs/PLAN_CUENTAS_DIARIAS.md` (análisis completo del Excel KOAJ_CARRENO2026.xlsx, cómo opera la tienda, criterio contable y las 4 fases). Arranca el 1-oct-2026.

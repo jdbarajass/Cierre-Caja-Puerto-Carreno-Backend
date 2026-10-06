@@ -1005,6 +1005,30 @@ class AlegraClient:
 
         return comparison
 
+    def get_payments_page(self, start: int, limit: int = 30) -> List[Dict]:
+        """
+        Una página de recibos de pago recibidos (`/payments`, tipo in), del
+        más nuevo al más viejo. Cada recibo trae paymentMethod, bankAccount
+        e invoices (Cuentas → Mes, app/services/payment_facts.py). Si falla
+        lanza excepción (nunca devuelve una página a medias).
+        """
+        url = f"{self.base_url}/payments"
+        params = {'type': 'in', 'order_direction': 'DESC', 'start': start, 'limit': limit}
+        try:
+            response = self.session.get(url, params=params, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            raise AlegraConnectionError(f'No se pudo conectar con Alegra: {e}')
+        if response.status_code in (401, 403):
+            raise AlegraAuthError('Credenciales de Alegra inválidas o sin permiso')
+        if response.status_code >= 400:
+            raise AlegraConnectionError(
+                f'Alegra respondió HTTP {response.status_code} al pedir los pagos',
+                details={'status_code': response.status_code})
+        data = response.json()
+        if isinstance(data, dict) and isinstance(data.get('data'), list):
+            data = data['data']
+        return data if isinstance(data, list) else []
+
     def health_check(self) -> bool:
         """
         Verifica si el servicio de Alegra está disponible

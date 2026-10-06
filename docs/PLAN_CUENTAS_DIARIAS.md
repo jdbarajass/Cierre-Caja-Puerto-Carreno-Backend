@@ -1,13 +1,13 @@
 # Plan: Cuentas diarias y cierre de mes (reemplazo del Excel KOAJ_CARRENO2026.xlsx)
 
-Creado: 2026-10-06. Se construye **por fases, una a la vez**, cada una probada, documentada (CHANGELOG de cada repo + este archivo) y commiteada antes de pasar a la siguiente. **Arranca el 1-oct-2026** (lo anterior se queda en el Excel; para el resumen mensual se cargará septiembre, ver Fase 3).
+Creado: 2026-10-06. **Guía para el usuario (subir y usar, sin términos técnicos): `GUIA_CUENTAS_DIARIAS.md`** (actualizarla en cada fase). Se construye **por fases, una a la vez**, cada una probada, documentada (CHANGELOG de cada repo + este archivo) y commiteada antes de pasar a la siguiente. **Arranca el 1-oct-2026** (lo anterior se queda en el Excel; para el resumen mensual se cargará septiembre, ver Fase 3).
 
 Estado de las fases (actualizar al cerrar cada una):
 
 | Fase | Qué | Estado |
 |---|---|---|
 | 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | Pendiente |
+| 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | Pendiente |
 | 4 | Extras: bonos regalo, regla 70/30, incentivos/metas, gastos en el comparativo de tiendas | Pendiente |
 
@@ -140,6 +140,23 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - **Saldos de partida (decisión del usuario, 2026-10-06): los de Cuentas → Resumen al 5-oct-2026 a las 9 pm son los reales.** El saldo al 1-oct se calcula hacia atrás (saldo − movimientos de octubre). Captura de ese momento: Efectivo $3.485.000, Nequi $397.350, Daviplata $0, QR $3.067.991, ADDI + DATÁFONO $3.506.103 (contempla hasta 5-oct), SisteCrédito $0, BBVA $0, Ahorro $3.924.204, Jhonatan $2.710.000.
   - Cruce con el Excel de octubre: Efectivo = "valor aún no enviado" del Excel; QR = ventas QR de octubre ($5.198.075) − gastos QR de octubre ($2.130.084) → **esos gastos ya están descontados en Resumen** (probablemente con ajustes manuales); Nequi = ventas de octubre; Ahorro = Excel. **ADDI + DATÁFONO difiere $29.592** del Excel ($3.506.103 vs $3.476.511): revisar en la conciliación.
   - El efectivo que abona el cierre ya viene sin lo pagado de la caja: 1-oct 1.845.800 + 1.300 excedente − 426.000 arriendo = 1.421.100 consignado; 2-oct 1.007.400 + 700 − 53.200 aseo = 954.900.
+
+**Cómo quedó (2026-10-06)**
+- Backend:
+  - `app/models/month_sheet.py`: `PaymentFact` (`payment_facts`, un recibo por factura, con `medio` ya clasificado y `needs_review`), `AccountReconciliation` (saldo real por cuenta y mes), `MonthClose` (foto JSON del mes).
+  - `app/services/payment_facts.py`: festivos de Colombia (Ley Emiliani, calculados), `arrival_date` (datáfono D+1 hábil; Addi +30 días o el siguiente hábil: **coincide con el reporte de pagos de Addi del usuario**), `net_amount`, `classify_payment`, `sync_payments` (pagina `/payments` del más nuevo al más viejo hasta pasar `since`; descarga todo y solo después reemplaza). Primera carga desde `PAYMENTS_START` (1-oct-2026), luego los últimos 7 días.
+  - `AlegraClient.get_payments_page` (`/payments?type=in&order_direction=DESC`).
+  - `app/services/month_sheet.py`: ventas por día y medio + calificación; estado por cuenta con la **fecha de negocio** de cada movimiento (cierre → fecha del cierre, recompra → fecha del envío, gasto → fecha del gasto, ajustes/transferencias → día de registro en Colombia); saldo final del mes = saldo actual − movimientos posteriores; tránsito; comisiones; foto del cierre.
+  - `app/routes/month_sheet.py`: `GET /api/month-sheet?year&month`, `POST /api/month-sheet/sync-payments` (admin o `X-Sync-Token`; body `since` opcional), `PUT /api/month-sheet/reconciliation`, `POST /api/month-sheet/commissions` (un gasto financiero por mes en ADDI + DATÁFONO, marcado `auto:comisiones:AAAA-MM` en notes; idempotente), `POST|DELETE /api/month-sheet/close`.
+  - El cron de las 9 pm ya carga los pagos: `invoice_facts/sync` llama `_sync_payments` (si falla no marca error). **No se tocó el workflow.**
+  - Tests: `tests/test_month_sheet.py` (12; el 5-oct con recibos de formato real de `/api/v1/payments` cuadra con el Excel). Suite 227/227.
+- Frontend: `src/pages/CuentasMes.jsx` (pestaña **Cuentas → Mes**, después de Resumen), `src/services/monthSheetService.js`. Tarjetas (venta, calificaciones, comisiones con botón "Registrar en Gastos", por llegar), tabla de ventas diarias (los 10 medios; oculta Bold/BBVA/Daviplata/SisteCrédito si el mes no tiene), estado por cuenta con saldo real y día por día, plata por llegar y cerrar/reabrir. En celular, tarjetas.
+- Verificado en Chromium (1366 y 390) con las ventas del 1 al 5-oct del Excel y los saldos de Resumen del 5-oct: total $14.793.275 (= Excel), QR $5.198.075, Addi por llegar 3-nov y 4-nov.
+- **Limitaciones / pendientes:**
+  - Cuenta a la que llega Bold: sin confirmar (`MEDIO_ACCOUNT['bold'] = None`); no entra al tránsito.
+  - El saldo real no admite negativos en el campo (LiveMoneyInput solo dígitos).
+  - Las comisiones de meses sin "Registrar en Gastos" no se arrastran al disponible estimado de meses siguientes (solo las del mes).
+  - Las ventas en el estado de cuenta vienen de los cierres (lo abonado), no de Alegra; la tabla de ventas sí es Alegra.
 
 ### Fase 3 — Resumen mensual y anual
 - Por mes (desde **sep-2026**): ventas totales y por medio, recompras, gastos por categoría, ganancia neta, ganancia real, % de ganancia, fletes, inventario al último día del mes y su variación, con total y promedio del año, y gráfico.
