@@ -2,6 +2,16 @@
 
 ---
 
+## [2026-10-06] (continuación) - Cuentas diarias, Fase 1: Gastos (reemplazo del Excel)
+
+Inicio del plan `docs/PLAN_CUENTAS_DIARIAS.md` (análisis completo del Excel KOAJ_CARRENO2026.xlsx, cómo opera la tienda, criterio contable y las 4 fases). Arranca el 1-oct-2026.
+- **Modelos** (`app/models/expense.py`): `Expense` (`expenses`, por tienda): fecha de pago, `period` (mes al que corresponde, para la ganancia), concepto, categoría, `direction` out/in, monto por medio (efectivo, datáfono = cuenta ADDI + DATÁFONO, QR, Daviplata, Nequi, BBVA, Ahorro), 4x1000 automático sobre lo que no es efectivo (`apply_fee`, `fee_override`), `account_mode` (`cuentas` / `caja` / `sin_mover`), otra tienda, empleada y enlaces a Empleadas, gasto fijo. `FixedExpense` (`fixed_expenses`): nombre, valor de referencia, día de pago, categoría, medio por defecto, activo.
+- **Rutas** (`app/routes/expenses.py`, solo admin): CRUD de gastos (mueve Resumen con movimientos `expense` / `expense_in`, revierte al editar/borrar, bloqueando cuentas como las recompras); gastos fijos con estado del mes (pagado / pendiente / vencido) y plantilla del Excel (14); préstamos entre tiendas (`/api/expenses/inter-store`: lo prestado y lo que se debe).
+- **`caja`**: lo que salió de la caja del día ya no está en EFECTIVO (el cierre abona `efectivo_para_consignar_final`, después de gastos y préstamos), así que no se vuelve a descontar.
+- **Empleadas**: préstamo a empleada → `EmployeeLoan`; devolución con empleada → `EmployeeLoan` negativo (abono); sueldo con empleada → `EmployeePayment`.
+- `app/models/account.py`: tipos de movimiento `expense` y `expense_in`. `app/__init__.py`: modelo y blueprint registrados (tablas nuevas con `db.create_all()`, sin migración).
+- `tests/test_expenses.py` (nuevo, 13 tests). **215/215**.
+
 ## [2026-10-06] - Cuentas Recompras: el balance de Jhonatan se arrastra de un mes al siguiente
 
 El balance disponible solo miraba el mes abierto: lo que le sobró a Jhonatan en septiembre no aparecía en octubre (había que escribirlo a mano en "Sobrante mes anterior" cada mes).

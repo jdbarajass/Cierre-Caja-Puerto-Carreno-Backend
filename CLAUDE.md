@@ -24,3 +24,7 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 - **Metas por vendedora** (Fase D3): `app/services/seller_goals.py`, `app/routes/seller_goals.py`, modelo `SellerGoal` (solo ajustes del admin). Automática = mismo mes del año anterior +15 % repartida por los 3 meses anteriores. Distinta de la meta del cierre de caja (+25 %).
 - **Alertas diarias** (Fase D4): `app/services/daily_alerts.py`, `app/routes/daily_alerts.py`, modelo `DailyAlert`; las calcula el cron de las 9 pm (paso "Calcular alertas del día") y se ven en el Dashboard del admin.
 - Al simular Alegra en tests, copiar el formato **real de /api/v1** (no el del conector MCP / reports-api v2): ese error dejó los montos en $0 en producción.
+
+## Cuentas diarias (reemplazo del Excel KOAJ_CARRENO2026.xlsx)
+- Plan, análisis del Excel, criterio contable y estado por fase: **`docs/PLAN_CUENTAS_DIARIAS.md`** (leerlo antes de seguir con la Fase 2).
+- Fase 1 (Gastos): `app/models/expense.py`, `app/routes/expenses.py`, `tests/test_expenses.py`. `account_mode='caja'` = salió de la caja del día (el cierre ya lo descontó de EFECTIVO: no restar otra vez).

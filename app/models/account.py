@@ -14,6 +14,8 @@ MOVEMENT_TYPES = (
     'transfer_in',
     'cash_closing',
     'repurchase_send',
+    'expense',      # Cuentas → Gastos: salida (app/routes/expenses.py)
+    'expense_in',   # Cuentas → Gastos: entrada que no es venta
 )
 
 
