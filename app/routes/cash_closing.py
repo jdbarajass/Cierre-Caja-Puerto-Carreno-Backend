@@ -660,6 +660,37 @@ def get_monthly_sales():
         return jsonify(error_response), 500
 
 
+def _real_previous_year(previous_month_total, daily_comparison, month_start, day):
+    """
+    Cambia la venta del año anterior (mes hasta el día y el día) por la venta
+    real de la copia de 2025 si ese periodo está cargado (incluye las POS de
+    la anulación masiva). Si no, deja lo que dio Alegra. Nunca falla.
+    """
+    try:
+        from app.services.history_2025 import real_sales_total
+        from app.utils.formatters import format_cop
+        store = get_current_store()
+        real_month = real_sales_total(store, month_start, day)
+        if real_month is not None:
+            previous_month_total = real_month
+        real_day = real_sales_total(store, day, day)
+        if real_day is not None:
+            current = daily_comparison.get('current', {}).get('total', 0)
+            diff = current - real_day
+            pct = ((current - real_day) / real_day * 100) if real_day > 0 else (100.0 if current > 0 else 0.0)
+            daily_comparison = {
+                **daily_comparison,
+                'previous_year': {**daily_comparison.get('previous_year', {}), 'total': real_day,
+                                  'formatted': format_cop(real_day), 'source': 'reconstruccion_2025'},
+                'comparison': {'difference': diff, 'difference_formatted': format_cop(abs(diff)),
+                               'percentage_change': round(pct, 2), 'is_growth': diff >= 0,
+                               'growth_label': 'crecimiento' if diff >= 0 else 'decrecimiento'},
+            }
+    except Exception as e:  # la comparación nunca debe caerse por esto
+        current_app.logger.warning(f'Venta real 2025 para la comparación: {e}')
+    return previous_month_total, daily_comparison
+
+
 @bp.route('/sales_comparison_yoy', methods=['GET', 'OPTIONS'])
 @token_required
 @role_required_any(['admin', 'sales'])
@@ -740,6 +771,13 @@ def get_sales_comparison_yoy():
         # Calcular diferencia y porcentaje mensual
         current_month_total = current_month_sales.get('total_vendido', {}).get('total', 0)
         previous_month_total = previous_month_sales.get('total_vendido', {}).get('total', 0)
+
+        # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md): en 2025 Alegra
+        # ya no cuenta las POS de la anulación masiva (fueron ventas reales).
+        # Si ese periodo está en la copia, se usa la venta real.
+        previous_month_total, daily_comparison = _real_previous_year(
+            previous_month_total, daily_comparison,
+            previous_year_dt.replace(day=1).date(), previous_year_dt.date())
         month_difference = current_month_total - previous_month_total
 
         if previous_month_total > 0:

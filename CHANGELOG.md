@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-07] - Reconstrucción de 2025 tras la anulación masiva de facturas POS (R1, R2, R4)
+
+Por impuestos se anularon de forma masiva (oct-2026) las 3.525 facturas POS de 2025 (de 5.664; las vigentes son todas electrónicas). Fueron ventas reales: la venta de 2025 en Alegra quedó baja y sus prendas volvieron al inventario. Plan y verificación: `docs/PLAN_RECONSTRUCCION_2025.md`.
+- Copia de facturas: `is_electronic`, `total_paid`, `issued_at` en `invoice_facts` (migración sin DEFAULT); prendas de las anuladas en `invoice_void_items` (la tabla de prendas vendidas no cambia); marca manual en `void_overrides`.
+- `app/services/history_2025.py` + `app/routes/history_2025.py`: carga de 2025 por tandas, clasificación anulación masiva vs. real (electrónica anulada o POS re-facturada con las mismas prendas y total en ≤ 60 min = real), venta real de 2025, informe de inventario (existencia antes = hoy − devueltas) y Excel. No escribe en Alegra.
+- Metas (total del mes del año anterior) y la comparación con el año anterior del cierre de caja usan la venta real de 2025 cuando el periodo está cargado.
+- `tests/test_history_2025.py` (nuevo, 6); `test_invoice_facts.py` actualizado con los campos nuevos. **238/238**.
+
 ## [2026-10-06] (continuación 3) - Cuentas diarias, Fase 3: resumen mensual y anual
 
 - `GET /api/monthly-summary?year`: por mes ventas (copia de facturas), recompras, gastos operativos (por mes al que corresponden, con 4x1000 de gastos y recompras), ganancia bruta/neta/real y %, inventario al cierre del mes y su variación, ganancia real + inventario, inversiones, retiros, préstamos, fletes y saldo de Jhonatan; ventas por medio del año. Desde sep-2026 (los meses anteriores se ven para comparar con el Excel, sin sumar).

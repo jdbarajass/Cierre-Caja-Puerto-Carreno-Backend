@@ -62,7 +62,7 @@ def create_app(config_class=Config):
     from app.models.cash_closing import CashClosing  # Import to ensure table is created
     from app.models.account import Account, AccountMovement  # Import to ensure tables are created
     from app.models.app_setting import AppSetting  # Import to ensure table is created
-    from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay, InvoiceItemFact  # Clientes (fase 4) y Prendas
+    from app.models.invoice_fact import InvoiceFact, InvoiceSyncDay, InvoiceItemFact, InvoiceVoidItem, VoidOverride  # Clientes (fase 4), Prendas y reconstrucción 2025
     from app.models.purchase_fact import PurchaseItemFact  # Estadísticas → Llegadas (Fase D1)
     from app.models.seller_goal import SellerGoal  # Estadísticas → Metas (Fase D3)
     from app.models.daily_alert import DailyAlert  # Alertas diarias (Fase D4)
@@ -252,6 +252,7 @@ def create_app(config_class=Config):
     from app.routes.expenses import bp as expenses_bp
     from app.routes.month_sheet import bp as month_sheet_bp
     from app.routes.monthly_summary import bp as monthly_summary_bp
+    from app.routes.history_2025 import bp as history_2025_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -277,6 +278,7 @@ def create_app(config_class=Config):
     app.register_blueprint(expenses_bp)  # Cuentas → Gastos (PLAN_CUENTAS_DIARIAS, Fase 1)
     app.register_blueprint(month_sheet_bp)  # Cuentas → Mes (PLAN_CUENTAS_DIARIAS, Fase 2)
     app.register_blueprint(monthly_summary_bp)  # Cuentas → Año (PLAN_CUENTAS_DIARIAS, Fase 3)
+    app.register_blueprint(history_2025_bp)  # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
@@ -623,6 +625,13 @@ def _migrate_employee_tables(db, app):
         # quedan en NULL y se vuelven a cargar en las siguientes tandas.
         add_column_if_missing(conn, 'invoice_facts', 'hour', 'SMALLINT')
         add_column_if_missing(conn, 'invoice_sync_days', 'fact_version', 'INTEGER')
+
+        # Reconstrucción de 2025 (docs/PLAN_RECONSTRUCCION_2025.md, 2026-10-07):
+        # factura electrónica o POS, lo pagado y la fecha-hora completa. Sin
+        # DEFAULT: las ya cargadas quedan en NULL hasta recargar su día.
+        add_column_if_missing(conn, 'invoice_facts', 'is_electronic', 'BOOLEAN')
+        add_column_if_missing(conn, 'invoice_facts', 'total_paid', 'BIGINT')
+        add_column_if_missing(conn, 'invoice_facts', 'issued_at', 'VARCHAR(19)')
         conn.commit()
 
 

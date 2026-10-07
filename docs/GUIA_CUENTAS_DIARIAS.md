@@ -86,6 +86,20 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 
 ---
 
+## Reconstrucción de 2025 (anulación masiva de facturas POS)
+
+Las facturas POS de 2025 se anularon todas juntas por impuestos (oct-2026). Fueron ventas reales y sus prendas volvieron al inventario de Alegra. Para arreglarlo:
+
+1. Entra a **Estadísticas → Reconstrucción 2025** y toca **"Traer todo 2025"**. Va de a 31 días (unos 2 minutos cada tanda; son unas 12). No cierres la página mientras trae; si la cierras, vuelve a tocar el botón y sigue donde iba.
+2. Revisa la lista **"Anulaciones reales"**: son las que el sistema cree que se anularon de verdad durante el año (electrónicas anuladas o POS que se volvieron a facturar enseguida con lo mismo). Si alguna sí era de la anulación masiva, toca **"Fue de la anulación masiva"**. También puedes marcar cualquier factura por su número.
+3. En **"Inventario antes de la anulación masiva"** toca **Calcular**: te dice cuánto vale hoy el inventario en Alegra, cuánto hay que retirar y cuánto quedaría (debería quedar cerca de los $160-175 millones que recuerdas).
+4. Toca **"Descargar Excel"** y revísalo con tu contador. Las prendas marcadas en "Revisar" hay que contarlas en físico.
+5. Cuando el contador lo apruebe, avísame: se crea el ajuste en Alegra desde la plataforma (Alegra no permite cargar ajustes desde un Excel).
+
+Mientras tanto, **Metas** y la **comparación con el año anterior** del cierre de caja ya usan la venta real de 2025 en los meses que estén cargados.
+
+---
+
 ## Preguntas frecuentes
 
 - **¿Lo que sobra de un mes pasa al siguiente?** Sí, solo. El "saldo inicial" de cada cuenta es lo que quedó el mes anterior. Ya no hace falta anotar recompras en el mes anterior como hacías en el Excel.

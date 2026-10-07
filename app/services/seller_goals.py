@@ -138,6 +138,14 @@ class SellerGoalsService:
 
     # Alegra (con caché de meses cerrados)
     def _month_total(self, start: date, end: date) -> Optional[int]:
+        # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md): para meses de
+        # 2025 cargados en la copia, la venta real (incluye las POS de la
+        # anulación masiva, que Alegra ya no cuenta).
+        from app.services.history_2025 import real_sales_total
+        real = real_sales_total(self.store, start, end)
+        if real is not None:
+            return real
+
         def load():
             result = self.direct.get_all_sales_totals_by_day(start.isoformat(), end.isoformat())
             if not result.get('success'):

@@ -65,6 +65,8 @@ def test_factura_a_resumen():
         'client_identification': '20230261', 'seller_id': '12', 'seller_name': 'RITA INFANTE',
         'subtotal': 176900, 'discount': 10000, 'total': 166900, 'voided': False,
         'hour': None,  # esta factura de prueba no trae datetime (Fase D2)
+        # Reconstrucción 2025: no trae isElectronic, totalPaid ni datetime
+        'is_electronic': None, 'total_paid': None, 'issued_at': None,
     }
     # Sin vendedora ni cliente
     bare = svc.invoice_to_fact(invoice('1', '2026-08-24', 5000, client=None, seller=None))

@@ -54,6 +54,12 @@ class InvoiceFact(StoreScopedMixin, db.Model):
     # `datetime`). NULL en las cargadas antes de la Fase D2: se completan al
     # recargar su día (ver InvoiceSyncDay.fact_version).
     hour = db.Column(db.SmallInteger)
+    # Reconstrucción de 2025 (docs/PLAN_RECONSTRUCCION_2025.md): si la factura
+    # es electrónica (numberTemplate.isElectronic), lo pagado (totalPaid) y la
+    # fecha y hora completas ('AAAA-MM-DD HH:MM:SS'). NULL en las cargadas antes.
+    is_electronic = db.Column(db.Boolean)
+    total_paid = db.Column(db.BigInteger)
+    issued_at = db.Column(db.String(19))
     synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -94,3 +100,46 @@ class InvoiceItemFact(StoreScopedMixin, db.Model):
     unit_price = db.Column(db.BigInteger, nullable=False, default=0)
     discount_pct = db.Column(db.Float, nullable=False, default=0)
     total = db.Column(db.BigInteger, nullable=False, default=0)  # con descuento (items[].total de Alegra)
+
+
+class InvoiceVoidItem(StoreScopedMixin, db.Model):
+    """
+    Prendas de las facturas ANULADAS (la tabla de prendas vendidas,
+    InvoiceItemFact, sigue sin ellas para no cambiar Prendas ni Llegadas).
+    Sirven para la reconstrucción de 2025: las facturas POS anuladas de forma
+    masiva fueron ventas reales y sus prendas volvieron al inventario de
+    Alegra (docs/PLAN_RECONSTRUCCION_2025.md). Se reemplazan con el día.
+    """
+    __tablename__ = 'invoice_void_items'
+    __table_args__ = (
+        db.Index('uq_invoice_void_items_store_invoice_line', 'store_code', 'invoice_alegra_id', 'line', unique=True),
+        db.Index('ix_invoice_void_items_store_date', 'store_code', 'date'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_alegra_id = db.Column(db.String(30), nullable=False, index=True)
+    line = db.Column(db.Integer, nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    item_id = db.Column(db.String(30))
+    name = db.Column(db.String(200), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+    unit_price = db.Column(db.BigInteger, nullable=False, default=0)
+    total = db.Column(db.BigInteger, nullable=False, default=0)
+
+
+class VoidOverride(StoreScopedMixin, db.Model):
+    """
+    Marca manual de una factura anulada: counts_as_sale=True = fue de la
+    anulación masiva (venta real); False = anulación real que se queda así.
+    Manda sobre la regla automática. No se borra al recargar el día.
+    """
+    __tablename__ = 'void_overrides'
+    __table_args__ = (
+        db.Index('uq_void_overrides_store_invoice', 'store_code', 'alegra_id', unique=True),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    alegra_id = db.Column(db.String(30), nullable=False)
+    counts_as_sale = db.Column(db.Boolean, nullable=False)
+    note = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

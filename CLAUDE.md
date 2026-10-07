@@ -31,3 +31,7 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 - Fase 2 (Mes): `app/models/month_sheet.py`, `app/services/payment_facts.py` (recibos de Alegra → 10 medios, festivos, llegada datáfono/Addi), `app/services/month_sheet.py`, `app/routes/month_sheet.py`, `tests/test_month_sheet.py`. Los pagos se cargan dentro de `invoice-facts/sync` (cron 9 pm).
 - Fase 3 (Año): `app/models/monthly_summary.py`, `app/services/monthly_summary.py`, `app/routes/monthly_summary.py`, `tests/test_monthly_summary.py`. El inventario de fin de mes también se carga dentro de `invoice-facts/sync`.
 - Guía para el usuario (sin términos técnicos): `docs/GUIA_CUENTAS_DIARIAS.md`.
+
+## Reconstrucción de 2025 (anulación masiva de POS, oct-2026)
+- Plan, verificación en Alegra y reglas: **`docs/PLAN_RECONSTRUCCION_2025.md`**. Código: `app/services/history_2025.py`, `app/routes/history_2025.py`, `InvoiceVoidItem` / `VoidOverride` en `app/models/invoice_fact.py`, `tests/test_history_2025.py`.
+- En 2025 **las facturas POS anuladas fueron ventas reales** (salvo las marcadas como anulación real): cualquier cálculo de 2025 debe usar `real_sales_total` / `mass_voided_ids`, no solo `voided=False`. El inventario de Alegra está inflado hasta que se haga el ajuste (R3).

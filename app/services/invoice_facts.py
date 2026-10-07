@@ -28,7 +28,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import func, text
 
-from app.models.invoice_fact import InvoiceFact, InvoiceItemFact, InvoiceSyncDay
+from app.models.invoice_fact import InvoiceFact, InvoiceItemFact, InvoiceSyncDay, InvoiceVoidItem
 from app.exceptions import CierreCajaException
 from app.models.user import db
 from app.utils.formatters import is_invoice_void, safe_number
@@ -101,6 +101,10 @@ def invoice_to_fact(invoice: Dict[str, Any]) -> Dict[str, Any]:
         'total': _money(invoice.get('total')),
         'voided': is_invoice_void(invoice),
         'hour': invoice_hour(invoice),
+        # Reconstrucción de 2025 (docs/PLAN_RECONSTRUCCION_2025.md)
+        'is_electronic': bool(template['isElectronic']) if 'isElectronic' in template else None,
+        'total_paid': _money(invoice.get('totalPaid')) if invoice.get('totalPaid') is not None else None,
+        'issued_at': _str(invoice.get('datetime'), 19),
     }
 
 
@@ -134,6 +138,27 @@ def invoice_to_items(invoice: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
+def invoice_to_void_items(invoice: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Prendas de una factura ANULADA (InvoiceVoidItem); lista vacía si no está anulada."""
+    if not is_invoice_void(invoice):
+        return []
+    rows = []
+    for line, item in enumerate(invoice.get('items') or []):
+        quantity = safe_number(item.get('quantity'))
+        price = safe_number(item.get('price'))
+        total = item.get('total')
+        rows.append({
+            'invoice_alegra_id': str(invoice.get('id')),
+            'line': line,
+            'item_id': _str(item.get('id'), 30),
+            'name': _str(item.get('name'), 200) or 'Sin nombre',
+            'quantity': int(round(quantity)),
+            'unit_price': _money(price),
+            'total': _money(total) if total is not None else int(round(price * quantity)),
+        })
+    return rows
+
+
 def sync_day(alegra_client, store_code: str, day: date) -> int:
     """Reemplaza las facturas guardadas de `day` por las que tiene Alegra. Devuelve cuántas."""
     invoices = alegra_client.get_invoices_by_date(day.isoformat())  # si falla, no se toca nada
@@ -141,6 +166,7 @@ def sync_day(alegra_client, store_code: str, day: date) -> int:
     unique_invoices = list({str(i['id']): i for i in invoices if i.get('id') is not None}.values())
     facts = [invoice_to_fact(i) for i in unique_invoices]
     items = [row for i in unique_invoices for row in invoice_to_items(i)]
+    void_items = [row for i in unique_invoices for row in invoice_to_void_items(i)]
 
     try:
         base = InvoiceFact.query.filter(InvoiceFact.store_code == store_code)
@@ -158,6 +184,13 @@ def sync_day(alegra_client, store_code: str, day: date) -> int:
         if ids:
             items_base.filter(InvoiceItemFact.invoice_alegra_id.in_(ids)).delete(synchronize_session=False)
         db.session.add_all(InvoiceItemFact(store_code=store_code, date=day, **row) for row in items)
+
+        # Prendas de las anuladas (reconstrucción de 2025): mismo reemplazo
+        void_base = InvoiceVoidItem.query.filter(InvoiceVoidItem.store_code == store_code)
+        void_base.filter(InvoiceVoidItem.date == day).delete(synchronize_session=False)
+        if ids:
+            void_base.filter(InvoiceVoidItem.invoice_alegra_id.in_(ids)).delete(synchronize_session=False)
+        db.session.add_all(InvoiceVoidItem(store_code=store_code, date=day, **row) for row in void_items)
 
         sync_row = InvoiceSyncDay.query.filter_by(store_code=store_code, date=day).first()
         if sync_row is None:
