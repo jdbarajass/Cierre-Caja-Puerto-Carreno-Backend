@@ -7,6 +7,7 @@ import logging
 
 from app.middlewares.auth import token_required, role_required
 from app.stores import get_alegra_client
+from app.services.history_2025 import revive_for_current_store
 from app.services.sales_analytics import SalesAnalytics
 from app.config import Config
 from app.exceptions import AlegraConnectionError, AlegraAuthError
@@ -34,18 +35,18 @@ def get_invoices_from_params():
         datetime.strptime(date_param, '%Y-%m-%d')  # Validar formato
         target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
         date_range = date_param
-        invoices = get_alegra_client().get_invoices_by_date(target_date)
+        invoices = revive_for_current_store(get_alegra_client().get_invoices_by_date(target_date))
     elif start_date_param and end_date_param:
         # Rango de fechas
         datetime.strptime(start_date_param, '%Y-%m-%d')  # Validar
         datetime.strptime(end_date_param, '%Y-%m-%d')  # Validar
         date_range = f"{start_date_param} al {end_date_param}"
-        invoices = get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param)
+        invoices = revive_for_current_store(get_alegra_client().get_all_invoices_in_range(start_date_param, end_date_param))
     else:
         # Día actual por defecto
         target_date = datetime.now().date()
         date_range = target_date.strftime('%Y-%m-%d')
-        invoices = get_alegra_client().get_invoices_by_date(target_date)
+        invoices = revive_for_current_store(get_alegra_client().get_invoices_by_date(target_date))
 
     return invoices, date_range
 

@@ -35,4 +35,4 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 
 ## Reconstrucción de 2025 (anulación masiva de POS, oct-2026)
 - Plan, verificación en Alegra y reglas: **`docs/PLAN_RECONSTRUCCION_2025.md`**. Código: `app/services/history_2025.py`, `app/routes/history_2025.py`, `InvoiceVoidItem` / `VoidOverride` en `app/models/invoice_fact.py`, `tests/test_history_2025.py`.
-- En 2025 **las facturas POS anuladas fueron ventas reales** (salvo las marcadas como anulación real): cualquier cálculo de 2025 debe usar `real_sales_total` / `mass_voided_ids`, no solo `voided=False`. El inventario de Alegra está inflado hasta que se haga el ajuste (R3).
+- En 2025 **las facturas POS anuladas fueron ventas reales** (salvo las marcadas como anulación real): cualquier cálculo de 2025 debe usar `real_sales_total` / `mass_voided_ids`, no solo `voided=False` (consultas a la copia: `sale_condition`; facturas descargadas de Alegra: `revive_for_current_store`; dentro de hilos: `revive_with_ids` con los ids calculados antes). El inventario de Alegra está inflado hasta que se haga el ajuste (R3).

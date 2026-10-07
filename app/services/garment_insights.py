@@ -282,6 +282,10 @@ class GarmentInsightsService:
                 'invoice_alegra_id': f.invoice_alegra_id, 'seller_id': f.seller_id, 'seller_name': f.seller_name,
                 'item_id': f.item_id, 'name': f.name, 'quantity': f.quantity, 'total': f.total,
             } for f in query]
+            # 2025: las prendas de la anulación masiva de POS también se vendieron
+            # (docs/PLAN_RECONSTRUCCION_2025.md). Vacío fuera de 2025.
+            from app.services.history_2025 import mass_voided_item_rows
+            rows += mass_voided_item_rows(self.store_code, start, closed_end)
         closed_rows = garment_rows(rows)
         today_rows: List[Dict[str, Any]] = []
         if end >= self.today and self.client is not None:

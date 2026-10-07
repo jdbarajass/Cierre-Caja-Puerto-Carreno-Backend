@@ -273,7 +273,10 @@ def get_sales_documents():
 
         # Las anuladas no son venta: Totales de Ventas y Documentos las sumaban.
         # Se quitan aquí (como en Cierre de Caja y Analytics) y se informan aparte.
-        voided_info = filter_voided_invoices(result.get('data', []))
+        # 2025: las de la anulación masiva de POS sí fueron venta y vuelven
+        # marcadas `mass_voided` (docs/PLAN_RECONSTRUCCION_2025.md).
+        from app.services.history_2025 import revive_for_current_store
+        voided_info = filter_voided_invoices(revive_for_current_store(result.get('data', [])))
         active = voided_info['active_invoices']
 
         response = {

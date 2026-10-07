@@ -97,10 +97,11 @@ class SalesPatternsService:
         outdated: List[date] = []
         if start <= closed_end:
             outdated = outdated_days(self.store_code, start, closed_end)
+            from app.services.history_2025 import sale_condition
             query = InvoiceFact.query.filter(
                 InvoiceFact.store_code == self.store_code,
                 InvoiceFact.date >= start, InvoiceFact.date <= closed_end,
-                InvoiceFact.voided.is_(False),
+                sale_condition(self.store_code, start, closed_end),  # 2025: + anulación masiva
             )
             facts = [{'date': r.date, 'hour': r.hour, 'total': r.total or 0,
                       'seller_id': r.seller_id, 'seller_name': r.seller_name} for r in query]

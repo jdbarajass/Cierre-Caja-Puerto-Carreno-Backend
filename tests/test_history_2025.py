@@ -298,3 +298,79 @@ def test_resumen_rapido_del_dashboard_usa_la_venta_real(app, client, h, loaded, 
     assert data['total_sales'] == real_day
     # fuera de 2025 o sin cargar: queda lo de Alegra
     assert client.get('/api/sales/quick-summary?from=2025-03-01&to=2025-03-05', headers=h()).get_json()['total_sales'] == 109900
+
+
+# ─── R4 (resto): las demás estadísticas de 2025 cuentan la anulación masiva ───
+
+DAY10_REAL = 109900 + (99900 + 15800 + 300) + 109900 + 109900   # 1462 + 8420 + 8421 + 8423
+
+
+def test_revivir_facturas_de_alegra_solo_2025(app, loaded):
+    from app.services.history_2025 import revive_mass_voided
+    from app.utils.formatters import filter_voided_invoices
+    invoices = BY_DAY['2025-01-10'] + BY_DAY['2025-01-11'] + [
+        inv(9001, '2026-01-10', '10:00:00', [JEAN])]                    # anulada de 2026: no se toca
+    with app.app_context():
+        revived = revive_mass_voided(invoices, 'carreno')
+    active = filter_voided_invoices(revived)['active_invoices']
+    assert sorted(i['id'] for i in active) == ['1462', '8420', '8421', '8423', '8430']
+    by_id = {i['id']: i for i in revived}
+    assert by_id['8420']['mass_voided'] is True and by_id['8420']['status'] == 'closed'
+    assert by_id['8420']['payments'] == [{'amount': 99900 + 15800 + 300, 'paymentMethod': 'cash', 'status': 'open'}]
+    assert by_id['1500']['status'] == 'void' and by_id['9001']['status'] == 'void'
+    assert BY_DAY['2025-01-10'][0]['status'] == 'void'                 # no cambia las originales
+
+
+def test_documentos_y_comparativo_cuentan_la_anulacion_masiva(app, client, h, loaded, monkeypatch):
+    import app.routes.direct_api as direct_routes
+    from app.routes.stores import _sales_metrics
+    from app.services.alegra_client import AlegraClient
+    from app.services.history_2025 import mass_ids_for_range
+
+    class Direct:
+        def get_all_invoices_for_date_range(self, from_date, to_date):
+            return {'success': True, 'data': BY_DAY['2025-01-10'], 'metadata': {}}
+    monkeypatch.setattr(direct_routes, 'get_alegra_direct_client', lambda *a, **k: Direct())
+    data = client.get('/api/direct/sales/documents?from=2025-01-10&to=2025-01-10', headers=h()).get_json()
+    assert sum(i['total'] for i in data['data']) == DAY10_REAL and data['voided']['count'] == 0
+
+    class Alegra:
+        build_sales_summary = AlegraClient.build_sales_summary
+        last_failed_days = []
+        username = 'test'
+
+        def get_all_invoices_in_range(self, start, end):
+            return BY_DAY['2025-01-10']
+    with app.app_context():
+        mass = mass_ids_for_range('carreno', date(2025, 1, 10), date(2025, 1, 10))
+        assert mass_ids_for_range('carreno', date(2026, 1, 1), date(2026, 1, 31)) == set()
+    sales = _sales_metrics(Alegra(), date(2025, 1, 10), date(2025, 1, 10), mass)   # sin base de datos (hilo)
+    assert sales['total'] == DAY10_REAL and sales['invoices'] == 4
+    assert sales['daily'] == [{'date': '2025-01-10', 'total': DAY10_REAL}]
+    assert _sales_metrics(Alegra(), date(2025, 1, 10), date(2025, 1, 10))['total'] == 109900   # sin ids: como Alegra
+
+
+def test_prendas_dia_y_hora_y_clientes_de_2025(app, loaded):
+    from app.services.garment_insights import GarmentInsightsService
+    from app.services.history_2025 import mass_voided_client_rows, merge_client_rows
+    from app.services.sales_patterns import SalesPatternsService
+    with app.test_request_context('/'):
+        rows = GarmentInsightsService('carreno', date(2026, 10, 7))._rows(date(2025, 1, 10), date(2025, 1, 10))['rows']
+        patterns = SalesPatternsService('carreno', date(2026, 10, 7)).summary(date(2025, 1, 10), date(2025, 1, 10))
+        clients = mass_voided_client_rows('carreno', date(2025, 1, 1), date(2025, 1, 31))
+        assert GarmentInsightsService('carreno', date(2026, 10, 7))._rows(
+            date(2026, 1, 1), date(2026, 1, 31))['rows'] == []
+    units = {}
+    for r in rows:
+        units[r['name']] = units.get(r['name'], 0) + r['quantity']
+    # jean: 1462 + 8421 + 8423; short y medias: 8420 (sin la bolsa); con vendedora de la factura
+    assert units == {'JEAN HOMBRE 109900 / 105110990034': 3, 'SHORT 99900 / 10419990016': 1, 'MEDIAS 7900 / 10487900': 2}
+    assert {r['seller_name'] for r in rows} == {'MONICA VARGAS'}
+    assert patterns['total_sales'] == DAY10_REAL and patterns['total_invoices'] == 4
+    assert clients == [{'idLocal': '1', 'clientName': 'Consumidor final', 'identification': '222222222222',
+                        'totalDocuments': 4, 'subtotal': DAY10_REAL - 109900 + 125700, 'discount': 0,
+                        'total': DAY10_REAL - 109900 + 125700}]
+    merged = merge_client_rows([{'idLocal': '1', 'totalDocuments': 1, 'total': 109900},
+                                {'idLocal': '7', 'totalDocuments': 2, 'total': 5}], clients)
+    assert {r['idLocal']: (r['totalDocuments'], r['total']) for r in merged} == {
+        '1': (5, 109900 + DAY10_REAL - 109900 + 125700), '7': (2, 5)}

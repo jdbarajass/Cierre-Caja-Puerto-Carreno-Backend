@@ -613,8 +613,11 @@ def get_monthly_sales():
         # Crear cliente de Alegra
         alegra_client = get_alegra_client()
 
-        # Obtener resumen de ventas mensuales
-        sales_summary = alegra_client.get_monthly_sales_summary(start_date, end_date)
+        # Obtener resumen de ventas mensuales (2025: con la anulación masiva de
+        # POS como venta, ver docs/PLAN_RECONSTRUCCION_2025.md)
+        from app.services.history_2025 import revive_for_current_store
+        invoices = revive_for_current_store(alegra_client.get_all_invoices_in_range(start_date, end_date))
+        sales_summary = alegra_client.build_sales_summary(invoices, start_date, end_date)
 
         # Agregar campos de éxito y timestamp
         response = {

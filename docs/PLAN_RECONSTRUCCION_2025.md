@@ -68,7 +68,13 @@ Las electrónicas anuladas de 2025 son anulaciones reales.
 
 ### R4 — Métricas con la venta real de 2025
 - Metas (meta automática = mismo mes del año anterior +15 %) y la comparación con el año anterior del cierre de caja usan la venta real de nuestra copia cuando el mes/día de 2025 está cargado; si no, siguen con Alegra.
-- Pendiente: Clientes nuevos/recurrentes e inactivas (hoy usan el reporte de Alegra para lo anterior a 2026).
+- **Resto de Estadísticas (hecho 2026-10-07):** con un rango de 2025, las facturas de la anulación masiva cuentan como venta en todas las pantallas. 2026 no cambia (los ids de la anulación masiva solo existen en 2025: fuera de 2025 las funciones devuelven vacío sin consultar nada).
+  - Desde nuestra copia (`sale_condition` = no anulada **o** de la anulación masiva): Clientes (`_stored_facts`), Día y hora, Metas por vendedora (`_month_sales`).
+  - Prendas y unidades de Metas: `mass_voided_item_rows` (prendas de `InvoiceVoidItem` con la vendedora de la factura).
+  - Clientes nuevos/recurrentes e inactivas: `mass_voided_client_rows` + `merge_client_rows` suman a lo del reporte de Alegra las compras de la anulación masiva (por cliente).
+  - Lo que se descarga de Alegra (Totales de Ventas, Documentos de Venta, Ventas Mensuales, Analytics Avanzado, Análisis de Productos): `revive_for_current_store` / `revive_mass_voided` devuelven esas facturas como vigentes (`status='closed'`, marca `mass_voided`) con un pago del medio de la factura (sus recibos se anularon). Documentos de Venta las marca "Anulada 2025 (venta real)".
+  - Comparativo de tiendas: los ids se calculan en el hilo del request (`mass_ids_for_range`) y se pasan a `_sales_metrics` (`revive_with_ids`, sin base de datos).
+  - Requiere que 2025 esté cargado en la copia (paso 1 de Reconstrucción 2025). Tests: 3 más en `tests/test_history_2025.py`.
 
 ## 5. Cómo quedó (2026-10-07)
 

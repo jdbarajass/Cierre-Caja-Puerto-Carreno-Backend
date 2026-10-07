@@ -179,16 +179,19 @@ class SellerGoalsService:
                                                               'identified_sales': 0, 'units': 0})
         facts, items = [], []
         if closed_end >= start:
+            # 2025: también la anulación masiva de POS (docs/PLAN_RECONSTRUCCION_2025.md)
+            from app.services.history_2025 import mass_voided_item_rows, sale_condition
             facts = [{'seller_id': r.seller_id, 'seller_name': r.seller_name, 'total': r.total or 0,
                       'client_id': r.client_id, 'client_name': r.client_name,
                       'client_identification': r.client_identification}
                      for r in InvoiceFact.query.filter(
-                         InvoiceFact.store_code == self.store, InvoiceFact.voided.is_(False),
+                         InvoiceFact.store_code == self.store, sale_condition(self.store, start, closed_end),
                          InvoiceFact.date >= start, InvoiceFact.date <= closed_end)]
             items = [{'seller_id': r.seller_id, 'name': r.name, 'quantity': r.quantity}
                      for r in InvoiceItemFact.query.filter(
                          InvoiceItemFact.store_code == self.store,
                          InvoiceItemFact.date >= start, InvoiceItemFact.date <= closed_end)]
+            items += mass_voided_item_rows(self.store, start, closed_end)
         units_complete = not (closed_end >= start and missing_item_days(self.store, start, closed_end))
         if includes_today:
             for invoice in self.client.get_invoices_by_date(self.today.isoformat()):

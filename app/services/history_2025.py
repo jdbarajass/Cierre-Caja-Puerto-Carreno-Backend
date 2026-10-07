@@ -18,6 +18,7 @@ Reconstrucción de 2025 tras la anulación masiva de facturas POS
   masiva y existencia antes de ella (= existencia de hoy − devueltas).
 """
 import io
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Set
@@ -26,6 +27,8 @@ from sqlalchemy import func
 
 from app.models.invoice_fact import InvoiceFact, InvoiceItemFact, InvoiceVoidItem, VoidOverride
 from app.services.invoice_facts import missing_days
+
+logger = logging.getLogger(__name__)
 
 HISTORY_START = date(2025, 1, 1)
 HISTORY_END = date(2025, 12, 31)
@@ -387,3 +390,151 @@ def public_state(state: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not state:
         return None
     return {k: v for k, v in state.items() if k != 'chunks'} | {'parts': len(state.get('chunks') or [])}
+
+
+# ─────────────────────────────────────────────
+#  R4 (resto): que las demás estadísticas cuenten la venta real de 2025
+# ─────────────────────────────────────────────
+
+def _overlap_2025(start: date, end: date):
+    s, e = max(start, HISTORY_START), min(end, HISTORY_END)
+    return (s, e) if s <= e else None
+
+
+def mass_ids_for_range(store: str, start: date, end: date) -> Set[str]:
+    """Facturas de la anulación masiva dentro del rango (vacío si no toca 2025)."""
+    overlap = _overlap_2025(start, end)
+    return mass_voided_ids(store, *overlap) if overlap else set()
+
+
+def sale_condition(store: str, start: date, end: date):
+    """
+    Condición SQL de "factura que cuenta como venta" para InvoiceFact: no
+    anulada, o de la anulación masiva de 2025. En 2026 es igual a voided=False.
+    """
+    from sqlalchemy import or_
+    mass = mass_ids_for_range(store, start, end)
+    if not mass:
+        return InvoiceFact.voided.is_(False)
+    return or_(InvoiceFact.voided.is_(False), InvoiceFact.alegra_id.in_(mass))
+
+
+def mass_voided_item_rows(store: str, start: date, end: date) -> List[Dict[str, Any]]:
+    """
+    Prendas de las facturas de la anulación masiva del rango, con el mismo
+    formato que las filas de InvoiceItemFact que usa Prendas (vendedora tomada
+    de la factura).
+    """
+    mass = mass_ids_for_range(store, start, end)
+    if not mass:
+        return []
+    sellers = {f.alegra_id: (f.seller_id, f.seller_name) for f in InvoiceFact.query.filter(
+        InvoiceFact.store_code == store, InvoiceFact.alegra_id.in_(mass))}
+    rows = []
+    for v in InvoiceVoidItem.query.filter(
+            InvoiceVoidItem.store_code == store, InvoiceVoidItem.date >= start, InvoiceVoidItem.date <= end,
+            InvoiceVoidItem.invoice_alegra_id.in_(mass)):
+        seller_id, seller_name = sellers.get(v.invoice_alegra_id, (None, None))
+        rows.append({'invoice_alegra_id': v.invoice_alegra_id, 'seller_id': seller_id, 'seller_name': seller_name,
+                     'item_id': v.item_id, 'name': v.name, 'quantity': v.quantity, 'total': v.total})
+    return rows
+
+
+def mass_voided_client_rows(store: str, start: date, end: date) -> List[Dict[str, Any]]:
+    """
+    Compras por cliente de la anulación masiva del rango, con el formato del
+    reporte sales-by-client de Alegra (idLocal, clientName, identification,
+    totalDocuments, subtotal, discount, total), para sumarlas a la historia
+    de clientes (nuevos/recurrentes, inactivas).
+    """
+    mass = mass_ids_for_range(store, start, end)
+    if not mass:
+        return []
+    out: Dict[str, Dict[str, Any]] = {}
+    for f in InvoiceFact.query.filter(InvoiceFact.store_code == store, InvoiceFact.alegra_id.in_(mass)):
+        if not f.client_id:
+            continue
+        r = out.setdefault(f.client_id, {'idLocal': f.client_id, 'clientName': f.client_name,
+                                         'identification': f.client_identification,
+                                         'totalDocuments': 0, 'subtotal': 0, 'discount': 0, 'total': 0})
+        r['totalDocuments'] += 1
+        r['subtotal'] += f.subtotal or 0
+        r['discount'] += f.discount or 0
+        r['total'] += f.total or 0
+    return list(out.values())
+
+
+def merge_client_rows(rows: List[Dict[str, Any]], extra: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Suma `extra` (mismo formato que sales-by-client) a las filas de Alegra por idLocal."""
+    if not extra:
+        return rows
+    merged = {str(r.get('idLocal') or ''): dict(r) for r in rows}
+    for e in extra:
+        key = str(e['idLocal'])
+        if key in merged:
+            m = merged[key]
+            for k in ('totalDocuments', 'subtotal', 'discount', 'total'):
+                m[k] = float(m.get(k) or 0) + e[k]
+        else:
+            merged[key] = dict(e)
+    return list(merged.values())
+
+
+_INVOICE_METHOD = {'CASH': 'cash', 'DEBIT_CARD': 'debit-card', 'CREDIT_CARD': 'credit-card',
+                   'DEBIT_TRANSFER': 'transfer', 'TRANSFER': 'transfer'}
+
+
+def revive_mass_voided(invoices: List[Dict[str, Any]], store: str) -> List[Dict[str, Any]]:
+    """
+    En listas de facturas que vienen de Alegra (Totales, Documentos, Analytics,
+    Productos, Comparativo): las de la anulación masiva de 2025 vuelven a
+    contar como venta (status 'closed', marcadas `mass_voided`). Como sus
+    recibos se anularon, se les pone un pago con el medio de la factura para
+    que también cuenten por medio de pago. Las de 2026 no se tocan.
+    """
+    from app.utils.formatters import is_invoice_void
+    candidates = [i for i in invoices if str(i.get('date') or '')[:4] == '2025' and is_invoice_void(i)]
+    if not candidates:
+        return invoices
+    dates = sorted(str(i['date'])[:10] for i in candidates)
+    mass = mass_ids_for_range(store, date.fromisoformat(dates[0]), date.fromisoformat(dates[-1]))
+    return revive_with_ids(invoices, mass)
+
+
+def revive_with_ids(invoices: List[Dict[str, Any]], mass: Set[str]) -> List[Dict[str, Any]]:
+    """
+    Lo mismo que revive_mass_voided con los ids ya calculados (sin base de
+    datos: sirve dentro de hilos, ej. el comparativo de tiendas).
+    """
+    if not mass:
+        return invoices
+    out = []
+    for inv in invoices:
+        if str(inv.get('id')) in mass:
+            inv = dict(inv)
+            for k in ('voided_at', 'cancelled_at', 'deleted_at', 'voided_by'):
+                inv.pop(k, None)
+            inv['status'] = 'closed'
+            inv['mass_voided'] = True
+            total = inv.get('total') or 0
+            inv['totalPaid'] = total
+            for k in ('observations', 'anotation', 'notes'):
+                if any(w in str(inv.get(k) or '').lower() for w in ('anul', 'void', 'cancel', 'revers')):
+                    inv.pop(k, None)
+            pays = [dict(p, status='open') for p in (inv.get('payments') or []) if p.get('amount')]
+            if not pays:
+                method = _INVOICE_METHOD.get(str(inv.get('paymentMethod') or '').upper(), 'cash')
+                pays = [{'amount': total, 'paymentMethod': method, 'status': 'open'}]
+            inv['payments'] = pays
+        out.append(inv)
+    return out
+
+
+def revive_for_current_store(invoices: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """revive_mass_voided para la tienda del request; si algo falla, deja la lista igual."""
+    try:
+        from app.stores import get_current_store
+        return revive_mass_voided(invoices, get_current_store())
+    except Exception as e:
+        logger.warning(f'Anulación masiva 2025 (revivir facturas): {e}')
+        return invoices

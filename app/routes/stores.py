@@ -58,14 +58,17 @@ def _parse_range():
     return start, end
 
 
-def _sales_metrics(client, start, end):
+def _sales_metrics(client, start, end, mass_ids=None):
     """
     Ventas de UNA tienda en el rango (corre en un hilo aparte: solo usa el
     cliente de Alegra, nada de base de datos ni del contexto de Flask).
     Usa build_sales_summary: exactamente el mismo cálculo que Ventas Mensuales.
+    `mass_ids`: facturas de la anulación masiva de 2025 que sí fueron venta
+    (calculadas antes, en el hilo del request; vacío en 2026).
     """
+    from app.services.history_2025 import revive_with_ids
     start_str, end_str = start.isoformat(), end.isoformat()
-    invoices = client.get_all_invoices_in_range(start_str, end_str)
+    invoices = revive_with_ids(client.get_all_invoices_in_range(start_str, end_str), mass_ids or set())
     summary = client.build_sales_summary(invoices, start_str, end_str)
 
     by_day = defaultdict(float)
@@ -183,10 +186,20 @@ def store_comparison():
         except Exception as e:
             sales[code] = {'available': False, 'error': getattr(e, 'message', None) or str(e)}
 
+    # 2025: anulación masiva de POS (base de datos: aquí, no en los hilos)
+    from app.services.history_2025 import mass_ids_for_range
+    mass = {}
+    for code in clients:
+        try:
+            mass[code] = mass_ids_for_range(code, start, end)
+        except Exception as e:
+            logger.warning(f'Comparativo: anulación masiva 2025 de {code}: {e}')
+
     # Las consultas a Alegra de cada tienda corren en paralelo.
     if clients:
         with ThreadPoolExecutor(max_workers=len(clients)) as pool:
-            futures = {code: pool.submit(_sales_metrics, client, start, end) for code, client in clients.items()}
+            futures = {code: pool.submit(_sales_metrics, client, start, end, mass.get(code))
+                       for code, client in clients.items()}
             for code, future in futures.items():
                 try:
                     sales[code] = {'available': True, **future.result()}

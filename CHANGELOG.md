@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-10-07] (continuación 6) - Reconstrucción 2025: el resto de Estadísticas usa la venta real
+
+- Pedido del usuario: que Clientes, Prendas, Día y hora, Comparativo de tiendas, Totales/Documentos de Venta, Analytics Avanzado y Análisis de Productos cuenten en 2025 las POS de la anulación masiva, **sin tocar 2026**.
+- `app/services/history_2025.py`: `mass_ids_for_range`, `sale_condition`, `mass_voided_item_rows`, `mass_voided_client_rows`, `merge_client_rows`, `revive_mass_voided` / `revive_with_ids` / `revive_for_current_store`. Aplicado en `customer_insights`, `sales_patterns`, `garment_insights`, `seller_goals._month_sales`, `routes/stores.py`, `routes/direct_api.py` (documentos), `routes/cash_closing.py` (`/monthly_sales`), `routes/analytics.py` y `routes/products.py`. Detalle en `docs/PLAN_RECONSTRUCCION_2025.md` (R4).
+- 3 tests más en `tests/test_history_2025.py`. **252/252**.
+
 ## [2026-10-07] (continuación 5) - Incentivos por empleada
 
 - Pedido del usuario: Mónica y Rita tienen incentivos distintos ($250.000 y $150.000). `IncentiveRule.employee_name` (opcional; migración `add_column_if_missing`): al pagar un incentivo de categoría sueldo con empleada, el gasto lleva la empleada y se crea el pago en Empleadas → Pagos como **comisión** (`_sync_employee_links(..., payment_type='comision')`; los sueldos siguen como quincena).

@@ -403,6 +403,7 @@ class CustomerInsightsService:
         Corre en el hilo del request (usa la base de datos).
         """
         from app.models.invoice_fact import InvoiceFact
+        from app.services.history_2025 import sale_condition
         from app.services.invoice_facts import invoice_to_fact, missing_days
 
         closed_end = min(end, self.today - timedelta(days=1))
@@ -417,7 +418,7 @@ class CustomerInsightsService:
             rows = InvoiceFact.query.filter(
                 InvoiceFact.store_code == self.store,
                 InvoiceFact.date >= start, InvoiceFact.date <= closed_end,
-                InvoiceFact.voided.is_(False),
+                sale_condition(self.store, start, closed_end),  # 2025: + anulación masiva
             ).all()
             facts = [{
                 'date': r.date, 'number': r.number, 'client_id': r.client_id, 'client_name': r.client_name,
@@ -434,6 +435,19 @@ class CustomerInsightsService:
                     fact['date'] = self.today
                     facts.append(fact)
         return facts
+
+    def _mass_client_rows(self, start: date, end: date) -> List[Dict[str, Any]]:
+        """
+        Compras de 2025 que Alegra ya no cuenta (anulación masiva de POS, ver
+        docs/PLAN_RECONSTRUCCION_2025.md) con el formato de sales-by-client.
+        Vacío fuera de 2025. Usa la base de datos: llamar en el hilo del request.
+        """
+        try:
+            from app.services.history_2025 import mass_voided_client_rows
+            return mass_voided_client_rows(self.store, start, end)
+        except Exception as e:
+            logger.warning(f'[{self.store}] Clientes de la anulación masiva 2025: {e}')
+            return []
 
     def _ttl(self, end: date) -> float:
         return CLOSED_RANGE_TTL if end < self.today else OPEN_RANGE_TTL
@@ -454,6 +468,7 @@ class CustomerInsightsService:
     def summary(self, start: date, end: date, top_limit: int = 25) -> Dict[str, Any]:
         history_end = start - timedelta(days=1)
         facts = self._stored_facts(start, end)  # base de datos: en el hilo del request
+        history_extra = self._mass_client_rows(HISTORY_START, history_end) if history_end >= HISTORY_START else []
         with ThreadPoolExecutor(max_workers=4) as pool:
             f_clients = pool.submit(self._clients, start, end) if facts is None else None
             f_seller_sales = pool.submit(self._seller_sales, start, end) if facts is None else None
@@ -472,7 +487,7 @@ class CustomerInsightsService:
             history_ids = set()
             if f_history is not None:
                 try:
-                    history_ids = {normalize_client(r)['id'] for r in f_history.result()}
+                    history_ids = {normalize_client(r)['id'] for r in f_history.result() + history_extra}
                 except Exception as e:
                     logger.warning(f'[{self.store}] No se pudo leer la historia de clientes: {e}')
                     history_ids = None
@@ -524,12 +539,16 @@ class CustomerInsightsService:
         recent_start = self.today - timedelta(days=days - 1)
         before_end = recent_start - timedelta(days=1)
         before_start = self.today - timedelta(days=lookback_days)
+        from app.services.history_2025 import merge_client_rows
+        before_extra = self._mass_client_rows(before_start, before_end)
+        recent_extra = self._mass_client_rows(recent_start, self.today)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             f_before = pool.submit(self._clients, before_start, before_end)
             f_recent = pool.submit(self._clients, recent_start, self.today)
             f_sellers = pool.submit(self._sellers)
-            before_rows, recent_rows = f_before.result(), f_recent.result()
+            before_rows = merge_client_rows(f_before.result(), before_extra)
+            recent_rows = merge_client_rows(f_recent.result(), recent_extra)
             try:
                 sellers = f_sellers.result()
             except Exception:
