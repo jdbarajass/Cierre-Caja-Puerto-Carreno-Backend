@@ -9,7 +9,7 @@ Estado de las fases (actualizar al cerrar cada una):
 | 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 4 | Extras: bonos regalo, regla 70/30, incentivos/metas, gastos en el comparativo de tiendas | Pendiente |
+| 4 | Extras: regla 70/30, incentivos/metas, gastos en el comparativo de tiendas (sin bonos regalo, decisión del usuario 2026-10-07) | Pendiente (después de probar las fases 1-3 en producción) |
 
 ---
 
@@ -32,7 +32,7 @@ Por mes: lo vendido por medio (efectivo, QR, datáfono, Nequi, Addi, BBVA, Davip
 Por mes: ventas, recompras, gastos operativos, ganancia neta (= ventas − gastos), ganancia real (= ventas − recompras − gastos), % de ganancia, total y promedio del año. Aparte: inventario al 30/31 de cada mes y cuánto aumentó. Lleno hasta julio. **El usuario quiere llenarlo desde septiembre.**
 
 ### Bonos Regalos_2026
-Tarjetas de regalo: valor, número, medio de pago, fecha de compra, fecha de redención, nota. (Fase 4.)
+Tarjetas de regalo: valor, número, medio de pago, fecha de compra, fecha de redención, nota. **No se pasa a la plataforma** (decisión del usuario, 2026-10-07): se queda en el Excel.
 
 ### Errores encontrados en el Excel (informados al usuario)
 1. Septiembre y octubre tienen fechas de agosto en la columna A (pestaña duplicada; los valores sí son del mes: sep = $42.239.140, cuadra con Alegra).
@@ -177,10 +177,11 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - **Pendiente de verificar en producción:** que el inventario de julio de Alegra dé $174.013.437 (= Excel). Si no, el valor de Alegra no está al mismo precio que el del Excel y "G. real + inventario" no se debe usar (ver C5 de Estadísticas: costos de Alegra por corregir).
 
 ### Fase 4 — Extras
-Bonos regalo; regla 70/30 (resurtido/utilidad) configurable; metas e incentivos (el sistema usa +15 % en Estadísticas → Metas, el Excel +25 %); gastos en el comparativo de tiendas.
+Regla 70/30 (resurtido/utilidad) configurable; metas e incentivos (el sistema usa +15 % en Estadísticas → Metas, el Excel +25 %); gastos en el comparativo de tiendas.
 
 ---
 
 ## 5. Decisiones tomadas
+- 2026-10-07: la hoja de bonos / tarjetas regalo NO se pasa a la plataforma. Se suben las fases 1-3 para probarlas con datos reales antes de la Fase 4.
 - 2026-10-06 (2): ventas por medio desde los recibos de pago de Alegra (cuenta + método); saldos de partida = Resumen al 5-oct 9 pm. Los gastos de octubre ya descontados en Resumen se registran en Gastos con "No mover cuentas" (o se borran los ajustes manuales y se registran con "De las cuentas"); arriendo parte de sep. y aseo del 2-oct con "De la caja del día".
 - 2026-10-06: empezar el 1-oct-2026; fases una por una; medios de pago listados arriba; Addi y datáfono separados como medio de venta, pero llegan a la misma cuenta …6018; gastos de Primavera pagados por Carreño = préstamo de Carreño a Primavera; resumen mensual desde septiembre.
