@@ -2,6 +2,8 @@
 
 Estado al 2026-10-02. Auditoría inicial solo de lectura del código; luego verificado con el conector de Alegra. **Fases A, B y C (C1-C4) hechas** (errores 1-11 y los 2 pendientes que salieron en la A, ver CHANGELOG). Las fases se hacen en orden, cada una con aprobación del usuario.
 
+Revisión 2026-10-07 de Analytics Avanzado y Análisis de Productos: bolsa en unidades/%, Consumidor final en recurrencia de vendedoras y productos juntos por talla, corregidos (CHANGELOG, continuación 7).
+
 Secciones revisadas (menú Estadísticas): Totales de Ventas, Documentos de Venta, Analytics Avanzado, Análisis de Productos, Análisis de Inventario. (Clientes y Comparativo de tiendas son nuevos y ya fueron revisados en producción: ver CHANGELOG.)
 
 ## Errores confirmados en el código

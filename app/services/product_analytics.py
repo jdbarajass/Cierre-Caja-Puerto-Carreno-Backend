@@ -56,6 +56,11 @@ class ProductAnalytics:
                 }
                 self.products_data.append(product)
 
+    def _units(self, exclude_bolsa: bool = True) -> int:
+        """Unidades vendidas, sin la BOLSA PAPEL si exclude_bolsa."""
+        return sum(p['cantidad'] for p in self.products_data
+                   if not (exclude_bolsa and 'BOLSA PAPEL' in p['nombre'].upper()))
+
     @staticmethod
     def normalize_product_name(name: str) -> str:
         """
@@ -111,7 +116,9 @@ class ProductAnalytics:
             if 'BOLSA PAPEL' not in p['nombre'].upper()
         ]
 
-        total_productos = sum(p['cantidad'] for p in self.products_data)
+        # Unidades: solo prendas (la bolsa se vende casi en cada factura e
+        # inflaba el total). El dinero sí incluye todo lo facturado.
+        total_productos = sum(p['cantidad'] for p in products_filtered)
         total_ingresos = sum(p['total'] for p in self.products_data)
 
         # Producto más vendido (excluyendo BOLSA PAPEL)
@@ -175,8 +182,9 @@ class ProductAnalytics:
         products_list = list(products_grouped.values())
         products_list.sort(key=lambda x: x['cantidad'], reverse=True)
 
-        # Calcular porcentaje de participación
-        total_productos = sum(p['cantidad'] for p in self.products_data)
+        # Participación sobre las mismas unidades que entran al ranking (antes
+        # el total incluía la bolsa y todos los % salían más bajos)
+        total_productos = self._units(exclude_bolsa)
 
         result = []
         for idx, product in enumerate(products_list[:limit], 1):
@@ -233,8 +241,9 @@ class ProductAnalytics:
         products_list = list(products_grouped.values())
         products_list.sort(key=lambda x: x['cantidad'], reverse=True)
 
-        # Calcular porcentaje de participación
-        total_productos = sum(p['cantidad'] for p in self.products_data)
+        # Participación sobre las mismas unidades que entran al ranking (antes
+        # el total incluía la bolsa y todos los % salían más bajos)
+        total_productos = self._units(exclude_bolsa)
 
         result = []
         for idx, product in enumerate(products_list[:limit], 1):
@@ -331,6 +340,8 @@ class ProductAnalytics:
 
         for p in self.products_data:
             nombre_upper = p['nombre'].upper()
+            if 'BOLSA PAPEL' in nombre_upper:
+                continue
 
             # Detectar categoría
             category = 'OTROS'
@@ -356,8 +367,8 @@ class ProductAnalytics:
         categories_list = list(categories.values())
         categories_list.sort(key=lambda x: x['cantidad'], reverse=True)
 
-        # Calcular porcentajes
-        total_productos = sum(p['cantidad'] for p in self.products_data)
+        # Calcular porcentajes (sin la bolsa)
+        total_productos = self._units(exclude_bolsa=True)
 
         result = []
         for cat in categories_list:

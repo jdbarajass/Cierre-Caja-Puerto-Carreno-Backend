@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-07] (continuación 7) - Analytics Avanzado y Análisis de Productos: correcciones
+
+Revisión pedida por el usuario (secciones poco usadas). Cambian números de 2026, con su aprobación:
+- **Análisis de Productos** (`product_analytics.py`): "Total productos vendidos" y el **% de participación** (top, unificados, categorías) ya no cuentan la BOLSA PAPEL (casi una por factura: todos los % salían más bajos). Los ingresos sí siguen incluyendo todo lo facturado. La bolsa ya no aparece en la categoría OTROS.
+- **Analytics → Vendedoras** (`sales_analytics.py`): "clientes únicos" y "% recurrentes" sin Consumidor final (antes contaba como una sola clienta que volvía siempre e inflaba la recurrencia). Recurrencia = facturas con cliente identificado de clientas que repitieron.
+- **Analytics → Productos que se compran juntos**: se agrupa por prenda sin talla/código (`ProductAnalytics.normalize_product_name`), una vez por factura, y la confianza es "de las facturas con A, cuántas tienen B" (antes dividía por unidades).
+- Unidades de horas pico, tendencias, vendedoras y clientes sin bolsa ni tarjetas de regalo (`garment_units`, mismo criterio que Prendas).
+- Tests: `tests/test_analytics_bolsa_y_recurrencia.py` (4). **256/256**.
+
 ## [2026-10-07] (continuación 6) - Reconstrucción 2025: el resto de Estadísticas usa la venta real
 
 - Pedido del usuario: que Clientes, Prendas, Día y hora, Comparativo de tiendas, Totales/Documentos de Venta, Analytics Avanzado y Análisis de Productos cuenten en 2025 las POS de la anulación masiva, **sin tocar 2026**.

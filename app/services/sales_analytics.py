@@ -9,6 +9,8 @@ from collections import defaultdict
 import logging
 
 from app.utils.formatters import format_cop, filter_voided_invoices
+from app.services.garment_insights import is_excluded
+from app.services.product_analytics import ProductAnalytics
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,11 @@ def is_consumidor_final(client: Dict) -> bool:
         return True
     return (str(client.get('id', '')) == CONSUMIDOR_FINAL_ID
             or str(client.get('identification', '')) == CONSUMIDOR_FINAL_IDENTIFICATION)
+
+
+def garment_units(items: List[Dict]) -> int:
+    """Prendas de una factura (sin bolsa ni tarjetas de regalo)."""
+    return sum(int(item.get('quantity', 0) or 0) for item in items or [] if not is_excluded(item.get('name')))
 
 
 class SalesAnalytics:
@@ -129,7 +136,7 @@ class SalesAnalytics:
 
                 # Obtener total de la factura
                 total = float(invoice.get('total', 0))
-                items_count = sum(item.get('quantity', 0) for item in invoice.get('items', []))
+                items_count = garment_units(invoice.get('items', []))
 
                 # Agregar a estadísticas por hora
                 sales_by_hour[hour]['total_revenue'] += total
@@ -269,7 +276,7 @@ class SalesAnalytics:
 
             # Items comprados
             items = invoice.get('items', [])
-            customer_stats[client_id]['total_items'] += sum(item.get('quantity', 0) for item in items)
+            customer_stats[client_id]['total_items'] += garment_units(items)
 
             # Productos comprados (para análisis posterior)
             for item in items:
@@ -388,6 +395,7 @@ class SalesAnalytics:
             'invoice_count': 0,
             'total_items': 0,
             'unique_customers': set(),
+            'identified_invoices': 0,
             'payment_methods': defaultdict(int),
             'hourly_sales': defaultdict(lambda: {'revenue': 0, 'invoices': 0}),
             'products_sold': []
@@ -414,12 +422,15 @@ class SalesAnalytics:
 
             # Items vendidos
             items = invoice.get('items', [])
-            seller_stats[seller_id]['total_items'] += sum(item.get('quantity', 0) for item in items)
+            seller_stats[seller_id]['total_items'] += garment_units(items)
 
             # Clientes únicos atendidos
+            # Solo clientas identificadas: "Consumidor final" son muchas personas
+            # distintas (antes contaba como una sola que volvía siempre)
             client = invoice.get('client', {})
-            if client and client.get('id'):
+            if client and client.get('id') and not is_consumidor_final(client):
                 seller_stats[seller_id]['unique_customers'].add(str(client.get('id')))
+                seller_stats[seller_id]['identified_invoices'] += 1
 
             # Métodos de pago utilizados
             payments = invoice.get('payments', [])
@@ -465,11 +476,12 @@ class SalesAnalytics:
                     key=lambda x: x[1]['revenue']
                 )[0]
 
-            # Tasa de clientes recurrentes
+            # % de facturas con cliente identificado que fueron de una clienta que repitió
             unique_customer_count = len(stats['unique_customers'])
+            identified = stats['identified_invoices']
             recurring_rate = 0
-            if unique_customer_count > 0:
-                recurring_rate = round(((stats['invoice_count'] - unique_customer_count) / stats['invoice_count']) * 100, 2)
+            if identified > 0:
+                recurring_rate = round(((identified - unique_customer_count) / identified) * 100, 2)
 
             sellers_list.append({
                 'seller_id': stats['seller_id'],
@@ -721,7 +733,7 @@ class SalesAnalytics:
                 weekday_name = weekday_names[weekday]
 
                 total = float(invoice.get('total', 0))
-                items_count = sum(item.get('quantity', 0) for item in invoice.get('items', []))
+                items_count = garment_units(invoice.get('items', []))
 
                 # Por día específico
                 daily_sales[date_key]['total_revenue'] += total
@@ -841,45 +853,35 @@ class SalesAnalytics:
             'total_revenue': 0
         })
 
-        # Procesar facturas
+        # Facturas en las que aparece cada prenda (para la confianza)
+        invoices_with = defaultdict(int)
+
+        # Se agrupa por prenda sin talla, color ni código ("JEAN HOMBRE 109900 /
+        # 1051..." queda "JEAN HOMBRE"): antes cada talla era un producto distinto
+        # y casi ninguna pareja se repetía.
         for invoice in self.invoices:
-            items = invoice.get('items', [])
             invoice_id = invoice.get('id', '')
-
-            # Filtrar productos válidos (excluir bolsas, etc.)
-            valid_items = [
-                item for item in items
-                if 'BOLSA' not in item.get('name', '').upper()
-            ]
-
-            if len(valid_items) < 2:
-                continue
-
-            # Contar productos individuales
-            for item in valid_items:
-                product_name = item.get('name', '').strip()
+            revenue_by_product = defaultdict(float)
+            for item in invoice.get('items', []) or []:
+                if is_excluded(item.get('name')):
+                    continue
+                product_name = ProductAnalytics.normalize_product_name(item.get('name', ''))
                 if not product_name:
                     continue
+                individual_products[product_name]['count'] += int(item.get('quantity', 0) or 0)
+                individual_products[product_name]['total_revenue'] += float(item.get('total', 0) or 0)
+                revenue_by_product[product_name] += float(item.get('total', 0) or 0)
 
-                individual_products[product_name]['count'] += item.get('quantity', 0)
-                individual_products[product_name]['total_revenue'] += float(item.get('total', 0))
+            products = sorted(revenue_by_product)
+            for name in products:
+                invoices_with[name] += 1
 
-            # Generar pares de productos
-            for i in range(len(valid_items)):
-                for j in range(i + 1, len(valid_items)):
-                    product1 = valid_items[i].get('name', '').strip()
-                    product2 = valid_items[j].get('name', '').strip()
-
-                    if not product1 or not product2:
-                        continue
-
-                    # Ordenar alfabéticamente para evitar duplicados (A,B) vs (B,A)
-                    pair = tuple(sorted([product1, product2]))
-
-                    revenue = float(valid_items[i].get('total', 0)) + float(valid_items[j].get('total', 0))
-
+            # Pares de prendas distintas (una vez por factura)
+            for i in range(len(products)):
+                for j in range(i + 1, len(products)):
+                    pair = (products[i], products[j])
                     product_pairs[pair]['count'] += 1
-                    product_pairs[pair]['total_revenue'] += revenue
+                    product_pairs[pair]['total_revenue'] += revenue_by_product[products[i]] + revenue_by_product[products[j]]
                     product_pairs[pair]['invoices'].append(invoice_id)
 
         # Filtrar pares por soporte mínimo
@@ -892,11 +894,12 @@ class SalesAnalytics:
                 confidence_1_to_2 = 0
                 confidence_2_to_1 = 0
 
-                if individual_products[product1]['count'] > 0:
-                    confidence_1_to_2 = (data['count'] / individual_products[product1]['count']) * 100
+                # De las facturas con A, en cuántas también hubo B
+                if invoices_with[product1] > 0:
+                    confidence_1_to_2 = (data['count'] / invoices_with[product1]) * 100
 
-                if individual_products[product2]['count'] > 0:
-                    confidence_2_to_1 = (data['count'] / individual_products[product2]['count']) * 100
+                if invoices_with[product2] > 0:
+                    confidence_2_to_1 = (data['count'] / invoices_with[product2]) * 100
 
                 frequent_pairs.append({
                     'product1': product1,
