@@ -269,3 +269,75 @@ def test_validaciones_y_permisos(app, client, h):
         sales = JWTService.generate_token(2, 'v@test.com', 'sales', None)
     assert client.get('/api/month-sheet?year=2026&month=10',
                       headers={'Authorization': f'Bearer {sales}'}).status_code == 403
+
+
+# ─── Correcciones a mano del medio de pago ──────────────────────────────────
+
+def test_correccion_mueve_el_medio_sin_cambiar_el_total(app, client, h, monkeypatch):
+    import app.routes.month_sheet as ms_routes
+    monkeypatch.setattr(ms_routes, 'get_colombia_now', lambda: datetime(2026, 10, 6, 12, 0))
+    _load(app)
+
+    def correct(**kw):
+        body = {'date': '2026-10-05', 'from_medio': 'ahorro', 'to_medio': 'efectivo', 'amount': 170000,
+                'note': 'la tarjeta no pasó, pagó en efectivo', **kw}
+        return client.post('/api/month-sheet/corrections', headers=h(), json=body)
+
+    # validaciones
+    assert correct(amount=170001).status_code == 400                       # más de lo que hubo
+    assert 'solo hay $170.000' in correct(amount=170001).get_json()['message']
+    assert correct(to_medio='ahorro').status_code == 400
+    assert correct(from_medio='xx').status_code == 400
+    assert correct(amount=0).status_code == 400
+    assert correct(date='2026-10-07').status_code == 400                   # futuro
+
+    resp = correct()
+    assert resp.status_code == 201
+    cid = resp.get_json()['correction']['id']
+    sheet = _sheet(client, h)
+    day5 = next(d for d in sheet['sales']['days'] if d['date'] == '2026-10-05')
+    assert day5['medios']['ahorro'] == 0 and day5['medios']['efectivo'] == 384500 + 170000
+    assert day5['total'] == 1344500 and day5['corrected'] is True
+    assert sheet['sales']['totals']['ahorro'] == 0
+    assert [c['id'] for c in sheet['corrections']] == [cid]
+    # sin datáfono débito: la comisión baja 3,8 % de 170.000
+    assert sheet['commissions']['total'] == round(193950 * 0.038 + 204700 * 0.07735)
+    # la otra tienda no la ve
+    assert _sheet(client, h, store='primavera')['corrections'] == []
+
+    # una recarga de Alegra no la borra
+    _load(app)
+    day5 = next(d for d in _sheet(client, h)['sales']['days'] if d['date'] == '2026-10-05')
+    assert day5['medios']['efectivo'] == 384500 + 170000
+
+    # Año (Fase 3) también la usa
+    from app.services.monthly_summary import computed_month
+    with app.app_context():
+        assert computed_month('carreno', 2026, 10)['ventas_por_medio']['ahorro'] == 0
+
+    # tránsito: pasar el Addi del 5 a crédito cambia cuándo llega y cuánto
+    assert correct(from_medio='addi', to_medio='credito', amount=204700).status_code == 201
+    assert _sheet(client, h)['transit']['items'] == []                      # el crédito del 5 llegó el 6
+
+    # mes cerrado: no se puede corregir ni borrar
+    assert client.post('/api/month-sheet/close', headers=h(), json={'year': 2026, 'month': 10}).status_code in (200, 201)
+    assert correct(amount=1000, from_medio='qr').status_code == 400
+    assert client.delete(f'/api/month-sheet/corrections/{cid}', headers=h()).status_code == 400
+    client.delete('/api/month-sheet/close?year=2026&month=10', headers=h())
+
+    assert client.delete(f'/api/month-sheet/corrections/{cid}', headers=h('primavera')).status_code == 404
+    assert client.delete(f'/api/month-sheet/corrections/{cid}', headers=h()).status_code == 200
+    day5 = next(d for d in _sheet(client, h)['sales']['days'] if d['date'] == '2026-10-05')
+    assert day5['medios']['ahorro'] == 170000
+
+
+def test_borrar_correccion_que_otra_usa(app, client, h, monkeypatch):
+    import app.routes.month_sheet as ms_routes
+    monkeypatch.setattr(ms_routes, 'get_colombia_now', lambda: datetime(2026, 10, 6, 12, 0))
+    _load(app)
+    first = client.post('/api/month-sheet/corrections', headers=h(), json={
+        'date': '2026-10-05', 'from_medio': 'ahorro', 'to_medio': 'nequi', 'amount': 170000}).get_json()['correction']
+    assert client.post('/api/month-sheet/corrections', headers=h(), json={
+        'date': '2026-10-05', 'from_medio': 'nequi', 'to_medio': 'efectivo', 'amount': 170000}).status_code == 201
+    resp = client.delete(f"/api/month-sheet/corrections/{first['id']}", headers=h())
+    assert resp.status_code == 400 and 'bórrala primero' in resp.get_json()['message']

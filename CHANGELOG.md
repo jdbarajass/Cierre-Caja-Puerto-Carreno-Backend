@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-10-07] (continuación 8) - Cuentas → Mes: corregir a mano el medio de pago de un día
+
+- Pedido del usuario: a veces en Alegra queda un medio equivocado (se pasó por datáfono y al final pagó en efectivo). Modelo `SaleMethodCorrection` + `POST/DELETE /api/month-sheet/corrections`; `month_sheet.sale_entries` suma los recibos de Alegra y las correcciones para la tabla diaria, totales, comisiones, plata por llegar y Cuentas → Año. No toca Alegra; sobrevive a las recargas de pagos; bloqueada con el mes cerrado. Detalle en `docs/PLAN_CUENTAS_DIARIAS.md` (Fase 2).
+- Verificado con Alegra (conector): el 6-oct la factura KPC4588 ($169.800) está en la cuenta ADDI con método tarjeta de crédito; el Excel la tiene en Crédito. Es el caso que esto resuelve.
+- 2 tests en `tests/test_month_sheet.py`. **258/258**.
+
 ## [2026-10-07] (continuación 7) - Analytics Avanzado y Análisis de Productos: correcciones
 
 Revisión pedida por el usuario (secciones poco usadas). Cambian números de 2026, con su aprobación:

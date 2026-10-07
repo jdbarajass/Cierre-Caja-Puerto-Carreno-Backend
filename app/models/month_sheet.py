@@ -8,6 +8,9 @@ medio de pago.
 - AccountReconciliation: saldo real que el usuario escribe por cuenta y mes
   (lo que dice el banco), para compararlo con el saldo calculado.
 - MonthClose: "foto" del estado del mes al cerrarlo (se puede reabrir).
+- SaleMethodCorrection: corrección a mano del medio de pago de un día ("se
+  pasó por datáfono pero al final pagó en efectivo"): mueve un valor de un
+  medio a otro sin tocar Alegra ni la copia de recibos.
 """
 from datetime import datetime
 from app.models.user import db
@@ -48,6 +51,26 @@ class AccountReconciliation(StoreScopedMixin, db.Model):
     note = db.Column(db.Text, nullable=True)
     updated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SaleMethodCorrection(StoreScopedMixin, db.Model):
+    __tablename__ = 'sale_method_corrections'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)      # día de la venta
+    from_medio = db.Column(db.String(20), nullable=False)      # uno de SALE_MEDIOS
+    to_medio = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.BigInteger, nullable=False)          # siempre > 0
+    note = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'date': self.date.isoformat(), 'from_medio': self.from_medio,
+            'to_medio': self.to_medio, 'amount': self.amount, 'note': self.note,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+        }
 
 
 class MonthClose(StoreScopedMixin, db.Model):

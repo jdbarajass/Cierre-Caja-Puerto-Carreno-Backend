@@ -67,7 +67,7 @@ def create_app(config_class=Config):
     from app.models.seller_goal import SellerGoal  # Estadísticas → Metas (Fase D3)
     from app.models.daily_alert import DailyAlert  # Alertas diarias (Fase D4)
     from app.models.expense import Expense, FixedExpense  # Cuentas → Gastos (docs/PLAN_CUENTAS_DIARIAS.md, Fase 1)
-    from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose  # Cuentas → Mes (Fase 2)
+    from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose, SaleMethodCorrection  # Cuentas → Mes (Fase 2)
     from app.models.monthly_summary import InventorySnapshot, MonthlySummaryOverride  # Cuentas → Año (Fase 3)
     from app.models.incentive import IncentiveRule  # Incentivos por meta (Fase 4)
 

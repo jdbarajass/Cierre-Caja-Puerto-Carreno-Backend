@@ -97,6 +97,11 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
             PaymentFact.store_code == store, PaymentFact.invoice_date >= start,
             PaymentFact.invoice_date <= end).group_by(PaymentFact.medio):
         medios[medio] = float(total or 0)
+    # Correcciones a mano del medio (Cuentas → Mes)
+    from app.services.month_sheet import corrections
+    for c in corrections(store, start, end):
+        medios[c.from_medio] = medios.get(c.from_medio, 0) - c.amount
+        medios[c.to_medio] = medios.get(c.to_medio, 0) + c.amount
 
     return {
         'ventas': ventas,

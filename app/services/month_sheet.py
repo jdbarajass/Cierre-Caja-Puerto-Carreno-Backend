@@ -9,6 +9,8 @@ Junta en una sola respuesta lo que el usuario veía "todo de una" en el Excel:
   por día, y el saldo real que escribe el usuario (conciliación).
 - Plata en tránsito del datáfono y Addi (bruto, neto y cuándo llega) y las
   comisiones del mes.
+- Correcciones a mano del medio de un día (SaleMethodCorrection): cuentan en
+  todo lo anterior y en Cuentas → Año (ver `sale_entries`).
 """
 import calendar
 import json
@@ -19,7 +21,7 @@ from typing import Any, Dict, List
 from app.models.account import Account, AccountMovement
 from app.models.cash_closing import CashClosing
 from app.models.expense import Expense
-from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose
+from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose, SaleMethodCorrection
 from app.models.repurchase import RepurchaseEntry
 from app.services.payment_facts import (
     SALE_MEDIOS, FEES, TRANSIT_MEDIOS, PAYMENTS_START, arrival_date, net_amount,
@@ -70,15 +72,49 @@ def period_label(year: int, month: int) -> str:
 #  Ventas por medio
 # ─────────────────────────────────────────────
 
+def corrections(store: str, start: date, end: date) -> List[SaleMethodCorrection]:
+    return SaleMethodCorrection.for_store(store).filter(
+        SaleMethodCorrection.date >= start, SaleMethodCorrection.date <= end
+    ).order_by(SaleMethodCorrection.date, SaleMethodCorrection.id).all()
+
+
+def sale_entries(store: str, start: date, end: date, medios=None) -> List[tuple]:
+    """
+    (día, medio, valor, needs_review) de las ventas por medio: los recibos de
+    Alegra + las correcciones a mano (cada una resta en un medio y suma en
+    otro el mismo día, así que el total del día no cambia).
+    """
+    q = PaymentFact.for_store(store).filter(PaymentFact.invoice_date >= start, PaymentFact.invoice_date <= end)
+    if medios is not None:
+        q = q.filter(PaymentFact.medio.in_(tuple(medios)))
+    rows = [(f.invoice_date, f.medio, f.amount, bool(f.needs_review)) for f in q]
+    for c in corrections(store, start, end):
+        rows.append((c.date, c.from_medio, -c.amount, False))
+        rows.append((c.date, c.to_medio, c.amount, False))
+    if medios is not None:
+        rows = [r for r in rows if r[1] in medios]
+    return rows
+
+
+def day_by_medio(store: str, day: date) -> Dict[str, float]:
+    """Venta de un día por medio (con las correcciones)."""
+    out: Dict[str, float] = defaultdict(float)
+    for _, medio, amount, _ in sale_entries(store, day, day):
+        out[medio] += amount
+    return out
+
+
 def sales_by_day(store: str, start: date, end: date, today: date) -> Dict[str, Any]:
-    facts = PaymentFact.for_store(store).filter(
-        PaymentFact.invoice_date >= start, PaymentFact.invoice_date <= end).all()
+    entries = sale_entries(store, start, end)
+    has_facts = PaymentFact.for_store(store).filter(
+        PaymentFact.invoice_date >= start, PaymentFact.invoice_date <= end).first() is not None
+    corrected = {c.date for c in corrections(store, start, end)}
     by_day: Dict[date, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     review: Dict[date, int] = defaultdict(int)
-    for f in facts:
-        by_day[f.invoice_date][f.medio] += f.amount
-        if f.needs_review:
-            review[f.invoice_date] += 1
+    for d_, medio, amount, needs_review in entries:
+        by_day[d_][medio] += amount
+        if needs_review:
+            review[d_] += 1
 
     days = []
     totals = {m: 0 for m in SALE_MEDIOS + ('otro',)}
@@ -95,7 +131,7 @@ def sales_by_day(store: str, start: date, end: date, today: date) -> Dict[str, A
         for m, v in medios.items():
             totals[m] += v
         days.append({'date': d.isoformat(), 'medios': medios, 'total': total,
-                     'rating': r, 'needs_review': review.get(d, 0)})
+                     'rating': r, 'needs_review': review.get(d, 0), 'corrected': d in corrected})
         d += timedelta(days=1)
 
     return {
@@ -103,7 +139,7 @@ def sales_by_day(store: str, start: date, end: date, today: date) -> Dict[str, A
         'totals': totals,
         'total': sum(totals.values()),
         'ratings': ratings,
-        'has_data': bool(facts),
+        'has_data': has_facts,
         'before_start': end < PAYMENTS_START,
     }
 
@@ -204,24 +240,21 @@ def account_statement(store: str, start: date, end: date, period: str) -> List[D
 
 def transit(store: str, cutoff: date) -> Dict[str, Any]:
     """Ventas de datáfono/Addi hechas hasta `cutoff` que todavía no llegan a esa fecha."""
-    facts = PaymentFact.for_store(store).filter(
-        PaymentFact.medio.in_(TRANSIT_MEDIOS),
-        PaymentFact.invoice_date <= cutoff,
-        PaymentFact.invoice_date >= cutoff - timedelta(days=45),
-    ).all()
+    entries = sale_entries(store, cutoff - timedelta(days=45), cutoff, TRANSIT_MEDIOS)
     groups: Dict[tuple, Dict[str, Any]] = {}
-    for f in facts:
-        arrives = arrival_date(f.medio, f.invoice_date)
+    for sale_date, medio, amount, _ in entries:
+        arrives = arrival_date(medio, sale_date)
         if arrives is None or arrives <= cutoff:
             continue
-        g = groups.setdefault((arrives, f.medio), {
-            'arrival_date': arrives.isoformat(), 'medio': f.medio, 'gross': 0, 'net': 0,
+        g = groups.setdefault((arrives, medio), {
+            'arrival_date': arrives.isoformat(), 'medio': medio, 'gross': 0, 'net': 0,
             'sales_dates': set(),
         })
-        g['gross'] += f.amount
-        g['net'] += net_amount(f.medio, f.amount)
-        g['sales_dates'].add(f.invoice_date.isoformat())
-    items = sorted(groups.values(), key=lambda g: (g['arrival_date'], g['medio']))
+        g['gross'] += amount
+        g['net'] += net_amount(medio, amount)
+        g['sales_dates'].add(sale_date.isoformat())
+    # Una corrección puede dejar un grupo en cero (todo se pasó a efectivo)
+    items = sorted((g for g in groups.values() if g['gross'] > 0), key=lambda g: (g['arrival_date'], g['medio']))
     for g in items:
         g['sales_dates'] = sorted(g['sales_dates'])
         g['net'] = round(g['net'])
@@ -234,17 +267,14 @@ def transit(store: str, cutoff: date) -> Dict[str, Any]:
 
 
 def commissions(store: str, start: date, end: date, period: str) -> Dict[str, Any]:
-    facts = PaymentFact.for_store(store).filter(
-        PaymentFact.medio.in_(tuple(FEES)),
-        PaymentFact.invoice_date >= start, PaymentFact.invoice_date <= end).all()
     by_medio = defaultdict(lambda: {'sales': 0, 'fee': 0.0})
-    for f in facts:
-        by_medio[f.medio]['sales'] += f.amount
-        by_medio[f.medio]['fee'] += f.amount * FEES[f.medio]
+    for _, medio, amount, _ in sale_entries(store, start, end, tuple(FEES)):
+        by_medio[medio]['sales'] += amount
+        by_medio[medio]['fee'] += amount * FEES[medio]
     total = round(sum(v['fee'] for v in by_medio.values()))
     registered = Expense.for_store(store).filter_by(notes=COMMISSION_MARKER.format(period=period)).first()
     return {
-        'by_medio': {m: {'sales': v['sales'], 'fee': round(v['fee'])} for m, v in by_medio.items()},
+        'by_medio': {m: {'sales': v['sales'], 'fee': round(v['fee'])} for m, v in by_medio.items() if v['sales']},
         'total': total,
         'registered_expense_id': registered.id if registered else None,
         'registered_amount': registered.total if registered else 0,
@@ -297,6 +327,7 @@ def build_sheet(store: str, year: int, month: int, today: date) -> Dict[str, Any
         'statement': statement,
         'transit': tr,
         'commissions': comm,
+        'corrections': [c.to_dict() for c in corrections(store, start, end)],
         'closed': close_info,
         'payments_start': PAYMENTS_START.isoformat(),
     }
