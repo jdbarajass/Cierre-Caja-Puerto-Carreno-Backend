@@ -6,7 +6,7 @@ Creado: 2026-10-07. **Va antes de la Fase 4 de `PLAN_CUENTAS_DIARIAS.md`** (que 
 |---|---|---|
 | R1 | Copia de 2025 en nuestra base (facturas, prendas, también de las anuladas) y clasificación: anulación masiva vs. anulación real | **Hecha (2026-10-07), commiteada; falta push + Manual Deploy y cargar 2025 en producción** |
 | R2 | Informe de inventario: unidades que volvieron por la anulación masiva y existencia antes de la anulación (pantalla + Excel) | **Hecha (2026-10-07)**; falta revisarlo con datos reales y con el contador |
-| R3 | Crear en Alegra el ajuste de inventario (salida) con esas unidades, con botón y confirmación | **Hecha (2026-10-07), commiteada**; se usa en producción cuando el contador apruebe el Excel |
+| R3 | Crear en Alegra el ajuste de inventario (salida) con esas unidades, con botón y confirmación | **Hecha y EJECUTADA en producción (2026-10-07)**: ajustes 1716-1719 en Alegra, $395.721.300 |
 | R4 | Métricas que miran 2025 con la venta real (Metas: mismo mes del año anterior; comparación con el año anterior del cierre de caja) | **Hecha para Metas (total de la tienda) y la comparación del cierre (2026-10-07)**; pendiente: Clientes, reparto de la meta entre vendedoras (historial de 3 meses por vendedora) e inventario histórico de la pestaña Año |
 
 ---
@@ -93,3 +93,12 @@ Las electrónicas anuladas de 2025 son anulaciones reales.
 
 - 2025 completo (365 días). Antes de la corrección: 3.481 de anulación masiva ($393.998.065), 44 "reales" ($3.629.000); Alegra muestra $281.388.042 vigentes (2.139 facturas). Con la corrección, la venta real de 2025 ≈ $281.388.042 + $393.998.065 + $3.629.000 = **$679.015.107** (menos lo que el usuario marque como anulación real).
 - Alegra por mes (vigentes, hoy): ene $28,4 M y feb $33,2 M (las POS de enero-febrero no se anularon), mar-oct $0,2-11 M, nov $22,7 M, dic $139,7 M (965 electrónicas, temporada).
+
+## 7. Ajuste ejecutado en producción (Carreño, 2026-10-07)
+
+- Verificación previa: Metas oct-2026 volvió a $55.014.000 (oct-2025 = $47.838.020, igual que antes de la anulación). Venta real 2025 = **$679.015.107** (3.525 POS de anulación masiva = $397.627.065; Alegra vigentes $281.388.042). Conteo físico: medias ≈ 356 ✓, body U 49900 17 (calculadas 18) ✓, jean 99900 / 10519990032 ya no existe (calculado 0) ✓. Aprobado por el contador.
+- **Valores a precio de venta:** en 612 de 629 prendas el `unitCost` de Alegra = precio de etiqueta (costos sin cargar). Las cifras de inventario de la plataforma y del Excel del usuario están en esa misma base.
+- Informe: inventario hoy $589.677.800, a retirar $395.721.300 (8.335 unidades en 629 prendas; 142 tarjetas regalo por $6.526.000; 1.323 bolsas), antes $193.956.500. 21 para revisar (10 con 1-2 unidades menos de las devueltas, 11 inactivas sin ajustar).
+- **Ajustes creados en Alegra (verificados con el conector):** 1716 ($315.824.300), 1717 ($58.714.200), 1718 ($20.417.000), 1719 ($765.800) = **$395.721.300**, fecha 2026-10-07, bodega Principal, observación "Reverso de la anulación masiva…". **No volver a crearlo.**
+- **Diferencia sin explicar (~$29 M):** Alegra hoy da junio-2026 = $617.659.541; menos lo de la anulación ≈ $222 M, contra $192.873.771 del Excel del usuario (y hoy $194 M contra los $160-175 M que recordaba). No viene de la anulación masiva: revisar con un conteo físico completo más adelante.
+- Pendiente: el inventario histórico de la pestaña Año (y de Alegra) sigue inflado para fechas anteriores al 2026-10-07 (el ajuste quedó con fecha de hoy).
