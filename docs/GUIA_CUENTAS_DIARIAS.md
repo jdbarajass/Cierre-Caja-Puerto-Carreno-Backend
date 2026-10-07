@@ -91,6 +91,7 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 - **Estadísticas → Metas**, abajo, cuadro **"Metas de la tienda e incentivos"**:
   - **"Configurar metas"**: el % que crece la meta sobre el mismo mes del año anterior (la plataforma venía con 15 %; tu Excel usaba 25 %) y cuánto más es la META 2 (tu Excel: $300.000).
   - La primera vez toca **"Cargar los del Excel"** (Incentivo 1: $300.000 si se pasa la META 1; Incentivo 2: $150.000 si se pasa la META 2). Puedes agregar, editar o borrar incentivos.
+  - Si cada empleada tiene un incentivo distinto (ej. Mónica $250.000 y Rita $150.000), crea **uno por persona** y elige la **Empleada**: al pagarlo queda también en Empleadas → Pagos de esa persona.
   - Cuando un incentivo dice **"Alcanzado"**, toca **"Registrar pago"**, elige por dónde se pagó y de dónde sale la plata: queda como gasto en Cuentas → Gastos. Se registra una sola vez por mes.
 - **Gestión → Cuentas → Año**, tabla **"Regla 70/30"**: por mes, cuánto debía ir a recompras (70 % de la venta) contra lo que se recompró, y la utilidad esperada (30 %) contra la ganancia real. "Configurar" cambia el % y el margen.
 - **Comparativo de tiendas**: ahora muestra los gastos operativos, las inversiones/préstamos/retiros y la ganancia real de cada tienda.

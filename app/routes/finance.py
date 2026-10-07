@@ -11,7 +11,7 @@ from app.middlewares.auth import token_required, get_current_user
 from app.models.user import db
 from app.models.expense import Expense, EXPENSE_METHODS, OUT_CATEGORIES, ACCOUNT_MODES
 from app.models.incentive import IncentiveRule, THRESHOLDS
-from app.routes.expenses import _sync_expense_account_movements, ExpenseError
+from app.routes.expenses import _sync_expense_account_movements, _sync_employee_links, ExpenseError
 from app.services import finance_settings
 from app.stores import get_current_store
 from app.utils.timezone import get_colombia_now
@@ -85,6 +85,8 @@ def _apply_rule(rule, data, creating):
         rule.category = data.get('category') or 'sueldo'
     if rule.category not in OUT_CATEGORIES:
         raise ExpenseError(f'Categoría inválida: {rule.category}')
+    if creating or 'employee_name' in data:
+        rule.employee_name = (data.get('employee_name') or '').strip() or None
     if creating or 'active' in data:
         rule.active = bool(data.get('active', True))
     if 'sort_order' in data:
@@ -249,12 +251,15 @@ def pay_incentive():
             account_mode=mode,
             apply_fee=True,
             notes=marker,
+            employee_name=rule.employee_name,
             created_by=get_current_user().get('userId'),
             **{m: (rule.amount if m == method else 0) for m in EXPENSE_METHODS},
         )
         db.session.add(expense)
         db.session.flush()
         _sync_expense_account_movements(expense)
+        # Con empleada y categoría sueldo: queda en Empleadas → Pagos como comisión
+        _sync_employee_links(expense, payment_type='comision')
         db.session.commit()
         return jsonify({'success': True, 'expense': expense.to_dict(), 'status': status}), 201
     except ExpenseError as e:

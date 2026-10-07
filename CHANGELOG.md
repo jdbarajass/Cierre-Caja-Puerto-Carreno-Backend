@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-10-07] (continuación 5) - Incentivos por empleada
+
+- Pedido del usuario: Mónica y Rita tienen incentivos distintos ($250.000 y $150.000). `IncentiveRule.employee_name` (opcional; migración `add_column_if_missing`): al pagar un incentivo de categoría sueldo con empleada, el gasto lleva la empleada y se crea el pago en Empleadas → Pagos como **comisión** (`_sync_employee_links(..., payment_type='comision')`; los sueldos siguen como quincena).
+- 1 test más en `tests/test_finance.py`. **249/249**.
+
 ## [2026-10-07] (continuación 4) - Reconstrucción 2025: el Dashboard compara con la venta real
 
 - Visto en producción tras el ajuste: la parte de arriba del Cierre de Caja (venta del mismo día y del mes del año anterior, "Meta diaria/mensual +25 %") compara contra lo que Alegra muestra hoy de 2025 (ej. 7-oct-2025 = $99.900, ↑469 %), sin las POS de la anulación masiva. Esos números salen de `GET /api/sales/quick-summary` (hook `useSalesComparison` y Totales de Ventas), que no estaba conectado a la reconstrucción.

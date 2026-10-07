@@ -19,6 +19,9 @@ class IncentiveRule(StoreScopedMixin, db.Model):
     amount = db.Column(db.Float, nullable=False, default=0)
     threshold = db.Column(db.String(10), nullable=False, default='meta1')   # 'meta1' | 'meta2'
     category = db.Column(db.String(30), nullable=False, default='sueldo')  # categoría del gasto al pagarlo
+    # Empleada a la que se le paga (opcional): con categoría 'sueldo', el pago
+    # queda también en Empleadas → Pagos (tipo comisión) de esa persona.
+    employee_name = db.Column(db.String(100), nullable=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     notes = db.Column(db.Text, nullable=True)
@@ -28,6 +31,7 @@ class IncentiveRule(StoreScopedMixin, db.Model):
     def to_dict(self):
         return {
             'id': self.id, 'name': self.name, 'amount': self.amount, 'threshold': self.threshold,
-            'category': self.category, 'active': bool(self.active), 'sort_order': self.sort_order,
+            'category': self.category, 'employee_name': self.employee_name,
+            'active': bool(self.active), 'sort_order': self.sort_order,
             'notes': self.notes,
         }

@@ -635,6 +635,10 @@ def _migrate_employee_tables(db, app):
         add_column_if_missing(conn, 'invoice_facts', 'is_electronic', 'BOOLEAN')
         add_column_if_missing(conn, 'invoice_facts', 'total_paid', 'BIGINT')
         add_column_if_missing(conn, 'invoice_facts', 'issued_at', 'VARCHAR(19)')
+
+        # Incentivos por empleada (Fase 4 de PLAN_CUENTAS_DIARIAS, 2026-10-07):
+        # NULL = incentivo de la tienda, sin empleada.
+        add_column_if_missing(conn, 'incentive_rules', 'employee_name', 'VARCHAR(100)')
         conn.commit()
 
 

@@ -231,13 +231,14 @@ def _sync_expense_account_movements(expense, is_delete=False):
         account.balance += value
 
 
-def _sync_employee_links(expense, is_delete=False):
+def _sync_employee_links(expense, is_delete=False, payment_type='quincena'):
     """
     Enlace con Empleadas:
     - prestamo_empleada -> EmployeeLoan por el total.
     - devolucion_prestamo con empleada -> EmployeeLoan NEGATIVO (abono: baja
       el total acumulado de la empleada).
-    - sueldo con empleada -> EmployeePayment tipo quincena.
+    - sueldo con empleada -> EmployeePayment (tipo `payment_type` al crearlo:
+      quincena por defecto; los incentivos usan 'comision').
     Crea, actualiza o borra el registro ligado según el estado actual.
     """
     want_loan = not is_delete and bool(expense.employee_name) and expense.category in (
@@ -267,7 +268,7 @@ def _sync_employee_links(expense, is_delete=False):
         id=expense.employee_payment_id).first() if expense.employee_payment_id else None
     if want_payment:
         if payment is None:
-            payment = EmployeePayment(store_code=expense.store_code, type='quincena')
+            payment = EmployeePayment(store_code=expense.store_code, type=payment_type)
             db.session.add(payment)
         payment.nombre_empleada = expense.employee_name
         payment.date = expense.date

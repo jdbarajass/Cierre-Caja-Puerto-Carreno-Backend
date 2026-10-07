@@ -143,3 +143,26 @@ def test_gastos_en_el_comparativo(app, client, h):
         ops = _operational_metrics('carreno', date(2026, 10, 1), date(2026, 10, 31))
     assert ops['expenses_operating'] == 1000000 + 4000     # + 4x1000 de la recompra
     assert ops['expenses_other'] == 500000
+
+
+def test_incentivo_por_empleada_queda_en_empleadas(client, h, monkeypatch):
+    _goal(monkeypatch, meta1=55014000, sales=56000000)
+    rules = [
+        client.post('/api/incentives/rules', headers=h(), json={
+            'name': 'Incentivo Mónica (META 1)', 'amount': 250000, 'threshold': 'meta1', 'employee_name': 'Mónica'}).get_json()['rule'],
+        client.post('/api/incentives/rules', headers=h(), json={
+            'name': 'Incentivo Rita (META 1)', 'amount': 150000, 'threshold': 'meta1', 'employee_name': 'Rita'}).get_json()['rule'],
+    ]
+    assert rules[0]['employee_name'] == 'Mónica'
+    for r in rules:
+        resp = client.post('/api/incentives/pay', headers=h(), json={'rule_id': r['id'], 'year': 2026, 'month': 10,
+                                                                      'method': 'efectivo', 'account_mode': 'caja'})
+        assert resp.status_code == 201
+        assert resp.get_json()['expense']['employee_name'] == r['employee_name']
+    pagos = client.get('/api/employee-records/payments', headers=h()).get_json()['items']
+    assert sorted((p['nombre_empleada'], p['type'], p['amount']) for p in pagos) == [
+        ('Mónica', 'comision', 250000), ('Rita', 'comision', 150000)]
+    # sin empleada: no crea pago en Empleadas
+    r = client.post('/api/incentives/rules', headers=h(), json={'name': 'Bono tienda', 'amount': 1000, 'threshold': 'meta1'}).get_json()['rule']
+    client.post('/api/incentives/pay', headers=h(), json={'rule_id': r['id'], 'year': 2026, 'month': 10, 'method': 'efectivo'})
+    assert len(client.get('/api/employee-records/payments', headers=h()).get_json()['items']) == 2
