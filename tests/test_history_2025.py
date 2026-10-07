@@ -283,3 +283,18 @@ def test_ajuste_por_partes_retoma_sin_duplicar(app, client, h, loaded, monkeypat
     assert len(fake.created) == 3
     assert sum(i['quantity'] for p in fake.created for i in p['items']) == 8
     assert [d['part'] for d in resp.get_json()['adjustment']['done']] == [1, 2, 3]
+
+
+def test_resumen_rapido_del_dashboard_usa_la_venta_real(app, client, h, loaded, monkeypatch):
+    """La comparación con el año anterior y la meta del Dashboard (quick-summary) usan la venta real de 2025."""
+    import app.routes.direct_api as direct_routes
+
+    class Direct:
+        def get_all_sales_totals_by_day(self, start, end):
+            return {'success': True, 'data': [{'date': start, 'total': 109900}]}   # lo que Alegra muestra hoy
+    monkeypatch.setattr(direct_routes, 'get_alegra_direct_client', lambda *a, **k: Direct())
+    real_day = 109900 + (99900 + 15800 + 300) + 109900 + 109900
+    data = client.get('/api/sales/quick-summary?from=2025-01-10&to=2025-01-10', headers=h()).get_json()
+    assert data['total_sales'] == real_day
+    # fuera de 2025 o sin cargar: queda lo de Alegra
+    assert client.get('/api/sales/quick-summary?from=2025-03-01&to=2025-03-05', headers=h()).get_json()['total_sales'] == 109900

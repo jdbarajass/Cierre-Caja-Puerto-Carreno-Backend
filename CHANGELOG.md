@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-10-07] (continuación 4) - Reconstrucción 2025: el Dashboard compara con la venta real
+
+- Visto en producción tras el ajuste: la parte de arriba del Cierre de Caja (venta del mismo día y del mes del año anterior, "Meta diaria/mensual +25 %") compara contra lo que Alegra muestra hoy de 2025 (ej. 7-oct-2025 = $99.900, ↑469 %), sin las POS de la anulación masiva. Esos números salen de `GET /api/sales/quick-summary` (hook `useSalesComparison` y Totales de Ventas), que no estaba conectado a la reconstrucción.
+- `get_quick_sales_summary`: si el rango es de 2025 y está en la copia, `total_sales` = `real_sales_total` (si falla, queda lo de Alegra).
+- Verificado con el conector: el ajuste sí quedó en Alegra (jean 99900 / 10519990032: 72 → 0; body U 49900: 120 → 18).
+- 1 test más en `tests/test_history_2025.py`.
+
 ## [2026-10-07] (continuación 3) - Cuentas diarias, Fase 4: metas configurables, incentivos, regla 70/30 y gastos en el comparativo
 
 - Configuración financiera por tienda (`app/services/finance_settings.py`, `GET|PUT /api/finance-settings`): % de crecimiento de la meta de la tienda (por defecto 15; el Excel usaba 25), extra de la META 2 ($300.000), % de resurtido (70) y margen (35). Metas por vendedora usa el % de la tienda.

@@ -383,6 +383,21 @@ def get_quick_sales_summary():
         sales_data = result.get('data', [])
         total_sales = sum(float(day.get('total', 0)) for day in sales_data)
 
+        # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md): en 2025
+        # Alegra ya no cuenta las POS de la anulación masiva (fueron ventas
+        # reales). Si el rango es de 2025 y está en la copia, se usa la venta
+        # real (la comparación con el año anterior y la meta del Dashboard
+        # salen de aquí). Si algo falla, queda lo de Alegra.
+        try:
+            from datetime import date as _date
+            from app.services.history_2025 import real_sales_total
+            from app.stores import get_current_store
+            real = real_sales_total(get_current_store(), _date.fromisoformat(from_date), _date.fromisoformat(to_date))
+            if real is not None:
+                total_sales = float(real)
+        except Exception as e:
+            logger.warning(f'Venta real 2025 para quick summary: {e}')
+
         # Formatear el total
         from app.utils.formatters import format_cop
         total_sales_formatted = format_cop(total_sales)
