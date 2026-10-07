@@ -69,6 +69,7 @@ def create_app(config_class=Config):
     from app.models.expense import Expense, FixedExpense  # Cuentas → Gastos (docs/PLAN_CUENTAS_DIARIAS.md, Fase 1)
     from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose  # Cuentas → Mes (Fase 2)
     from app.models.monthly_summary import InventorySnapshot, MonthlySummaryOverride  # Cuentas → Año (Fase 3)
+    from app.models.incentive import IncentiveRule  # Incentivos por meta (Fase 4)
 
     db.init_app(app)
 
@@ -253,6 +254,7 @@ def create_app(config_class=Config):
     from app.routes.month_sheet import bp as month_sheet_bp
     from app.routes.monthly_summary import bp as monthly_summary_bp
     from app.routes.history_2025 import bp as history_2025_bp
+    from app.routes.finance import bp as finance_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -279,6 +281,7 @@ def create_app(config_class=Config):
     app.register_blueprint(month_sheet_bp)  # Cuentas → Mes (PLAN_CUENTAS_DIARIAS, Fase 2)
     app.register_blueprint(monthly_summary_bp)  # Cuentas → Año (PLAN_CUENTAS_DIARIAS, Fase 3)
     app.register_blueprint(history_2025_bp)  # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md)
+    app.register_blueprint(finance_bp)  # Configuración financiera e incentivos (PLAN_CUENTAS_DIARIAS, Fase 4)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

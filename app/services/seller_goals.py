@@ -236,7 +236,10 @@ class SellerGoalsService:
             logger.warning(f'[{self.store}] Venta del año anterior para metas: {e}')
             last_year_total = None
             warnings.append('No se pudo leer la venta del mismo mes del año anterior en Alegra.')
-        store_auto_goal = _round(last_year_total * (1 + GROWTH_PCT / 100)) if last_year_total else None
+        # % de crecimiento configurable por tienda (Fase 4 de PLAN_CUENTAS_DIARIAS; por defecto GROWTH_PCT)
+        from app.services.finance_settings import get_settings
+        growth_pct = get_settings(self.store).get('goal_growth_pct', GROWTH_PCT)
+        store_auto_goal = _round(last_year_total * (1 + growth_pct / 100)) if last_year_total else None
 
         try:
             sellers = self._sellers()
@@ -303,7 +306,7 @@ class SellerGoalsService:
             'month': start.isoformat()[:7],
             'date_range': {'start': start.isoformat(), 'end': end.isoformat()},
             'pace': month_pace,
-            'growth_pct': GROWTH_PCT,
+            'growth_pct': growth_pct,
             'last_year': {'start': last_year_start.isoformat(), 'end': last_year_end.isoformat(), 'total': last_year_total},
             'store_auto_goal': store_auto_goal,
             'history_range': {'start': hist_start.isoformat(), 'end': hist_end.isoformat()},

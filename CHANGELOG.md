@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-07] (continuación 3) - Cuentas diarias, Fase 4: metas configurables, incentivos, regla 70/30 y gastos en el comparativo
+
+- Configuración financiera por tienda (`app/services/finance_settings.py`, `GET|PUT /api/finance-settings`): % de crecimiento de la meta de la tienda (por defecto 15; el Excel usaba 25), extra de la META 2 ($300.000), % de resurtido (70) y margen (35). Metas por vendedora usa el % de la tienda.
+- Incentivos por meta (`IncentiveRule`, `app/routes/finance.py`): reglas por tienda (META 1 / META 2), plantilla del Excel (Incentivo 1 $300.000, Incentivo 2 $150.000) y `POST /api/incentives/pay`, que verifica la meta del mes y registra el pago como gasto (una vez por regla y mes).
+- Cuentas → Año: regla 70/30 por mes (resurtido esperado vs. recomprado, utilidad esperada vs. ganancia real, resurtido en ropa a precio de venta).
+- Comparativo de tiendas: `expenses_operating` y `expenses_other`.
+- `tests/test_finance.py` (nuevo, 6). **247/247**.
+
 ## [2026-10-07] (continuación 2) - Reconstrucción 2025: las POS re-facturadas cuentan como venta
 
 - Revisión con la carga real de 2025: octubre-2025 antes de la anulación = $47.838.020 = vigentes ($7.788.300) + anulación masiva ($39.906.620) + las 2 "anulaciones reales" ($143.100). La regla "otra factura igual ≤ 60 min = anulación real" daba falsos positivos (dos clientas comprando lo mismo).

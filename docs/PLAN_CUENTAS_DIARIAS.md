@@ -9,7 +9,7 @@ Estado de las fases (actualizar al cerrar cada una):
 | 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
 | 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 4 | Extras: regla 70/30, incentivos/metas, gastos en el comparativo de tiendas (sin bonos regalo, decisión del usuario 2026-10-07) | Pendiente (después de probar las fases 1-3 en producción) |
+| 4 | Extras: regla 70/30, incentivos/metas, gastos en el comparativo de tiendas (sin bonos regalo, decisión del usuario 2026-10-07) | **Hecha (2026-10-07)**, commiteada |
 
 ---
 
@@ -176,8 +176,22 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - **Valores de septiembre** para escribir a mano (clasificación hecha por el asistente sobre la hoja SEPTIEMBRE del Excel, 46 gastos = $28.120.618): operativos con fletes $5.954.601 (+ $2.247.256 de gastos de septiembre pagados en octubre = $8.201.857), Primavera $14.646.881, inversiones $6.956.337, préstamos a Mónica $362.000, retiro $200.800. Están en la guía.
 - **Pendiente de verificar en producción:** que el inventario de julio de Alegra dé $174.013.437 (= Excel). Si no, el valor de Alegra no está al mismo precio que el del Excel y "G. real + inventario" no se debe usar (ver C5 de Estadísticas: costos de Alegra por corregir).
 
-### Fase 4 — Extras
-Regla 70/30 (resurtido/utilidad) configurable; metas e incentivos (el sistema usa +15 % en Estadísticas → Metas, el Excel +25 %); gastos en el comparativo de tiendas.
+### Fase 4 — Extras (hecha 2026-10-07; bonos regalo NO)
+Lo que hacía el Excel (hoja de cada mes): META 1 = venta del mismo mes del año anterior × 1,25 (D60); META 2 = META 1 + $300.000 (E60); INCENTIVO 1 (si la venta pasa META 1: $200.000 + $100.000 para las empleadas) e INCENTIVO 2 (si pasa META 2: $100.000 + $50.000); "VALOR PARA RESURTIDO" = venta × 70 % y "VALOR PARA UTILIDAD" = venta × 30 % (C62/C63, y lo mismo sobre la plata en cuentas, G62/G63); "Fórmula Re-Compras aplicando el 35 %" = valor / (1 − 0,35) (lo que esa plata representa en ropa a precio de venta).
+
+Plan:
+1. **Configuración por tienda** (`app_settings` `finance_settings`): % de crecimiento de la meta de la tienda (por defecto 15, el de Metas; el Excel usa 25), cuánto más es la META 2 (por defecto $300.000), % para resurtido (70) y margen (35). La meta del cierre de caja (+25 %) no cambia.
+2. **Incentivos** (`IncentiveRule` por tienda: nombre, valor, META 1 o META 2, categoría del gasto): en Estadísticas → Metas, estado del mes (alcanzado / en curso / no alcanzado) con META 1 = meta de la tienda y META 2 = META 1 + extra, y botón "Registrar pago" que crea el gasto en Cuentas → Gastos (una vez por regla y mes). Plantilla del Excel: Incentivo 1 $300.000 (META 1) e Incentivo 2 $150.000 (META 2).
+3. **Regla 70/30** en Cuentas → Año: por mes, resurtido esperado (venta × %) vs. recompras hechas y su diferencia; utilidad esperada (venta × (100 − %)) vs. ganancia real; ropa que se compra con lo esperado (÷ (1 − margen)).
+4. **Comparativo de tiendas**: gastos operativos, inversiones/préstamos/retiros y ganancia real por tienda en el rango.
+
+**Cómo quedó (2026-10-07)**
+- Backend: `app/services/finance_settings.py` (`get_settings` / `save_settings`, valores por defecto y límites), `app/models/incentive.py` (`IncentiveRule`), `app/routes/finance.py`: `GET|PUT /api/finance-settings`; `GET /api/incentives?year&month` (reglas + pagadas en el mes, por el marcador `auto:incentivo:<id>:<AAAA-MM>` en notes del gasto); `POST /api/incentives/rules`, `PUT|DELETE /api/incentives/rules/<id>`, `POST /api/incentives/rules/load-template` (409 si ya hay); `POST /api/incentives/pay` (verifica con `month_goal_status` = `SellerGoalsService.summary` que la venta del mes pase la meta; crea el gasto con fecha de hoy, mes del incentivo, la categoría de la regla y el medio elegido; una vez por regla y mes).
+- `SellerGoalsService.summary` usa `goal_growth_pct` de la tienda (al guardar la configuración se limpia su caché). La meta del cierre de caja (+25 %) no cambió.
+- `build_year` (Cuentas → Año): `resurtido_esperado`, `resurtido_diferencia`, `utilidad_esperada`, `utilidad_diferencia`, `resurtido_en_ropa` por mes y en totales; `settings` en la respuesta.
+- `_operational_metrics` (comparativo): `expenses_operating` (categorías operativas + 4x1000 de recompras) y `expenses_other`.
+- Tests: `tests/test_finance.py` (6). Suite 247/247.
+- Frontend: `src/components/goals/IncentivesPanel.jsx` en Estadísticas → Metas (META 1, META 2, vendido; "Configurar metas" con % de crecimiento y extra de la META 2; incentivos con estado Pagado / Alcanzado / Faltan $X / No alcanzado y "Registrar pago" con medio y de dónde sale la plata; plantilla del Excel), `src/services/financeService.js`; tabla "Regla 70/30" con "Configurar" en `CuentasAnual.jsx`; 3 filas nuevas en `StoreComparison.jsx` (gastos operativos, inversiones/préstamos/retiros, ganancia real). Verificado en Chromium (1366 y 390) con Alegra simulado.
 
 ---
 

@@ -86,6 +86,17 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 
 ---
 
+## Metas, incentivos y regla 70/30
+
+- **Estadísticas → Metas**, abajo, cuadro **"Metas de la tienda e incentivos"**:
+  - **"Configurar metas"**: el % que crece la meta sobre el mismo mes del año anterior (la plataforma venía con 15 %; tu Excel usaba 25 %) y cuánto más es la META 2 (tu Excel: $300.000).
+  - La primera vez toca **"Cargar los del Excel"** (Incentivo 1: $300.000 si se pasa la META 1; Incentivo 2: $150.000 si se pasa la META 2). Puedes agregar, editar o borrar incentivos.
+  - Cuando un incentivo dice **"Alcanzado"**, toca **"Registrar pago"**, elige por dónde se pagó y de dónde sale la plata: queda como gasto en Cuentas → Gastos. Se registra una sola vez por mes.
+- **Gestión → Cuentas → Año**, tabla **"Regla 70/30"**: por mes, cuánto debía ir a recompras (70 % de la venta) contra lo que se recompró, y la utilidad esperada (30 %) contra la ganancia real. "Configurar" cambia el % y el margen.
+- **Comparativo de tiendas**: ahora muestra los gastos operativos, las inversiones/préstamos/retiros y la ganancia real de cada tienda.
+
+---
+
 ## Reconstrucción de 2025 (anulación masiva de facturas POS)
 
 Las facturas POS de 2025 se anularon todas juntas por impuestos (oct-2026). Fueron ventas reales y sus prendas volvieron al inventario de Alegra. Para arreglarlo:

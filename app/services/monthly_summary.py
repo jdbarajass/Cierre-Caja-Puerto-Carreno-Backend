@@ -132,6 +132,8 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
     prev_inventory = prev_override.value if prev_override else (prev_snap.value if prev_snap else None)
 
     from app.routes.repurchase import _carryover_before, CARRYOVER_START
+    from app.services.finance_settings import get_settings
+    settings = get_settings(store)
 
     months = []
     for month in range(1, 13):
@@ -178,13 +180,24 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         row['ganancia_con_inventario'] = (row['ganancia_real'] + row['inventario_cambio']) if row['inventario_cambio'] is not None else None
         prev_inventory = inv if inv is not None else prev_inventory
 
+        # Regla 70/30 (Fase 4): lo que debía ir a resurtido vs. lo recomprado,
+        # y la utilidad esperada vs. la ganancia real.
+        share = settings['resurtido_pct'] / 100
+        row['resurtido_esperado'] = ventas * share
+        row['resurtido_diferencia'] = recompras - row['resurtido_esperado']
+        row['utilidad_esperada'] = ventas * (1 - share)
+        row['utilidad_diferencia'] = row['ganancia_real'] - row['utilidad_esperada']
+        margin = settings['margin_pct'] / 100
+        row['resurtido_en_ropa'] = row['resurtido_esperado'] / (1 - margin) if margin < 1 else None
+
         next_start = end + timedelta(days=1)
         row['jhonatan'] = _carryover_before(next_start) if end >= CARRYOVER_START else None
         months.append(row)
 
     done = [m for m in months if not m['future'] and not m['before_start']]
     numeric = ('ventas', 'recompras', 'gastos_operativos', 'ganancia_bruta', 'ganancia_neta', 'ganancia_real',
-               'inversiones', 'retiros', 'prestamos', 'fletes')
+               'inversiones', 'retiros', 'prestamos', 'fletes', 'resurtido_esperado', 'resurtido_diferencia',
+               'utilidad_esperada', 'utilidad_diferencia')
     totals = {k: sum(m[k] for m in done) for k in numeric}
     totals['porcentaje'] = (totals['ganancia_real'] / totals['ventas']) if totals['ventas'] else None
     with_sales = [m for m in done if m['ventas']]
@@ -202,6 +215,7 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         'months_counted': len(done),
         'ventas_por_medio_year': medios_year,
         'override_fields': list(OVERRIDE_FIELDS),
+        'settings': settings,
     }
 
 

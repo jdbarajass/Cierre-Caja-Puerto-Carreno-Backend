@@ -111,6 +111,17 @@ def _operational_metrics(store_code, start, end):
         RepurchasePurchase.date >= start, RepurchasePurchase.date <= end
     ).all()
 
+    # Cuentas → Gastos (Fase 4 de PLAN_CUENTAS_DIARIAS): salidas con fecha en
+    # el rango, separadas como en el resumen anual (operativos vs. lo que no
+    # es gasto del mes). Incluye el 4x1000.
+    from app.models.expense import Expense
+    from app.services.monthly_summary import OPERATING_CATEGORIES
+    expenses = Expense.for_store(store_code).filter(
+        Expense.date >= start, Expense.date <= end, Expense.direction == 'out').all()
+    operating = sum(e.total_with_fee for e in expenses if e.category in OPERATING_CATEGORIES)
+    operating += sum(e.fee_4mil for e in entries)  # 4x1000 de las recompras
+    other = sum(e.total_with_fee for e in expenses if e.category not in OPERATING_CATEGORIES)
+
     return {
         'closings_registered': len(closings),
         'period_days': (end - start).days + 1,
@@ -123,6 +134,8 @@ def _operational_metrics(store_code, start, end):
         )),
         'repurchase_sent': round(sum(e.total_enviado for e in entries)),
         'repurchase_purchases': round(sum(p.amount for p in purchases)),
+        'expenses_operating': round(operating),
+        'expenses_other': round(other),
     }
 
 
