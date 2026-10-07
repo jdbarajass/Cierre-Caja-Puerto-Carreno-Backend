@@ -6,7 +6,7 @@ Creado: 2026-10-07. **Va antes de la Fase 4 de `PLAN_CUENTAS_DIARIAS.md`** (que 
 |---|---|---|
 | R1 | Copia de 2025 en nuestra base (facturas, prendas, también de las anuladas) y clasificación: anulación masiva vs. anulación real | **Hecha (2026-10-07), commiteada; falta push + Manual Deploy y cargar 2025 en producción** |
 | R2 | Informe de inventario: unidades que volvieron por la anulación masiva y existencia antes de la anulación (pantalla + Excel) | **Hecha (2026-10-07)**; falta revisarlo con datos reales y con el contador |
-| R3 | Crear en Alegra el ajuste de inventario (salida) con esas unidades, con botón y confirmación | Pendiente: después de que el usuario y su contador revisen el Excel de R2 |
+| R3 | Crear en Alegra el ajuste de inventario (salida) con esas unidades, con botón y confirmación | **Hecha (2026-10-07), commiteada**; se usa en producción cuando el contador apruebe el Excel |
 | R4 | Métricas que miran 2025 con la venta real (Metas: mismo mes del año anterior; comparación con el año anterior del cierre de caja) | **Hecha para Metas (total de la tienda) y la comparación del cierre (2026-10-07)**; pendiente: Clientes, reparto de la meta entre vendedoras (historial de 3 meses por vendedora) e inventario histórico de la pestaña Año |
 
 ---
@@ -57,8 +57,12 @@ Las electrónicas anuladas de 2025 son anulaciones reales.
 - Por prenda: unidades devueltas por la anulación masiva, existencia de hoy, existencia antes de la anulación, costo unitario y valor. Totales: valor de inventario hoy, valor devuelto, valor antes (comparar con el rango de $160-175 M que recuerda el usuario).
 - Descarga en Excel para revisarlo con el contador.
 
-### R3 — Ajuste en Alegra (pendiente)
-- Botón que crea UN ajuste de inventario de salida en Alegra con las prendas del informe, con confirmación escrita. Solo después de que el usuario y el contador aprueben el Excel. Antes de programarlo: confirmar el formato exacto del API de ajustes de Alegra.
+### R3 — Ajuste en Alegra (hecha 2026-10-07)
+- Formato verificado en developer.alegra.com (`POST https://api.alegra.com/api/v1/inventory-adjustments`, requeridos `date` e `items[{id, type, unitCost, quantity}]`; `warehouse {id}` opcional, por defecto la principal) y contra un ajuste real de la tienda (n.º 1712: bodega Principal id 1, items con `type` in/out, `quantity`, `unitCost`).
+- `AlegraClient.create_inventory_adjustment` (POST sin reintentos automáticos). `history_2025.create_adjustment`: exige 2025 completo, `confirm: "AJUSTAR"`, `accountant_ok: true` y que las unidades a retirar coincidan con las que el usuario revisó (`expected_units`); guarda el plan completo en `app_settings` (`history2025_inventory_adjustment`, por tienda) ANTES de enviar; crea un ajuste de salida por cada 200 prendas en la bodega 1 con observación "Reverso de la anulación masiva…"; si una parte falla, guarda lo hecho y otra llamada sigue con las partes que faltan usando el MISMO plan (no recalcula: las partes creadas ya bajaron la existencia); completado = no se vuelve a crear.
+- Ruta `POST /api/history-2025/inventory-adjustment`; `GET /status` trae `adjustment` (sin la lista de prendas).
+- Tests: 3 más en `tests/test_history_2025.py` (confirmación y año completo, formato y una sola vez, por partes con falla y reintento sin duplicar). Suite 241/241.
+- Frontend: paso 4 de la página (casilla "Mi contador revisó y aprobó el Excel" + escribir AJUSTAR; muestra los números de ajuste creados o el estado a medias). Verificado en Chromium con Alegra simulado.
 
 ### R4 — Métricas con la venta real de 2025
 - Metas (meta automática = mismo mes del año anterior +15 %) y la comparación con el año anterior del cierre de caja usan la venta real de nuestra copia cuando el mes/día de 2025 está cargado; si no, siguen con Alegra.
@@ -80,6 +84,5 @@ Las electrónicas anuladas de 2025 son anulaciones reales.
 **Cálculo del inventario**: existencia antes = existencia de hoy − devueltas; unidades a retirar = mín(devueltas, existencia de hoy) (no se puede retirar más de lo que hay); si da negativo se marca "revisar en físico". El valor es a costo (`unitCost` de Alegra).
 
 **Pendientes**
-- R3: botón para crear el ajuste de salida en Alegra (confirmar antes el formato de `/inventory-adjustments`).
 - El inventario histórico de Alegra (y el de la pestaña Año) queda inflado para fechas posteriores a las ventas anuladas: corregirlo restando el valor de las unidades devueltas hasta esa fecha.
 - Clientes (nuevos/recurrentes, inactivas) con la copia de 2025.

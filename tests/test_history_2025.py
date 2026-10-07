@@ -182,3 +182,101 @@ def test_permisos(app, client):
     with app.app_context():
         sales = JWTService.generate_token(2, 'v@test.com', 'sales', None)
     assert client.get('/api/history-2025/status', headers={'Authorization': f'Bearer {sales}'}).status_code == 403
+
+
+# ─── R3: ajuste de inventario en Alegra ─────────────────────────────────────
+
+class FakeAlegraWrite(FakeAlegra):
+    def __init__(self, *a, fail_on=None, **kw):
+        super().__init__(*a, **kw)
+        self.created = []
+        self.fail_on = fail_on or set()
+
+    def create_inventory_adjustment(self, payload):
+        n = len(self.created) + 1
+        if n in self.fail_on:
+            self.fail_on.discard(n)
+            raise RuntimeError('Alegra caído')
+        self.created.append(payload)
+        return {'id': f'adj-{n}', 'number': 1715 + n}
+
+
+def _complete_2025(app):
+    """Marca todos los días de 2025 como cargados (sin facturas extra)."""
+    from datetime import timedelta
+    from app.models.user import db
+    from app.models.invoice_fact import InvoiceSyncDay
+    with app.app_context():
+        loaded = {r.date for r in InvoiceSyncDay.query.all()}
+        d = date(2025, 1, 1)
+        while d <= date(2025, 12, 31):
+            if d not in loaded:
+                db.session.add(InvoiceSyncDay(store_code='carreno', date=d, invoice_count=0, items_synced=True))
+            d += timedelta(days=1)
+        db.session.commit()
+
+
+OK = {'confirm': 'AJUSTAR', 'accountant_ok': True}
+
+
+def test_ajuste_pide_confirmacion_y_2025_completo(app, client, h, loaded, monkeypatch):
+    import app.routes.history_2025 as routes
+    fake = FakeAlegraWrite(items=ITEMS)
+    monkeypatch.setattr(routes, 'get_alegra_client', lambda store=None: fake)
+    url = '/api/history-2025/inventory-adjustment'
+    assert client.post(url, headers=h(), json={'confirm': 'ajustar'}).status_code == 400          # sin aprobación del contador
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    assert resp.status_code == 409 and 'todo 2025' in resp.get_json()['message']
+    assert fake.created == []
+
+
+def test_ajuste_se_crea_una_sola_vez_con_el_formato_de_alegra(app, client, h, loaded, monkeypatch):
+    import app.routes.history_2025 as routes
+    fake = FakeAlegraWrite(items=ITEMS)
+    monkeypatch.setattr(routes, 'get_alegra_client', lambda store=None: fake)
+    _complete_2025(app)
+    url = '/api/history-2025/inventory-adjustment'
+
+    # jean 2 + medias 4 + bolsa 1 = 7 (el short no tiene existencia)
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 6})
+    assert resp.status_code == 409 and 'cambió' in resp.get_json()['message']
+
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    assert resp.status_code == 200, resp.get_json()
+    assert len(fake.created) == 1
+    payload = fake.created[0]
+    assert payload['warehouse'] == {'id': '1'} and payload['date']
+    assert 'anulación masiva' in payload['observations']
+    assert sorted((i['id'], i['type'], i['quantity'], i['unitCost']) for i in payload['items']) == [
+        ('1183', 'out', 2, 50000), ('2165', 'out', 1, 100), ('829', 'out', 4, 3000)]
+    adj = resp.get_json()['adjustment']
+    assert adj['completed'] is True and adj['units'] == 7 and adj['done'][0]['number'] == 1716
+
+    # no se repite
+    again = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    assert again.status_code == 409 and 'ya se creó' in again.get_json()['message']
+    assert len(fake.created) == 1
+    status = client.get('/api/history-2025/status', headers=h()).get_json()
+    assert status['adjustment']['completed'] is True and 'chunks' not in status['adjustment']
+
+
+def test_ajuste_por_partes_retoma_sin_duplicar(app, client, h, loaded, monkeypatch):
+    import app.routes.history_2025 as routes
+    import app.services.history_2025 as svc
+    monkeypatch.setattr(svc, 'ADJUSTMENT_CHUNK', 1)
+    fake = FakeAlegraWrite(items=ITEMS, fail_on={2})
+    monkeypatch.setattr(routes, 'get_alegra_client', lambda store=None: fake)
+    _complete_2025(app)
+    url = '/api/history-2025/inventory-adjustment'
+
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    assert resp.status_code == 409 and 'parte 2 de 3' in resp.get_json()['message']
+    assert len(fake.created) == 1 and resp.get_json()['adjustment']['completed'] is False
+
+    # La existencia en Alegra ya bajó por la parte 1; el reintento usa el plan guardado
+    fake.items = [dict(i, inventory={**i['inventory'], 'availableQuantity': 0}) for i in ITEMS]
+    resp = client.post(url, headers=h(), json={**OK})
+    assert resp.status_code == 200
+    assert len(fake.created) == 3
+    assert sum(i['quantity'] for p in fake.created for i in p['items']) == 7
+    assert [d['part'] for d in resp.get_json()['adjustment']['done']] == [1, 2, 3]

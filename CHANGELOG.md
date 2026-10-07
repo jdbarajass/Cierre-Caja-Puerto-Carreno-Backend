@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-10-07] (continuación) - Reconstrucción 2025, R3: crear el ajuste de inventario en Alegra
+
+- `POST /api/history-2025/inventory-adjustment` + `AlegraClient.create_inventory_adjustment` (formato verificado en developer.alegra.com y contra el ajuste real n.º 1712). Ajuste de SALIDA en la bodega Principal por partes de 200 prendas, con confirmación escrita (`AJUSTAR`), aprobación del contador marcada, 2025 completo y unidades iguales a las revisadas. Plan guardado en `app_settings` antes de enviar; reintento sin duplicar; una sola vez por tienda. `/status` trae el estado del ajuste.
+- 3 tests más en `tests/test_history_2025.py`. **241/241**.
+
 ## [2026-10-07] - Reconstrucción de 2025 tras la anulación masiva de facturas POS (R1, R2, R4)
 
 Por impuestos se anularon de forma masiva (oct-2026) las 3.525 facturas POS de 2025 (de 5.664; las vigentes son todas electrónicas). Fueron ventas reales: la venta de 2025 en Alegra quedó baja y sus prendas volvieron al inventario. Plan y verificación: `docs/PLAN_RECONSTRUCCION_2025.md`.

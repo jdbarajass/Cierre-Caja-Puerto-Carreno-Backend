@@ -1029,6 +1029,31 @@ class AlegraClient:
             data = data['data']
         return data if isinstance(data, list) else []
 
+    def create_inventory_adjustment(self, payload: Dict) -> Dict:
+        """
+        Crea un ajuste de inventario en Alegra (`POST /inventory-adjustments`,
+        formato de developer.alegra.com: date, observations, warehouse {id},
+        items [{id, type 'in'|'out', quantity, unitCost}]). ESCRIBE en Alegra:
+        solo lo usa la fase R3 de docs/PLAN_RECONSTRUCCION_2025.md, con
+        confirmación del usuario. Sin reintentos automáticos (POST).
+        """
+        url = f"{self.base_url}/inventory-adjustments"
+        try:
+            response = self.session.post(url, json=payload, timeout=max(self.timeout, 60))
+        except requests.exceptions.RequestException as e:
+            raise AlegraConnectionError(f'No se pudo conectar con Alegra: {e}')
+        if response.status_code in (401, 403):
+            raise AlegraAuthError('Credenciales de Alegra inválidas o sin permiso para crear ajustes')
+        if response.status_code >= 400:
+            try:
+                detail = response.json()
+            except ValueError:
+                detail = response.text[:500]
+            raise AlegraConnectionError(
+                f'Alegra no aceptó el ajuste de inventario (HTTP {response.status_code})',
+                details={'status_code': response.status_code, 'response': detail})
+        return response.json()
+
     def health_check(self) -> bool:
         """
         Verifica si el servicio de Alegra está disponible

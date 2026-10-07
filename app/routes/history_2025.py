@@ -3,8 +3,9 @@ Reconstrucción de 2025 (docs/PLAN_RECONSTRUCCION_2025.md): cargar las
 facturas de 2025 en la copia, revisar la clasificación de las anuladas,
 marcar a mano e informe de inventario (pantalla y Excel). Solo admin.
 
-No escribe nada en Alegra (el ajuste de inventario en Alegra es la fase R3,
-pendiente de la revisión del usuario y su contador).
+Lo único que escribe en Alegra es el ajuste de inventario de salida (fase
+R3, POST /api/history-2025/inventory-adjustment), con confirmación escrita,
+aprobación del contador marcada por el usuario y una sola vez por tienda.
 """
 import logging
 import time
@@ -18,6 +19,7 @@ from app.models.invoice_fact import InvoiceFact, VoidOverride
 from app.services import history_2025 as svc
 from app.services import invoice_facts as facts_svc
 from app.stores import STORES, get_alegra_client, get_current_store
+from app.utils.timezone import get_colombia_now
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('history_2025', __name__)
@@ -42,7 +44,8 @@ def status():
         return err
     store = get_current_store()
     try:
-        return jsonify({'success': True, 'coverage': svc.coverage(store), 'summary': svc.summary(store)}), 200
+        return jsonify({'success': True, 'coverage': svc.coverage(store), 'summary': svc.summary(store),
+                        'adjustment': svc.public_state(svc.adjustment_state(store))}), 200
     except Exception as e:
         logger.error(f'[{store}] Estado de la reconstrucción 2025: {e}', exc_info=True)
         return jsonify({'success': False, 'message': 'Error al leer la reconstrucción de 2025'}), 500
@@ -157,3 +160,42 @@ def inventory_xlsx():
         return jsonify({'success': False, 'message': 'No se pudo generar el Excel'}), 502
     return Response(content, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     headers={'Content-Disposition': f'attachment; filename=ajuste_inventario_2025_{store}.xlsx'})
+
+
+@bp.route('/api/history-2025/inventory-adjustment', methods=['POST', 'OPTIONS'])
+@token_required
+def inventory_adjustment():
+    """
+    Crea en Alegra el ajuste de inventario de SALIDA con las unidades del
+    informe (fase R3). Body: {"confirm": "AJUSTAR", "accountant_ok": true,
+    "expected_units": <unidades a retirar que el usuario revisó>}. Si una
+    parte falló antes, otra llamada (con la misma confirmación) sigue con lo
+    que falta usando el plan guardado.
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    data = request.get_json() or {}
+    if (data.get('confirm') or '').strip().upper() != 'AJUSTAR' or data.get('accountant_ok') is not True:
+        return jsonify({'success': False, 'message': 'Falta la confirmación: marca que el contador aprobó el Excel y escribe AJUSTAR.'}), 400
+    store = get_current_store()
+    try:
+        client = get_alegra_client()
+        state = svc.adjustment_state(store)
+        report = None if (state and not state.get('completed')) else _report(store)
+        result = svc.create_adjustment(client, store, report, get_colombia_now().date(),
+                                       expected_units=data.get('expected_units'),
+                                       user_id=get_current_user().get('userId'))
+        logger.warning(f'[{store}] Ajuste de inventario 2025 creado en Alegra: {result.get("done")}')
+        return jsonify({'success': True, 'adjustment': result}), 200
+    except svc.AdjustmentError as e:
+        return jsonify({'success': False, 'message': str(e),
+                        'adjustment': svc.public_state(svc.adjustment_state(store))}), 409
+    except ConfigurationError as e:
+        return jsonify({'success': False, 'message': e.message}), 503
+    except Exception as e:
+        logger.error(f'[{store}] Ajuste de inventario 2025: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'No se pudo crear el ajuste. Revisa el estado antes de reintentar.',
+                        'adjustment': svc.public_state(svc.adjustment_state(store))}), 502

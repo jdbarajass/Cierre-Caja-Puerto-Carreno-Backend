@@ -256,3 +256,125 @@ def inventory_excel(report: Dict[str, Any], store_name: str) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ─────────────────────────────────────────────
+#  R3: ajuste de inventario en Alegra
+# ─────────────────────────────────────────────
+
+ADJUSTMENT_SETTING = 'history2025_inventory_adjustment'
+ADJUSTMENT_CHUNK = 200            # prendas por ajuste (Alegra no documenta un máximo)
+WAREHOUSE_ID = '1'                # bodega "Principal" (la de los ajustes de la tienda)
+ADJUSTMENT_NOTE = ('Reverso de la anulación masiva de facturas POS 2025 (oct-2026): '
+                   'esas ventas fueron reales y sus prendas volvieron al inventario. '
+                   'Creado desde la plataforma KOAJ. Parte {part} de {parts}.')
+
+
+class AdjustmentError(ValueError):
+    """El ajuste no se puede crear (ya existe, faltan datos, cambió el cálculo...)."""
+
+
+def _setting(store: str):
+    from app.models.app_setting import AppSetting
+    from app.stores import store_setting_key
+    return AppSetting.query.get(store_setting_key(ADJUSTMENT_SETTING, store))
+
+
+def adjustment_state(store: str) -> Optional[Dict[str, Any]]:
+    import json
+    row = _setting(store)
+    return json.loads(row.value) if row and row.value else None
+
+
+def _save_state(store: str, state: Dict[str, Any]) -> None:
+    import json
+    from app.models.app_setting import AppSetting
+    from app.models.user import db
+    from app.stores import store_setting_key
+    row = _setting(store)
+    if row is None:
+        row = AppSetting(key=store_setting_key(ADJUSTMENT_SETTING, store))
+        db.session.add(row)
+    row.value = json.dumps(state, ensure_ascii=False)
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
+
+
+def adjustment_items(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Renglones del ajuste de salida (formato de Alegra) a partir del informe."""
+    return [{'id': str(r['item_id']), 'type': 'out', 'quantity': int(r['units_to_remove']),
+             'unitCost': round(float(r['unit_cost'] or 0), 2), 'name': r['name']}
+            for r in report['rows'] if r['item_id'] and r['units_to_remove'] > 0]
+
+
+def create_adjustment(client, store: str, report: Optional[Dict[str, Any]], today: date,
+                      expected_units: Optional[int] = None, user_id=None) -> Dict[str, Any]:
+    """
+    Crea en Alegra el ajuste de salida, por partes de ADJUSTMENT_CHUNK prendas.
+    - Primera vez: exige 2025 completo y que las unidades a retirar coincidan
+      con las que el usuario aprobó (expected_units); guarda el plan completo.
+    - Si una parte falla, se guarda lo hecho y otra llamada sigue con las
+      partes que faltan usando el MISMO plan (no se recalcula: las partes ya
+      creadas cambiaron la existencia en Alegra).
+    - Si ya se completó, no se vuelve a crear.
+    """
+    state = adjustment_state(store)
+    if state and state.get('completed'):
+        raise AdjustmentError('El ajuste ya se creó en Alegra; no se puede volver a crear desde aquí.')
+
+    if not state:
+        if not coverage(store)['complete']:
+            raise AdjustmentError('Primero hay que traer todo 2025: el ajuste solo se crea con el año completo.')
+        items = adjustment_items(report)
+        if not items:
+            raise AdjustmentError('No hay unidades para retirar.')
+        units = sum(i['quantity'] for i in items)
+        if expected_units is None or int(expected_units) != units:
+            raise AdjustmentError(
+                f'El cálculo cambió desde que lo revisaste ({units} unidades ahora). Vuelve a calcular y revisa antes de crear el ajuste.')
+        chunks = [items[i:i + ADJUSTMENT_CHUNK] for i in range(0, len(items), ADJUSTMENT_CHUNK)]
+        state = {
+            'started_at': datetime.utcnow().isoformat() + 'Z', 'date': today.isoformat(), 'user_id': user_id,
+            'units': units, 'value': round(sum(i['quantity'] * i['unitCost'] for i in items)),
+            'items_count': len(items), 'chunks': chunks, 'done': [], 'errors': [], 'completed': False,
+        }
+        _save_state(store, state)
+
+    parts = len(state['chunks'])
+    done_parts = {d['part'] for d in state['done']}
+    for index, chunk in enumerate(state['chunks'], start=1):
+        if index in done_parts:
+            continue
+        payload = {
+            'date': state['date'],
+            'observations': ADJUSTMENT_NOTE.format(part=index, parts=parts),
+            'warehouse': {'id': WAREHOUSE_ID},
+            'items': [{k: v for k, v in i.items() if k != 'name'} for i in chunk],
+        }
+        try:
+            created = client.create_inventory_adjustment(payload)
+        except Exception as e:
+            state['errors'].append({'part': index, 'at': datetime.utcnow().isoformat() + 'Z',
+                                    'error': getattr(e, 'message', str(e))[:500]})
+            _save_state(store, state)
+            raise AdjustmentError(
+                f'Alegra no aceptó la parte {index} de {parts}. Lo ya creado quedó guardado; '
+                f'vuelve a tocar el botón para seguir con lo que falta.') from e
+        state['done'].append({
+            'part': index, 'alegra_id': str(created.get('id')),
+            'number': created.get('fullNumeration') or created.get('number'),
+            'items': len(chunk), 'units': sum(i['quantity'] for i in chunk),
+        })
+        _save_state(store, state)
+
+    state['completed'] = True
+    state['completed_at'] = datetime.utcnow().isoformat() + 'Z'
+    _save_state(store, state)
+    return public_state(state)
+
+
+def public_state(state: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Estado del ajuste sin la lista completa de prendas (para la pantalla)."""
+    if not state:
+        return None
+    return {k: v for k, v in state.items() if k != 'chunks'} | {'parts': len(state.get('chunks') or [])}

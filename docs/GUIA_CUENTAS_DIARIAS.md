@@ -94,7 +94,7 @@ Las facturas POS de 2025 se anularon todas juntas por impuestos (oct-2026). Fuer
 2. Revisa la lista **"Anulaciones reales"**: son las que el sistema cree que se anularon de verdad durante el año (electrónicas anuladas o POS que se volvieron a facturar enseguida con lo mismo). Si alguna sí era de la anulación masiva, toca **"Fue de la anulación masiva"**. También puedes marcar cualquier factura por su número.
 3. En **"Inventario antes de la anulación masiva"** toca **Calcular**: te dice cuánto vale hoy el inventario en Alegra, cuánto hay que retirar y cuánto quedaría (debería quedar cerca de los $160-175 millones que recuerdas).
 4. Toca **"Descargar Excel"** y revísalo con tu contador. Las prendas marcadas en "Revisar" hay que contarlas en físico.
-5. Cuando el contador lo apruebe, avísame: se crea el ajuste en Alegra desde la plataforma (Alegra no permite cargar ajustes desde un Excel).
+5. Cuando el contador lo apruebe, ve al **paso 4** de la misma página: marca **"Mi contador revisó y aprobó el Excel"**, escribe **AJUSTAR** y toca **"Crear ajuste"**. La plataforma crea en Alegra el ajuste de salida (en la bodega Principal, de a 200 prendas por ajuste) y te muestra los números de ajuste. Se hace una sola vez; si algo falla a mitad, vuelve a tocar el botón y sigue con lo que faltaba sin repetir. Hazlo justo después de calcular (si se vende algo entre medio, te pedirá volver a calcular).
 
 Mientras tanto, **Metas** y la **comparación con el año anterior** del cierre de caja ya usan la venta real de 2025 en los meses que estén cargados.
 
