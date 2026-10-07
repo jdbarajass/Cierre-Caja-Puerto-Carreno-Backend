@@ -35,9 +35,11 @@ Creado: 2026-10-07. **Va antes de la Fase 4 de `PLAN_CUENTAS_DIARIAS.md`** (que 
 
 ## 3. Reglas de la reconstrucción
 
-**Anulación masiva** (cuenta como venta real) = factura de 2025, anulada, POS (no electrónica), **salvo**:
-1. que el usuario la marque a mano como anulación real (`VoidOverride`), o
-2. que parezca una anulación real del momento: hay **otra factura del mismo día, con las mismas prendas y el mismo total, hecha hasta 60 minutos después** (se volvió a facturar). Se muestra en una lista para que el usuario confirme.
+**Anulación masiva** (cuenta como venta real) = factura de 2025, anulada, POS (no electrónica), **salvo** que el usuario la marque a mano como anulación real (`VoidOverride`).
+
+Las que tienen **otra factura del mismo día, con las mismas prendas y el mismo total, hasta 60 minutos después** se muestran en una lista "para revisar" (`possible_real`), pero **cuentan como venta**.
+
+> **Corrección del 2026-10-07 tras cargar 2025 en producción.** Al principio esas se tomaban como anulación real (44 facturas, $3.629.000). La prueba contra Alegra lo descartó: octubre de 2025 antes de la anulación masiva valía **$47.838.020** (dato del 3-oct en Metas); hoy Alegra muestra $7.788.300 vigentes + $39.906.620 de anulación masiva = $47.694.920; la diferencia, **$143.100, es exactamente lo de las 2 "anulaciones reales" de octubre**. Eran ventas válidas: la regla confundía a dos clientas comprando lo mismo (ej. 8385 y 8397, $15.800, 54 min).
 
 Las electrónicas anuladas de 2025 son anulaciones reales.
 
@@ -86,3 +88,8 @@ Las electrónicas anuladas de 2025 son anulaciones reales.
 **Pendientes**
 - El inventario histórico de Alegra (y el de la pestaña Año) queda inflado para fechas posteriores a las ventas anuladas: corregirlo restando el valor de las unidades devueltas hasta esa fecha.
 - Clientes (nuevos/recurrentes, inactivas) con la copia de 2025.
+
+## 6. Resultado de la carga en producción (Carreño, 2026-10-07)
+
+- 2025 completo (365 días). Antes de la corrección: 3.481 de anulación masiva ($393.998.065), 44 "reales" ($3.629.000); Alegra muestra $281.388.042 vigentes (2.139 facturas). Con la corrección, la venta real de 2025 ≈ $281.388.042 + $393.998.065 + $3.629.000 = **$679.015.107** (menos lo que el usuario marque como anulación real).
+- Alegra por mes (vigentes, hoy): ene $28,4 M y feb $33,2 M (las POS de enero-febrero no se anularon), mar-oct $0,2-11 M, nov $22,7 M, dic $139,7 M (965 electrónicas, temporada).

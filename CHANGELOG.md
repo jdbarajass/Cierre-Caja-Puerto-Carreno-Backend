@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-10-07] (continuación 2) - Reconstrucción 2025: las POS re-facturadas cuentan como venta
+
+- Revisión con la carga real de 2025: octubre-2025 antes de la anulación = $47.838.020 = vigentes ($7.788.300) + anulación masiva ($39.906.620) + las 2 "anulaciones reales" ($143.100). La regla "otra factura igual ≤ 60 min = anulación real" daba falsos positivos (dos clientas comprando lo mismo).
+- `classify`: esas facturas ahora son 'masiva' (cuentan como venta) con `possible_real` y se listan en `summary.review` para que el usuario marque solo las que sí se anularon. Anulación real = electrónica anulada o marcada a mano. Tests actualizados (241/241).
+
 ## [2026-10-07] (continuación) - Reconstrucción 2025, R3: crear el ajuste de inventario en Alegra
 
 - `POST /api/history-2025/inventory-adjustment` + `AlegraClient.create_inventory_adjustment` (formato verificado en developer.alegra.com y contra el ajuste real n.º 1712). Ajuste de SALIDA en la bodega Principal por partes de 200 prendas, con confirmación escrita (`AJUSTAR`), aprobación del contador marcada, 2025 completo y unidades iguales a las revisadas. Plan guardado en `app_settings` antes de enviar; reintento sin duplicar; una sola vez por tienda. `/status` trae el estado del ajuste.

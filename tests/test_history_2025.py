@@ -114,42 +114,45 @@ def test_carga_guarda_prendas_de_anuladas_sin_tocar_prendas_vendidas(app, loaded
 def test_clasificacion_y_venta_real(app, client, h, loaded):
     s = client.get('/api/history-2025/status', headers=h()).get_json()['summary']
     real = {r['number']: r for r in s['real_voids']}
-    assert set(real) == {'8421', 'KPC1500'}
-    assert 'Se volvió a facturar 7 min después' in real['8421']['reason']
+    assert set(real) == {'KPC1500'}
     assert real['KPC1500']['reason'] == 'Factura electrónica anulada'
-    assert s['masiva_count'] == 3                              # 8420, 8423, 8430
+    # 8421 tiene otra factura igual 7 min después: cuenta como venta, pero queda para revisar
+    assert [r['number'] for r in s['review']] == ['8421']
+    assert 'lo mismo 7 min después' in s['review'][0]['reason']
+    assert s['masiva_count'] == 4                              # 8420, 8421, 8423, 8430
     venta_8420 = 99900 + 7900 * 2 + 300
-    assert s['real_sales_total'] == 109900 + venta_8420 + 109900 + (109900 + 15800)
+    assert s['real_sales_total'] == 109900 + venta_8420 + 109900 + 109900 + (109900 + 15800)
 
     from app.services.history_2025 import real_sales_total
     with app.app_context():
-        assert real_sales_total('carreno', date(2025, 1, 10), date(2025, 1, 10)) == 109900 + venta_8420 + 109900
+        assert real_sales_total('carreno', date(2025, 1, 10), date(2025, 1, 10)) == 109900 + venta_8420 + 109900 + 109900
         assert real_sales_total('carreno', date(2025, 2, 1), date(2025, 2, 28)) is None   # febrero no está cargado
         assert real_sales_total('carreno', date(2026, 1, 1), date(2026, 1, 31)) is None   # solo 2025
 
 
 def test_marca_manual(app, client, h, loaded):
-    resp = client.put('/api/history-2025/override', headers=h(), json={'number': '8421', 'counts_as_sale': True, 'note': 'era venta'})
+    resp = client.put('/api/history-2025/override', headers=h(), json={'number': '8421', 'counts_as_sale': False, 'note': 'devolución'})
     assert resp.status_code == 200
     s = client.get('/api/history-2025/status', headers=h()).get_json()['summary']
-    assert s['masiva_count'] == 4 and [r['number'] for r in s['real_voids']] == ['KPC1500']
+    assert s['masiva_count'] == 3 and [r['number'] for r in s['real_voids']] == ['8421', 'KPC1500']
+    assert s['review'] == [] and s['real_voids'][0]['manual'] is True
     client.put('/api/history-2025/override', headers=h(), json={'number': '8421', 'counts_as_sale': None})
-    assert client.get('/api/history-2025/status', headers=h()).get_json()['summary']['masiva_count'] == 3
+    assert client.get('/api/history-2025/status', headers=h()).get_json()['summary']['masiva_count'] == 4
     assert client.put('/api/history-2025/override', headers=h(), json={'number': '1462', 'counts_as_sale': True}).status_code == 404
 
 
 def test_informe_de_inventario_y_excel(app, client, h, loaded):
     data = client.get('/api/history-2025/inventory', headers=h()).get_json()
     rows = {r['item_id']: r for r in data['rows']}
-    # masivas: 8420 (short, 2 medias, bolsa), 8423 (jean), 8430 (jean, 2 medias)
-    assert rows['1183']['units_returned'] == 2 and rows['1183']['stock_before'] == 8 and rows['1183']['units_to_remove'] == 2
+    # masivas: 8420 (short, 2 medias, bolsa), 8421 y 8423 (jean), 8430 (jean, 2 medias)
+    assert rows['1183']['units_returned'] == 3 and rows['1183']['stock_before'] == 7 and rows['1183']['units_to_remove'] == 3
     assert rows['829']['units_returned'] == 4 and rows['829']['stock_before'] == 26
     assert rows['1928']['units_returned'] == 1 and rows['1928']['units_to_remove'] == 0
     assert rows['1928']['flag'].startswith('Da negativo')
     assert rows['2165']['is_bag'] is True
     assert '999' not in rows
     assert data['value_now'] == 10 * 50000 + 30 * 3000 + 500 * 100 + 5 * 20000
-    assert data['value_to_remove'] == 2 * 50000 + 4 * 3000 + 1 * 100
+    assert data['value_to_remove'] == 3 * 50000 + 4 * 3000 + 1 * 100
     assert data['value_before'] == data['value_now'] - data['value_to_remove']
 
     resp = client.get('/api/history-2025/inventory.xlsx', headers=h())
@@ -166,7 +169,7 @@ def test_metas_y_comparacion_usan_la_venta_real(app, loaded):
         month, daily = _real_previous_year(
             1000, {'current': {'total': 500000}, 'previous_year': {'total': 1}, 'comparison': {}},
             date(2025, 1, 1), date(2025, 1, 10))
-    expected_day = 109900 + (99900 + 15800 + 300) + 109900
+    expected_day = 109900 + (99900 + 15800 + 300) + 109900 + 109900
     assert month == expected_day                       # 1 al 10 de enero: solo el 10 tiene ventas
     assert daily['previous_year']['total'] == expected_day
     assert daily['comparison']['difference'] == 500000 - expected_day
@@ -237,23 +240,23 @@ def test_ajuste_se_crea_una_sola_vez_con_el_formato_de_alegra(app, client, h, lo
     _complete_2025(app)
     url = '/api/history-2025/inventory-adjustment'
 
-    # jean 2 + medias 4 + bolsa 1 = 7 (el short no tiene existencia)
-    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 6})
+    # jean 3 + medias 4 + bolsa 1 = 8 (el short no tiene existencia)
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
     assert resp.status_code == 409 and 'cambió' in resp.get_json()['message']
 
-    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 8})
     assert resp.status_code == 200, resp.get_json()
     assert len(fake.created) == 1
     payload = fake.created[0]
     assert payload['warehouse'] == {'id': '1'} and payload['date']
     assert 'anulación masiva' in payload['observations']
     assert sorted((i['id'], i['type'], i['quantity'], i['unitCost']) for i in payload['items']) == [
-        ('1183', 'out', 2, 50000), ('2165', 'out', 1, 100), ('829', 'out', 4, 3000)]
+        ('1183', 'out', 3, 50000), ('2165', 'out', 1, 100), ('829', 'out', 4, 3000)]
     adj = resp.get_json()['adjustment']
-    assert adj['completed'] is True and adj['units'] == 7 and adj['done'][0]['number'] == 1716
+    assert adj['completed'] is True and adj['units'] == 8 and adj['done'][0]['number'] == 1716
 
     # no se repite
-    again = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    again = client.post(url, headers=h(), json={**OK, 'expected_units': 8})
     assert again.status_code == 409 and 'ya se creó' in again.get_json()['message']
     assert len(fake.created) == 1
     status = client.get('/api/history-2025/status', headers=h()).get_json()
@@ -269,7 +272,7 @@ def test_ajuste_por_partes_retoma_sin_duplicar(app, client, h, loaded, monkeypat
     _complete_2025(app)
     url = '/api/history-2025/inventory-adjustment'
 
-    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 7})
+    resp = client.post(url, headers=h(), json={**OK, 'expected_units': 8})
     assert resp.status_code == 409 and 'parte 2 de 3' in resp.get_json()['message']
     assert len(fake.created) == 1 and resp.get_json()['adjustment']['completed'] is False
 
@@ -278,5 +281,5 @@ def test_ajuste_por_partes_retoma_sin_duplicar(app, client, h, loaded, monkeypat
     resp = client.post(url, headers=h(), json={**OK})
     assert resp.status_code == 200
     assert len(fake.created) == 3
-    assert sum(i['quantity'] for p in fake.created for i in p['items']) == 7
+    assert sum(i['quantity'] for p in fake.created for i in p['items']) == 8
     assert [d['part'] for d in resp.get_json()['adjustment']['done']] == [1, 2, 3]

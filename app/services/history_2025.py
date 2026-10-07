@@ -5,9 +5,14 @@ Reconstrucción de 2025 tras la anulación masiva de facturas POS
 - Clasifica las facturas anuladas de 2025 de la copia (InvoiceFact):
   * 'masiva'  = POS anulada en la anulación masiva de oct-2026 → fue una
     VENTA REAL (cuenta como venta y sus prendas volvieron al inventario).
-  * 'real'    = anulación real que se queda así: electrónica anulada, o POS
-    que se volvió a facturar con las mismas prendas y el mismo total hasta
-    60 minutos después, o marcada a mano (VoidOverride).
+  * 'real'    = anulación real que se queda así: electrónica anulada, o
+    marcada a mano (VoidOverride).
+  Las POS que se volvieron a facturar con las mismas prendas y el mismo
+  total hasta 60 minutos después quedan como 'masiva' pero marcadas
+  `possible_real` para que el usuario las revise: la prueba contra Alegra
+  (oct-2025 antes de la anulación = $47.838.020 = vigentes + TODAS las POS
+  anuladas de octubre) mostró que esa regla daba falsos positivos (dos
+  clientas comprando lo mismo).
 - Venta real de 2025 = vigentes + 'masiva'.
 - Informe de inventario: por prenda, unidades que devolvió la anulación
   masiva y existencia antes de ella (= existencia de hoy − devueltas).
@@ -72,6 +77,7 @@ def classify(store: str, start: date = HISTORY_START, end: date = HISTORY_END) -
         if not f.voided:
             continue
         status, reason = 'masiva', 'POS anulada en la anulación masiva'
+        possible_real = False
         if f.is_electronic:
             status, reason = 'real', 'Factura electrónica anulada'
         else:
@@ -84,8 +90,9 @@ def classify(store: str, start: date = HISTORY_START, end: date = HISTORY_END) -
                     ot = _parse_dt(other.issued_at)
                     if ot and t < ot <= t + REPLACEMENT_WINDOW:
                         minutes = int((ot - t).total_seconds() // 60)
-                        status = 'real'
-                        reason = f'Se volvió a facturar {minutes} min después (factura {other.number})'
+                        possible_real = True
+                        reason = (f'Hay otra factura con lo mismo {minutes} min después (factura {other.number}): '
+                                  'puede ser otra clienta o una re-facturación')
                         break
         o = overrides.get(f.alegra_id)
         if o is not None:
@@ -95,7 +102,7 @@ def classify(store: str, start: date = HISTORY_START, end: date = HISTORY_END) -
             'alegra_id': f.alegra_id, 'number': f.number, 'date': f.date.isoformat(), 'issued_at': f.issued_at,
             'total': f.total, 'total_paid': f.total_paid, 'is_electronic': f.is_electronic,
             'seller_name': f.seller_name, 'status': status, 'reason': reason,
-            'manual': o is not None,
+            'manual': o is not None, 'possible_real': possible_real and o is None,
         })
     return {'rows': rows}
 
@@ -128,6 +135,8 @@ def summary(store: str) -> Dict[str, Any]:
         'real_sales_total': active_total + sum(r['total'] for r in masiva),
         'by_month': [{'month': k, **v} for k, v in sorted(by_month.items())],
         'real_voids': sorted(real, key=lambda r: (r['date'], r['issued_at'] or '')),
+        # Cuentan como venta, pero conviene revisarlas (ver classify)
+        'review': sorted((r for r in masiva if r['possible_real']), key=lambda r: (r['date'], r['issued_at'] or '')),
     }
 
 
