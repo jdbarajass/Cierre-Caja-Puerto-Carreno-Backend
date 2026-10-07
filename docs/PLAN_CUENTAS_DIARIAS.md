@@ -6,10 +6,12 @@ Estado de las fases (actualizar al cerrar cada una):
 
 | Fase | Qué | Estado |
 |---|---|---|
-| 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | **Hecha (2026-10-06), commiteada; falta push + Manual Deploy y probar en producción** |
-| 4 | Extras: regla 70/30, incentivos/metas, gastos en el comparativo de tiendas (sin bonos regalo, decisión del usuario 2026-10-07) | **Hecha (2026-10-07)**, commiteada |
+| 1 | Gastos y otros movimientos de plata + gastos fijos + préstamos entre tiendas + enlace con Empleadas | **Hecha (2026-10-06) y subida (2026-10-07)**; falta Manual Deploy y probar en producción |
+| 2 | Hoja del mes: ventas diarias por los 10 medios, plata en tránsito (datáfono/Addi), estado por medio de pago, conciliación, cerrar/reabrir mes | **Hecha (2026-10-06) y subida (2026-10-07)**; falta Manual Deploy y probar en producción |
+| 3 | Resumen mensual y anual (CierreGeneral + DATOS_ANUALES) con inventario a fin de mes | **Hecha (2026-10-06) y subida (2026-10-07)**; falta Manual Deploy y probar en producción |
+| 4 | Extras: regla 70/30, incentivos/metas, gastos en el comparativo de tiendas (sin bonos regalo, decisión del usuario 2026-10-07) | **Hecha y subida (2026-10-07)**; falta Manual Deploy y probar en producción |
+
+**Las 4 fases del plan están hechas (2026-10-07).** No queda ninguna fase de código: falta la puesta en marcha (Manual Deploy, llenar septiembre a mano en Año, verificar el inventario de julio) y las mejoras opcionales listadas en "Limitaciones" de cada fase.
 
 ---
 
@@ -153,7 +155,7 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - Frontend: `src/pages/CuentasMes.jsx` (pestaña **Cuentas → Mes**, después de Resumen), `src/services/monthSheetService.js`. Tarjetas (venta, calificaciones, comisiones con botón "Registrar en Gastos", por llegar), tabla de ventas diarias (los 10 medios; oculta Bold/BBVA/Daviplata/SisteCrédito si el mes no tiene), estado por cuenta con saldo real y día por día, plata por llegar y cerrar/reabrir. En celular, tarjetas.
 - Verificado en Chromium (1366 y 390) con las ventas del 1 al 5-oct del Excel y los saldos de Resumen del 5-oct: total $14.793.275 (= Excel), QR $5.198.075, Addi por llegar 3-nov y 4-nov.
 - **Limitaciones / pendientes:**
-  - Cuenta a la que llega Bold: sin confirmar (`MEDIO_ACCOUNT['bold'] = None`); no entra al tránsito.
+  - Bold: llega a la misma cuenta que datáfono y Addi (`MEDIO_ACCOUNT['bold'] = 'addi_datafono'`, decisión del usuario 2026-10-07).
   - El saldo real no admite negativos en el campo (LiveMoneyInput solo dígitos).
   - Las comisiones de meses sin "Registrar en Gastos" no se arrastran al disponible estimado de meses siguientes (solo las del mes).
   - Las ventas en el estado de cuenta vienen de los cierres (lo abonado), no de Alegra; la tabla de ventas sí es Alegra.
