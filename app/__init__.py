@@ -81,8 +81,9 @@ def create_app(config_class=Config):
             db.create_all()
             app.logger.info("Database tables created/verified successfully")
 
-            from app.routes.accounts import seed_default_accounts
+            from app.routes.accounts import seed_default_accounts, apply_account_order
             seed_default_accounts()
+            apply_account_order()
 
             _fix_historical_closing_dates_timezone_bug(db, app)
         except Exception as e:

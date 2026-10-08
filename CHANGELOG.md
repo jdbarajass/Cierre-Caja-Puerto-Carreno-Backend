@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-10-08] - Nuevo orden de las cuentas
+
+- Pedido del usuario: EFECTIVO, QR BANCOLOMBIA, ADDI + DATÁFONO, NEQUI, DAVIPLATA, SisteCrédito, BBVA, AHORRO (Jhonatan, que no es cuenta, lo pone el frontend después de NEQUI). `DEFAULT_ACCOUNTS` con el orden nuevo y `apply_account_order()` reordena una sola vez las cuentas existentes de las dos tiendas al arrancar (bandera `accounts_order_2026_10_08_applied` en `app_settings`; solo toca `sort_order`). Aplica también al orden de Cuentas → Mes. Test en `tests/test_multi_store.py`.
+
 ## [2026-10-08] (continuación 3) - Recordatorios del administrador
 
 - Pedido del usuario: que la plataforma le avise con una ventana qué hacer, cuándo y dónde. `app/services/reminders.py` + `app/routes/reminders.py` (`GET /api/reminders`, `POST /api/reminders/<key>/snooze|done`; solo admin, por tienda; estado en `app_settings` `reminders_state`). Se calculan solos:

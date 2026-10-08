@@ -414,3 +414,29 @@ def test_comparativo_solo_admin_y_rango_valido(client, admin_headers, sales_head
                       headers=admin_headers()).status_code == 400
     assert client.get('/api/stores/comparison?start_date=2026-01-01&end_date=2026-09-01',
                       headers=admin_headers()).status_code == 400
+
+
+# ─── Orden de las cuentas (pedido del usuario, 2026-10-08) ───────────────────
+
+def test_orden_de_cuentas_y_reordenar_las_existentes_sin_tocar_saldos(app, client, admin_headers):
+    expected = ['cash', 'qr', 'addi_datafono', 'nequi', 'daviplata', 'sistecredito', 'bbva', 'ahorro']
+    keys = lambda store=None: [a['payment_key'] for a in client.get('/api/accounts', headers=admin_headers(store)).get_json()['accounts']]
+    assert keys() == expected and keys('primavera') == expected
+
+    # Base con el orden viejo (como producción antes del cambio): se reordena una vez
+    from app.models.account import Account
+    from app.models.app_setting import AppSetting
+    from app.models.user import db
+    from app.routes.accounts import apply_account_order, ACCOUNT_ORDER_SETTING_KEY
+    old = {'cash': 1, 'nequi': 2, 'daviplata': 3, 'qr': 4, 'addi_datafono': 5}
+    with app.app_context():
+        for a in Account.query.all():
+            a.sort_order = old.get(a.payment_key, a.sort_order)
+            if a.payment_key == 'qr':
+                a.balance = 4394541
+        AppSetting.query.filter_by(key=ACCOUNT_ORDER_SETTING_KEY).delete()
+        db.session.commit()
+        apply_account_order()
+    assert keys() == expected and keys('primavera') == expected
+    qr = next(a for a in client.get('/api/accounts', headers=admin_headers()).get_json()['accounts'] if a['payment_key'] == 'qr')
+    assert qr['balance'] == 4394541

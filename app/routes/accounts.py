@@ -33,16 +33,23 @@ SYNC_FAILURE_SETTING_KEY = 'last_sync_failure'
 # Cuentas por defecto (payment_key -> nombre/color), sembradas una sola vez si la
 # tabla está vacía. El campo de cierre de caja que acredita cada una se resuelve
 # en sync_daily().
+#
+# Orden pedido por el usuario (2026-10-08): EFECTIVO, QR, ADDI + DATÁFONO,
+# NEQUI, (Jhonatan, que no es cuenta: lo pone el frontend después de NEQUI),
+# DAVIPLATA, SisteCrédito, BBVA y AHORRO aparte. Las cuentas que ya existían
+# se reordenan una sola vez con apply_account_order().
 DEFAULT_ACCOUNTS = [
     {'payment_key': 'cash', 'name': 'EFECTIVO', 'color': 'green', 'sort_order': 1},
-    {'payment_key': 'nequi', 'name': 'NEQUI', 'color': 'purple', 'sort_order': 2},
-    {'payment_key': 'daviplata', 'name': 'DAVIPLATA', 'color': 'red', 'sort_order': 3},
-    {'payment_key': 'qr', 'name': 'QR BANCOLOMBIA', 'color': 'orange', 'sort_order': 4},
-    {'payment_key': 'addi_datafono', 'name': 'ADDI + DATÁFONO (Tarjetas)', 'color': 'blue', 'sort_order': 5},
+    {'payment_key': 'qr', 'name': 'QR BANCOLOMBIA', 'color': 'orange', 'sort_order': 2},
+    {'payment_key': 'addi_datafono', 'name': 'ADDI + DATÁFONO (Tarjetas)', 'color': 'blue', 'sort_order': 3},
+    {'payment_key': 'nequi', 'name': 'NEQUI', 'color': 'purple', 'sort_order': 4},
+    {'payment_key': 'daviplata', 'name': 'DAVIPLATA', 'color': 'red', 'sort_order': 5},
     {'payment_key': 'sistecredito', 'name': 'SisteCrédito', 'color': 'teal', 'sort_order': 6},
     {'payment_key': 'bbva', 'name': 'BBVA', 'color': 'indigo', 'sort_order': 7},
     {'payment_key': 'ahorro', 'name': 'AHORRO', 'color': 'emerald', 'sort_order': 8},
 ]
+
+ACCOUNT_ORDER_SETTING_KEY = 'accounts_order_2026_10_08_applied'
 
 # Cuentas que NO cuentan para el total "disponible para recompras" (Resumen):
 # el ahorro es plata aparte, no se toca para financiar recompras - mezclarla
@@ -69,6 +76,26 @@ def seed_default_accounts():
         return
     db.session.commit()
     logger.info(f"Cuentas por defecto creadas: {created}")
+
+
+def apply_account_order():
+    """
+    Pone a las cuentas existentes (de todas las tiendas) el orden de
+    DEFAULT_ACCOUNTS. Una sola vez (bandera en app_settings) y solo toca
+    sort_order: nunca saldos, nombres ni movimientos.
+    """
+    if AppSetting.query.get(ACCOUNT_ORDER_SETTING_KEY):
+        return
+    order = {d['payment_key']: d['sort_order'] for d in DEFAULT_ACCOUNTS}
+    changed = 0
+    for account in Account.query.all():
+        new = order.get(account.payment_key)
+        if new is not None and account.sort_order != new:
+            account.sort_order = new
+            changed += 1
+    db.session.add(AppSetting(key=ACCOUNT_ORDER_SETTING_KEY, value=f'reordered_{changed}', updated_at=datetime.utcnow()))
+    db.session.commit()
+    logger.info(f"Orden de cuentas actualizado ({changed} cuenta(s))")
 
 
 def sync_token_or_admin_required(f):
