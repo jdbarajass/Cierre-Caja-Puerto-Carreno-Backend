@@ -341,3 +341,16 @@ def test_borrar_correccion_que_otra_usa(app, client, h, monkeypatch):
         'date': '2026-10-05', 'from_medio': 'nequi', 'to_medio': 'efectivo', 'amount': 170000}).status_code == 201
     resp = client.delete(f"/api/month-sheet/corrections/{first['id']}", headers=h())
     assert resp.status_code == 400 and 'bórrala primero' in resp.get_json()['message']
+
+
+def test_por_llegar_addi_una_fila_por_venta_como_el_reporte_de_addi(app):
+    """Reporte de pagos de Addi del usuario: ventas 1-oct y 3-oct se pagan el 3-nov, cada una por separado."""
+    from app.services.month_sheet import transit
+    _load(app, [_pay(3, '2026-10-03', 170100, 'transfer', 'ADDI'), _pay(1, '2026-10-01', 180000, 'transfer', 'ADDI'),
+                _pay(2, '2026-09-29', 159800, 'transfer', 'ADDI')], since=date(2026, 9, 1))
+    with app.app_context():
+        tr = transit('carreno', date(2026, 10, 7))
+    by_arrival = {i['arrival_date']: i for i in tr['items']}
+    assert [(s['date'], s['net']) for s in by_arrival['2026-11-03']['by_sale']] == [
+        ('2026-10-01', 166077), ('2026-10-03', 156943)]          # = "Total a pagar" de Addi
+    assert by_arrival['2026-10-29']['by_sale'] == [{'date': '2026-09-29', 'gross': 159800, 'net': 147439}]   # mes pasado

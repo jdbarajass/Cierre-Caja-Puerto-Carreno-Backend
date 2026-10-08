@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-10-07] (continuación 9) - Plata por llegar: una fila por venta
+
+- `month_sheet.transit`: cada grupo (día de llegada + medio) trae `by_sale` = [{date, gross, net}] por día de venta. Addi paga cada venta por separado aunque lleguen el mismo día (ej. 1-oct y 3-oct → 3-nov: $166.077 y $156.943, iguales al "Reporte de pagos" de Addi del usuario). Lo usa la ventana "lo que falta que llegue" de Cuentas → Mes.
+- Comparando con ese reporte: la venta "Addi" de $169.800 del 6-oct no está en Addi (fue datáfono crédito, como dice el Excel): se corrige con el lápiz ✎.
+- 1 test más en `tests/test_month_sheet.py`.
+
 ## [2026-10-07] (continuación 8) - Cuentas → Mes: corregir a mano el medio de pago de un día
 
 - Pedido del usuario: a veces en Alegra queda un medio equivocado (se pasó por datáfono y al final pagó en efectivo). Modelo `SaleMethodCorrection` + `POST/DELETE /api/month-sheet/corrections`; `month_sheet.sale_entries` suma los recibos de Alegra y las correcciones para la tabla diaria, totales, comisiones, plata por llegar y Cuentas → Año. No toca Alegra; sobrevive a las recargas de pagos; bloqueada con el mes cerrado. Detalle en `docs/PLAN_CUENTAS_DIARIAS.md` (Fase 2).

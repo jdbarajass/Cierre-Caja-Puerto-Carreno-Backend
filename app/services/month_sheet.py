@@ -248,15 +248,19 @@ def transit(store: str, cutoff: date) -> Dict[str, Any]:
             continue
         g = groups.setdefault((arrives, medio), {
             'arrival_date': arrives.isoformat(), 'medio': medio, 'gross': 0, 'net': 0,
-            'sales_dates': set(),
+            'sales_dates': set(), 'by_sale': defaultdict(float),
         })
         g['gross'] += amount
         g['net'] += net_amount(medio, amount)
         g['sales_dates'].add(sale_date.isoformat())
+        g['by_sale'][sale_date.isoformat()] += amount
     # Una corrección puede dejar un grupo en cero (todo se pasó a efectivo)
     items = sorted((g for g in groups.values() if g['gross'] > 0), key=lambda g: (g['arrival_date'], g['medio']))
     for g in items:
-        g['sales_dates'] = sorted(g['sales_dates'])
+        # Una fila por día de venta (como el reporte de pagos de Addi)
+        g['by_sale'] = [{'date': d, 'gross': v, 'net': round(net_amount(g['medio'], v))}
+                        for d, v in sorted(g['by_sale'].items()) if v > 0]
+        g['sales_dates'] = [s['date'] for s in g['by_sale']]
         g['net'] = round(g['net'])
     return {
         'cutoff': cutoff.isoformat(),
