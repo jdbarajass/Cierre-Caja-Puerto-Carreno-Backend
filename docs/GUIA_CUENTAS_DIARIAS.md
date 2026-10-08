@@ -73,6 +73,10 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 5. Si es un **préstamo a una empleada**, elige "Préstamo a empleada" y su nombre: queda solo en Empleadas → Préstamos. Si te lo devuelve, usa **"Registrar entrada" → "Devolución de préstamo"**.
 6. Si es algo que **Carreño paga por Primavera**, elige "Préstamo a otra tienda" → Primavera. Abajo verás cuánto te debe Primavera. Cuando te devuelva, **"Registrar entrada" → "Devolución de otra tienda"**.
 
+**Cada noche, después del cierre de caja:**
+- En **Gestión de cuentas** toca **"Sincronizar ahora"** (o espera el automático de las 9 pm). **Solo pasa a las cuentas un cierre que salió "Cierre exitoso".** Si un cierre salió con diferencia, junto al botón aparece **"Sin Cierre exitoso: (fecha)"** y ese día no se suma: la vendedora corrige los valores en Cierre diario de caja y lo vuelve a enviar; cuando salga exitoso, se sincroniza normal.
+- Los **excedentes** del cierre (plata que entró pero no es venta: la diferencia de un cambio de prenda o de una tarjeta regalo, las vueltas que deja un cliente) entran a la cuenta del medio por el que llegaron (efectivo, QR, Nequi…), **aparte de las ventas**. Así el saldo cuadra con el banco y las ventas, metas e incentivos no cambian.
+
 **Cada semana (o cuando quieras revisar):**
 1. **Cuentas → Mes.** Ahí ves todo como en el Excel: ventas por día y medio de pago (con "venta mala / bajita / buena / alta"), cuánta plata hay en cada cuenta y cuánta está **por llegar** del datáfono y Addi (con la fecha en que llega).
    - **Si en Alegra quedó un medio equivocado** (ej. se pasó por datáfono, la tarjeta no tenía plata y al final pagó en efectivo): en la fila del día toca el **lápiz ✎** (en el celular: abre el día y toca "Corregir medio de pago"), elige **De** (el medio que quedó mal), **A** (el correcto) y el **valor**, y Guardar. El total del día no cambia y Alegra no se toca; la corrección se ve abajo de la tabla ("Correcciones a mano del mes") y se puede quitar con el basurero. También corrige las comisiones, la plata por llegar y la pestaña Año. Con el mes cerrado hay que reabrirlo para corregir.
@@ -116,8 +120,10 @@ Mientras tanto, **Metas** y la **comparación con el año anterior** del cierre 
 
 ## Preguntas frecuentes
 
+- **¿Dónde veo los excedentes?** En **Cuentas → Mes**, cada cuenta muestra "Ventas (cierres)" (solo ventas), "Excedentes" y "Ventas + excedentes" (el total que entró). En **Cuentas → Año** hay una columna "Excedentes" al lado de Ventas. No suman a la ganancia ni a las ventas.
+- **Un cierre no se sincroniza, ¿qué hago?** Salió con diferencia (no fue "Cierre exitoso"). Corrige en Cierre diario de caja (conteo, transferencias, excedentes, gastos) y envíalo otra vez con la misma fecha. Los excedentes de transferencias de cierres anteriores al 8-oct-2026 no se guardaron: si hace falta, usa Ajuste manual.
 - **¿Lo que sobra de un mes pasa al siguiente?** Sí, solo. El "saldo inicial" de cada cuenta es lo que quedó el mes anterior. Ya no hace falta anotar recompras en el mes anterior como hacías en el Excel.
 - **¿Me equivoqué en un gasto?** Edítalo o bórralo con el lápiz / la caneca en Gastos: el saldo de las cuentas se corrige solo.
-- **¿Por qué la venta del mes de Alegra no es igual a "Ventas (cierres)" en una cuenta?** La tabla de ventas viene de Alegra (lo vendido); "Ventas (cierres)" es lo que se abonó a cada cuenta con el cierre de caja (el efectivo ya viene sin lo que se sacó de la caja ese día).
+- **¿Por qué la venta del mes de Alegra no es igual a "Ventas (cierres)" en una cuenta?** La tabla de ventas viene de Alegra (lo vendido); "Ventas (cierres)" es lo que se abonó a cada cuenta con el cierre de caja (el efectivo ya viene sin lo que se sacó de la caja ese día). Los excedentes van aparte, en su columna.
 - **Bold:** sus ventas salen en la tabla y la plata se toma como que llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Su comisión y en cuántos días llega no se conocen, así que no aparece en "por llegar".
 - **¿Qué es cada ganancia?** Bruta = ventas − recompras. Neta = ventas − gastos (como tu Excel). Real = ventas − recompras − gastos. "G. real + inventario" suma lo que subió el inventario: si subió, esa plata está en la tienda en ropa.

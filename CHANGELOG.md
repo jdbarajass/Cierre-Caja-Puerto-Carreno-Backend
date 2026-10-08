@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-08] - Excedentes del cierre en Cuentas y solo un Cierre exitoso se sincroniza
+
+Fase 1 de `docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md` (incluye el análisis del Excel de cierre de las vendedoras).
+- `CashClosing`: excedentes por medio (`excedente_efectivo/nequi/daviplata/qr/datafono`), `validation_status` y `validation_message` (migración sin DEFAULT: cierres viejos en NULL). `excedentes()` y `can_sync`.
+- `POST /api/sum_payments` guarda excedentes y estado de la validación.
+- Sincronización: las ventas (`cash_closing`) y los excedentes (tipo nuevo **`excedente`**) entran como movimientos separados; antes los excedentes de Nequi/Daviplata/QR/datáfono no entraban a ninguna cuenta y el de efectivo quedaba mezclado con las ventas. Solo se sincroniza un **Cierre exitoso** (`success`; NULL = cierre viejo, se permite): los demás quedan pendientes en `blocked` (sync-daily sin fecha → 200, con fecha → 409; `sync-status.blocked`).
+- Cuentas → Mes: columna `excedentes` e `ingresos_cierres` (ventas + excedentes). Cuentas → Año: `excedentes` y `ventas_mas_excedentes` (no cambian ventas, ganancias ni 70/30).
+- Tests: `tests/test_excedentes_cierre.py` (4); `tests/test_multi_store.py` con Alegra simulado que cuadra. **263/263** (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-07] (continuación 10) - Addi sí paga el festivo del 12 de octubre
 
 - Verificado en producción contra el Reporte de pagos de Addi: por llegar de Addi $3.013.125 (= suma de los "Pendiente de pago"). Única diferencia: la venta del 11-sep la paga Addi el lunes 12-oct (festivo Día de la Raza) y la plataforma decía 13-oct. `payment_facts._addi_pays_on`: Addi salta fines de semana y festivos (2-nov -> 3-nov sigue igual) salvo ese. Test de llegada con 3 fechas más del reporte.

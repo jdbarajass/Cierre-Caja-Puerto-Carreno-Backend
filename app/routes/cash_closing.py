@@ -382,6 +382,21 @@ def sum_payments():
             closing_row.qr = metodos_pago_calculados.get('qr_julieth', 0)
             closing_row.addi_datafono = metodos_pago_calculados.get('total_datafono_real', 0)
 
+            # Excedentes por medio (no son venta): se abonan aparte al
+            # sincronizar. `efectivo` ya trae adentro excedente_efectivo
+            # (es la plata física); los demás medios no.
+            closing_row.excedente_efectivo = excedentes_procesados['excedente_efectivo']
+            closing_row.excedente_nequi = excedentes_procesados['excedente_nequi']
+            closing_row.excedente_daviplata = excedentes_procesados['excedente_daviplata']
+            closing_row.excedente_qr = excedentes_procesados['excedente_qr']
+            closing_row.excedente_datafono = excedentes_procesados['excedente_datafono']
+
+            # Solo un Cierre exitoso ('success') se puede sincronizar con
+            # Cuentas (ver CashClosing.can_sync). Si la vendedora corrige y
+            # reenvía, este estado se actualiza.
+            closing_row.validation_status = validacion_cierre['validation_status']
+            closing_row.validation_message = (validacion_cierre.get('mensaje_validacion') or '')[:500]
+
             # Guarda la comparación con Alegra que YA se calculó arriba (con
             # los ajustes de excedentes/gastos/préstamos/desfases - la misma
             # que decide si el cierre sale "exitoso"), en vez de que

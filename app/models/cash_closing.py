@@ -31,6 +31,26 @@ class CashClosing(StoreScopedMixin, db.Model):
     qr = db.Column(db.Float, default=0, nullable=False)
     addi_datafono = db.Column(db.Float, default=0, nullable=False)
 
+    # Excedentes del día por medio (2026-10-08, docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md):
+    # plata que entró pero NO es venta de Alegra (diferencia de un cambio de
+    # prenda, de una tarjeta regalo, vueltas que deja un cliente). OJO:
+    # `efectivo` es la plata física a consignar y YA incluye excedente_efectivo;
+    # nequi/daviplata/qr/addi_datafono son lo registrado (= Alegra) y NO
+    # incluyen su excedente. Al sincronizar (accounts.py) cada excedente se
+    # abona aparte, como movimiento 'excedente'. NULL en cierres anteriores.
+    excedente_efectivo = db.Column(db.Float, default=0, nullable=True)
+    excedente_nequi = db.Column(db.Float, default=0, nullable=True)
+    excedente_daviplata = db.Column(db.Float, default=0, nullable=True)
+    excedente_qr = db.Column(db.Float, default=0, nullable=True)
+    excedente_datafono = db.Column(db.Float, default=0, nullable=True)
+
+    # Resultado de la validación contra Alegra al enviar el cierre
+    # ('success' | 'warning' | 'error'). Solo un cierre 'success' (Cierre
+    # exitoso) se puede sincronizar con Cuentas. NULL = cierre guardado antes
+    # de este cambio: se deja sincronizar como siempre.
+    validation_status = db.Column(db.String(10), nullable=True)
+    validation_message = db.Column(db.String(500), nullable=True)
+
     # Totales reportados por Alegra para ese día (para verificación, no para acreditar)
     alegra_total_efectivo = db.Column(db.Float, nullable=True)
     alegra_total_transferencia = db.Column(db.Float, nullable=True)
@@ -48,6 +68,24 @@ class CashClosing(StoreScopedMixin, db.Model):
 
     creator = db.relationship('User', foreign_keys=[created_by], lazy='joined')
 
+    # payment_key de la cuenta de Resumen -> excedente de ese medio
+    EXCEDENTE_FIELDS = (
+        ('cash', 'excedente_efectivo'),
+        ('nequi', 'excedente_nequi'),
+        ('daviplata', 'excedente_daviplata'),
+        ('qr', 'excedente_qr'),
+        ('addi_datafono', 'excedente_datafono'),
+    )
+
+    def excedentes(self):
+        """Excedentes por payment_key (0 si el cierre es de antes del cambio)."""
+        return {key: float(getattr(self, field) or 0) for key, field in self.EXCEDENTE_FIELDS}
+
+    @property
+    def can_sync(self):
+        """Solo un Cierre exitoso pasa a Cuentas (NULL = cierre antiguo, se permite)."""
+        return self.validation_status in (None, 'success')
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -58,6 +96,11 @@ class CashClosing(StoreScopedMixin, db.Model):
             'daviplata': self.daviplata,
             'qr': self.qr,
             'addi_datafono': self.addi_datafono,
+            'excedentes': self.excedentes(),
+            'total_excedentes': sum(self.excedentes().values()),
+            'validation_status': self.validation_status,
+            'validation_message': self.validation_message,
+            'can_sync': self.can_sync,
             'alegra_total_efectivo': self.alegra_total_efectivo,
             'alegra_total_transferencia': self.alegra_total_transferencia,
             'alegra_total_tarjeta': self.alegra_total_tarjeta,

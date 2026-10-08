@@ -388,6 +388,21 @@ def _clear_sync_failure_alert():
         logger.warning(f"sync_daily: no se pudo limpiar la alerta de fallo previa: {e}")
 
 
+def _blocked_message(closing):
+    return (f"El cierre del {closing.closing_date.isoformat()} no salió exitoso y no se sincroniza "
+            f"hasta que se corrija y se vuelva a enviar con Cierre exitoso.")
+
+
+def _blocked_info(closing):
+    """Cierre pendiente que no se puede sincronizar (no salió exitoso)."""
+    return {
+        'date': closing.closing_date.isoformat(),
+        'validation_status': closing.validation_status,
+        'validation_message': closing.validation_message,
+        'message': _blocked_message(closing),
+    }
+
+
 def _claim_and_credit_closing(closing, user_id):
     """
     "Reclama" un cierre (UPDATE atómico condicionado a synced_to_accounts=False)
@@ -419,9 +434,14 @@ def _claim_and_credit_closing(closing, user_id):
         }
 
     # Mapeo cuenta <- campo del cierre (usa los mismos campos que ya llena
-    # la vendedora en el cierre de caja diario)
+    # la vendedora en el cierre de caja diario). Las ventas y los excedentes
+    # se abonan como movimientos separados ('cash_closing' y 'excedente') para
+    # que Cuentas → Mes muestre el subtotal de ventas y el total con
+    # excedentes. `efectivo` es la plata física y ya trae su excedente
+    # adentro: la venta en efectivo es efectivo − excedente_efectivo.
+    excedentes = closing.excedentes()
     credit_map = [
-        ('cash', closing.efectivo),
+        ('cash', closing.efectivo - excedentes['cash']),
         ('nequi', closing.nequi),
         ('daviplata', closing.daviplata),
         ('qr', closing.qr),
@@ -434,7 +454,10 @@ def _claim_and_credit_closing(closing, user_id):
     ).all()}
 
     credited = []
-    for payment_key, amount in credit_map:
+    movements = [(key, amount, 'cash_closing', f'Cierre de caja {date_str}') for key, amount in credit_map]
+    movements += [(key, amount, 'excedente', f'Excedente cierre de caja {date_str}')
+                  for key, amount in excedentes.items()]
+    for payment_key, amount, movement_type, description in movements:
         if not amount:
             continue
         account = accounts_by_key.get(payment_key)
@@ -444,15 +467,16 @@ def _claim_and_credit_closing(closing, user_id):
 
         movement = AccountMovement(
             account_id=account.id,
-            type='cash_closing',
+            type=movement_type,
             amount=amount,
-            description=f'Cierre de caja {date_str}',
+            description=description,
             cash_closing_id=closing.id,
             created_by=user_id
         )
         account.balance += amount
         db.session.add(movement)
-        credited.append({'account': account.name, 'amount': amount, 'date': date_str})
+        credited.append({'account': account.name, 'amount': amount, 'date': date_str,
+                         'kind': 'excedente' if movement_type == 'excedente' else 'venta'})
 
     # La comparación con Alegra (con los ajustes de excedentes/gastos/
     # préstamos/desfases - la misma que decide si el cierre sale "exitoso")
@@ -516,21 +540,34 @@ def sync_daily():
                     'success': False,
                     'message': f'No hay cierre de caja registrado para {date_str}'
                 }), 404
+            if not closing.synced_to_accounts and not closing.can_sync:
+                return jsonify({
+                    'success': False,
+                    'message': _blocked_message(closing),
+                    'blocked': [_blocked_info(closing)],
+                }), 409
             targets = [closing]
+            blocked = []
         else:
             today = get_colombia_now().date()
-            targets = CashClosing.for_current_store().filter(
+            pending = CashClosing.for_current_store().filter(
                 CashClosing.synced_to_accounts == False,  # noqa: E712
                 CashClosing.closing_date <= today
             ).order_by(CashClosing.closing_date.asc()).all()
+            # Un cierre que no salió exitoso NO pasa a Cuentas: se queda
+            # pendiente hasta que la vendedora lo corrija y lo reenvíe.
+            targets = [c for c in pending if c.can_sync]
+            blocked = [_blocked_info(c) for c in pending if not c.can_sync]
 
             if not targets:
                 _clear_sync_failure_alert()
                 return jsonify({
                     'success': True,
-                    'message': 'No hay cierres pendientes de sincronizar.',
+                    'message': (' '.join(b['message'] for b in blocked) if blocked
+                                else 'No hay cierres pendientes de sincronizar.'),
                     'results': [],
-                    'credited': []
+                    'credited': [],
+                    'blocked': blocked,
                 }), 200
 
         results = [_claim_and_credit_closing(closing, user_id) for closing in targets]
@@ -541,6 +578,8 @@ def sync_daily():
             message = f"Sincronizado: {', '.join(newly_synced_dates)}" if len(newly_synced_dates) > 1 else None
         else:
             message = 'Este cierre ya fue sincronizado anteriormente, no se duplica.' if len(results) == 1 else 'Todos los cierres del rango ya estaban sincronizados, no se duplican.'
+        if blocked:
+            message = ' '.join(filter(None, [message] + [b['message'] for b in blocked]))
 
         # Esta corrida terminó bien: si había una alerta de fallo de una
         # corrida anterior (ver report_sync_failure), ya no aplica.
@@ -552,6 +591,7 @@ def sync_daily():
             'results': results,
             'credited': all_credited,
             'synced_dates': newly_synced_dates,
+            'blocked': blocked,
             # Compatibilidad con llamadas que aún esperan la forma de un solo cierre
             **({'date': results[0]['date'], 'alegra_discrepancy': results[0].get('alegra_discrepancy'), 'cash_closing': results[0].get('cash_closing')} if len(results) == 1 else {})
         }), 200
@@ -599,10 +639,13 @@ def sync_status():
         CashClosing.closing_date >= tracking_start
     ).order_by(CashClosing.closing_date.desc(), CashClosing.synced_at.desc()).first()
 
-    pending_count = CashClosing.for_current_store().filter(
+    pending = CashClosing.for_current_store().filter(
         CashClosing.synced_to_accounts == False,  # noqa: E712
         CashClosing.closing_date <= today
-    ).count()
+    ).order_by(CashClosing.closing_date.asc()).all()
+    pending_count = len(pending)
+    # Pendientes que no se pueden sincronizar porque no salieron exitosos
+    blocked = [_blocked_info(c) for c in pending if not c.can_sync]
 
     last_failure = None
     failure_setting = AppSetting.query.get(store_setting_key(SYNC_FAILURE_SETTING_KEY))
@@ -618,6 +661,7 @@ def sync_status():
         'last_synced_at': _iso_utc(last_synced.synced_at) if last_synced else None,
         'last_discrepancy': last_synced.alegra_discrepancy if last_synced else None,
         'pending_count': pending_count,
+        'blocked': blocked,
         'last_failure': last_failure
     }), 200
 

@@ -4,9 +4,10 @@ Hoja del mes (Cuentas → Mes, Fase 2 de docs/PLAN_CUENTAS_DIARIAS.md).
 Junta en una sola respuesta lo que el usuario veía "todo de una" en el Excel:
 - Ventas diarias por los 10 medios (recibos de Alegra, PaymentFact) con la
   calificación del día (mala / bajita / buena / alta).
-- Estado de cada cuenta de Resumen en el mes: saldo inicial + ventas −
-  recompras − gastos + entradas ± ajustes/transferencias = saldo final, día
-  por día, y el saldo real que escribe el usuario (conciliación).
+- Estado de cada cuenta de Resumen en el mes: saldo inicial + ventas +
+  excedentes − recompras − gastos + entradas ± ajustes/transferencias = saldo
+  final, día por día, y el saldo real que escribe el usuario (conciliación).
+  Los excedentes de los cierres (no son venta) van en su propia columna.
 - Plata en tránsito del datáfono y Addi (bruto, neto y cuándo llega) y las
   comisiones del mes.
 - Correcciones a mano del medio de un día (SaleMethodCorrection): cuentan en
@@ -38,6 +39,7 @@ RATING_ORDER = ('mala', 'bajita', 'buena', 'alta')
 # Tipo de movimiento de Resumen -> columna del estado de cuenta
 MOVEMENT_COLUMNS = {
     'cash_closing': 'ventas',
+    'excedente': 'excedentes',  # no es venta: se muestra aparte (subtotal ventas + excedentes = total)
     'repurchase_send': 'recompras',
     'expense': 'gastos',
     'expense_in': 'entradas',
@@ -45,7 +47,7 @@ MOVEMENT_COLUMNS = {
     'transfer_in': 'transferencias',
     'transfer_out': 'transferencias',
 }
-STATEMENT_COLUMNS = ('ventas', 'recompras', 'gastos', 'entradas', 'ajustes', 'transferencias')
+STATEMENT_COLUMNS = ('ventas', 'excedentes', 'recompras', 'gastos', 'entradas', 'ajustes', 'transferencias')
 
 COMMISSION_MARKER = 'auto:comisiones:{period}'
 COMMISSION_CONCEPT = 'Comisiones datáfono y Addi {label}'
@@ -225,6 +227,8 @@ def account_statement(store: str, start: date, end: date, period: str) -> List[D
             'color': a.color,
             'initial': initial,
             **cols,
+            # Subtotal de ventas (cols['ventas']) + excedentes del mes
+            'ingresos_cierres': cols['ventas'] + cols['excedentes'],
             'final': final,
             'real_balance': rec.real_balance if rec else None,
             'real_note': rec.note if rec else None,

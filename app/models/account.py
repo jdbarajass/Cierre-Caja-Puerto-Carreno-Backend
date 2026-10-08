@@ -13,6 +13,7 @@ MOVEMENT_TYPES = (
     'transfer_out',
     'transfer_in',
     'cash_closing',
+    'excedente',    # excedente del cierre de caja (no es venta, ver CashClosing)
     'repurchase_send',
     'expense',      # Cuentas → Gastos: salida (app/routes/expenses.py)
     'expense_in',   # Cuentas → Gastos: entrada que no es venta

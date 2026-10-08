@@ -14,6 +14,9 @@ del plan):
   + aumento del inventario (si el inventario sube, esa plata está en la tienda).
 - aparte (no son gasto): inversiones, retiros de socios, préstamos, fletes,
   lo que tiene Jhonatan al cierre del mes.
+- excedentes (otros ingresos, no son venta): lo abonado como 'excedente' por
+  los cierres de caja del mes ya sincronizados con Cuentas. No cambian ventas,
+  ganancias ni la regla 70/30; se muestran aparte con ventas + excedentes.
 Cada dato se puede escribir a mano (MonthlySummaryOverride) y manda sobre el
 calculado.
 
@@ -28,6 +31,8 @@ from typing import Any, Dict, Optional
 from sqlalchemy import func
 
 from app.models.user import db
+from app.models.account import AccountMovement
+from app.models.cash_closing import CashClosing
 from app.models.expense import Expense
 from app.models.invoice_fact import InvoiceFact
 from app.models.month_sheet import PaymentFact
@@ -103,8 +108,16 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
         medios[c.from_medio] = medios.get(c.from_medio, 0) - c.amount
         medios[c.to_medio] = medios.get(c.to_medio, 0) + c.amount
 
+    # Excedentes de los cierres del mes (solo los sincronizados con Cuentas,
+    # es decir, cierres exitosos: lo mismo que entró a las cuentas)
+    excedentes = _sum(db.session.query(func.sum(AccountMovement.amount)).join(
+        CashClosing, AccountMovement.cash_closing_id == CashClosing.id).filter(
+        AccountMovement.type == 'excedente', CashClosing.store_code == store,
+        CashClosing.closing_date >= start, CashClosing.closing_date <= end))
+
     return {
         'ventas': ventas,
+        'excedentes': excedentes,
         'recompras': recompras,
         'gastos_operativos': gastos_operativos,
         'inversiones': by_cat['inversion'],
@@ -168,7 +181,7 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         row.update(values)
         row['edited'] = edited
         row['computed'] = {f: comp[f] for f in OVERRIDE_FIELDS}
-        for k in ('gastos_por_categoria', 'recompras_fee', 'compras_jhonatan', 'ventas_por_medio',
+        for k in ('excedentes', 'gastos_por_categoria', 'recompras_fee', 'compras_jhonatan', 'ventas_por_medio',
                   'has_sales_data', 'has_payments_data', 'has_expenses'):
             row[k] = comp[k]
         # Si se escribieron los gastos a mano, el mes sí tiene gastos
@@ -179,6 +192,7 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         row['ganancia_neta'] = ventas - gastos
         row['ganancia_real'] = ventas - recompras - gastos
         row['porcentaje'] = (row['ganancia_real'] / ventas) if ventas else None
+        row['ventas_mas_excedentes'] = ventas + row['excedentes']
 
         inv = row['inventario']
         row['inventario_cambio'] = (inv - prev_inventory) if (inv is not None and prev_inventory is not None) else None
@@ -200,7 +214,7 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         months.append(row)
 
     done = [m for m in months if not m['future'] and not m['before_start']]
-    numeric = ('ventas', 'recompras', 'gastos_operativos', 'ganancia_bruta', 'ganancia_neta', 'ganancia_real',
+    numeric = ('ventas', 'excedentes', 'ventas_mas_excedentes', 'recompras', 'gastos_operativos', 'ganancia_bruta', 'ganancia_neta', 'ganancia_real',
                'inversiones', 'retiros', 'prestamos', 'fletes', 'resurtido_esperado', 'resurtido_diferencia',
                'utilidad_esperada', 'utilidad_diferencia')
     totals = {k: sum(m[k] for m in done) for k in numeric}

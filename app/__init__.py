@@ -639,6 +639,16 @@ def _migrate_employee_tables(db, app):
         # Incentivos por empleada (Fase 4 de PLAN_CUENTAS_DIARIAS, 2026-10-07):
         # NULL = incentivo de la tienda, sin empleada.
         add_column_if_missing(conn, 'incentive_rules', 'employee_name', 'VARCHAR(100)')
+
+        # Excedentes por medio y resultado de la validación del cierre
+        # (docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md, 2026-10-08). Sin DEFAULT:
+        # los cierres ya guardados quedan en NULL (= sin excedentes guardados y
+        # se pueden sincronizar como antes).
+        for column in ('excedente_efectivo', 'excedente_nequi', 'excedente_daviplata',
+                       'excedente_qr', 'excedente_datafono'):
+            add_column_if_missing(conn, 'cash_closings', column, 'FLOAT')
+        add_column_if_missing(conn, 'cash_closings', 'validation_status', 'VARCHAR(10)')
+        add_column_if_missing(conn, 'cash_closings', 'validation_message', 'VARCHAR(500)')
         conn.commit()
 
 

@@ -18,8 +18,12 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv('ALEGRA_PASS_CARRENO', 'tok-carreno')
     monkeypatch.delenv('ALEGRA_USER_PRIMAVERA', raising=False)
     monkeypatch.delenv('ALEGRA_PASS_PRIMAVERA', raising=False)
-    # Sin facturas en Alegra: el cierre se calcula igual, sin red.
-    monkeypatch.setattr(AlegraClient, 'get_invoices_by_date', lambda self, date: [])
+    # Alegra simulado (sin red) con lo mismo que trae _closing_payload, para
+    # que el cierre salga exitoso: solo un Cierre exitoso se sincroniza.
+    monkeypatch.setattr(AlegraClient, 'get_invoices_by_date', lambda self, date: [
+        {'id': '1', 'status': 'open', 'total': 70000, 'payments': [
+            {'amount': 50000, 'paymentMethod': 'cash'}, {'amount': 20000, 'paymentMethod': 'transfer'}]},
+    ])
 
     class MultiStoreTestConfig(TestingConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{(tmp_path / 'multi_store.db').as_posix()}"
