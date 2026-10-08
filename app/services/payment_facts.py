@@ -105,8 +105,22 @@ def arrival_date(medio: str, sale_date: date) -> Optional[date]:
         return next_business_day(sale_date)
     if medio == 'addi':
         d = sale_date + timedelta(days=ADDI_DAYS)
-        return d if is_business_day(d) else next_business_day(d)
+        while not _addi_pays_on(d):
+            d += timedelta(days=1)
+        return d
     return None
+
+
+def _addi_pays_on(d: date) -> bool:
+    """
+    Días en que Addi consigna. Según el Reporte de pagos de Addi (oct-2026)
+    salta fines de semana y festivos (2-nov -> 3-nov), pero SÍ paga el festivo
+    del 12 de octubre (Día de la Raza, que la ley pasa al lunes): venta del
+    11-sep -> pago lunes 12-oct-2026.
+    """
+    if d.weekday() >= 5:
+        return False
+    return d not in colombia_holidays(d.year) or d == _next_monday(date(d.year, 10, 12))
 
 
 def net_amount(medio: str, amount: float) -> float:

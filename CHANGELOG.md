@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-10-07] (continuación 10) - Addi sí paga el festivo del 12 de octubre
+
+- Verificado en producción contra el Reporte de pagos de Addi: por llegar de Addi $3.013.125 (= suma de los "Pendiente de pago"). Única diferencia: la venta del 11-sep la paga Addi el lunes 12-oct (festivo Día de la Raza) y la plataforma decía 13-oct. `payment_facts._addi_pays_on`: Addi salta fines de semana y festivos (2-nov -> 3-nov sigue igual) salvo ese. Test de llegada con 3 fechas más del reporte.
+
 ## [2026-10-07] (continuación 9) - Plata por llegar: una fila por venta
 
 - `month_sheet.transit`: cada grupo (día de llegada + medio) trae `by_sale` = [{date, gross, net}] por día de venta. Addi paga cada venta por separado aunque lleguen el mismo día (ej. 1-oct y 3-oct → 3-nov: $166.077 y $156.943, iguales al "Reporte de pagos" de Addi del usuario). Lo usa la ventana "lo que falta que llegue" de Cuentas → Mes.

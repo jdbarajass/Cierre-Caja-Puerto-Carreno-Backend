@@ -96,7 +96,8 @@ def test_festivos_2026():
 def test_llegada_addi_igual_al_reporte_de_addi():
     # Reporte de pagos de Addi del usuario: venta -> pago
     for sale, pay in (('2026-10-05', '2026-11-04'), ('2026-10-03', '2026-11-03'), ('2026-10-01', '2026-11-03'),
-                      ('2026-09-29', '2026-10-29'), ('2026-09-25', '2026-10-26'), ('2026-09-20', '2026-10-20')):
+                      ('2026-09-29', '2026-10-29'), ('2026-09-25', '2026-10-26'), ('2026-09-20', '2026-10-20'),
+                      ('2026-09-11', '2026-10-12'), ('2026-09-04', '2026-10-05'), ('2026-08-28', '2026-09-28')):  # Addi sí paga el 12-oct
         assert arrival_date('addi', date.fromisoformat(sale)).isoformat() == pay
     assert round(net_amount('addi', 204700), 2) == 188866.45      # mismo neto del reporte
     assert arrival_date('ahorro', date(2026, 10, 3)) == date(2026, 10, 5)    # sábado -> lunes
