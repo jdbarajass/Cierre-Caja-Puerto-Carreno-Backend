@@ -5,7 +5,7 @@ Pedido del usuario (2026-10-08). Las vendedoras hacen el cierre de las 8 pm en e
 | Fase | Qué | Estado |
 |---|---|---|
 | 1 | Excedentes por medio en Cuentas (subtotal ventas + excedentes = total) y bloquear "Sincronizar" si el cierre no salió exitoso | **Hecha 2026-10-08** (commit local; falta push y Manual Deploy) |
-| 2 | Subir el Excel del cierre para llenar el formulario (sin guardarlo), con avisos; la vendedora revisa y envía | Pendiente (después de probar la Fase 1) |
+| 2 | Subir el Excel del cierre para llenar el formulario (sin guardarlo), con avisos; la vendedora revisa y envía | **Hecha 2026-10-08** (commit local; se sube junto con la Fase 1) |
 
 ---
 
@@ -80,18 +80,30 @@ Hoy el usuario cuadra el inventario con un **ajuste de inventario** en Alegra. E
 
 ---
 
-## Fase 2 (pendiente): subir el Excel para llenar el cierre
+## Fase 2 (hecha 2026-10-08): subir el Excel para llenar el cierre
 
-Decisión: **solo llena el formulario**, no envía el cierre solo. El archivo **no se guarda**.
+Decisión: **solo llena el formulario**, no envía el cierre solo. El archivo **no se guarda** (se lee en memoria con tope de 5 MB).
 
-1. En Cierre diario, después de la preconsulta, botón "Subir Excel del cierre".
-2. Backend `POST /api/cash_closing/parse-excel` (multipart, `openpyxl` ya está en requirements, `data_only=True`; el archivo trae los valores calculados porque Excel los guarda): lee
-   - fecha (`CIERRE ALEGRA!B3`, "Reporte de ventas diarias del d/m/aaaa"),
-   - conteo `CIERRE CAJA!C5:C8` y `C13:C18`,
-   - excedentes `D23` (datáfono), `D24` (QR: preguntar a qué subtipo: por defecto QR), `D25` (efectivo); gastos `D26`, préstamos `D27`,
-   - transferencias y tarjetas `CIERRE ALEGRA!F11` Nequi, `F12` Daviplata, `F13` QR, `F15` Addi, `F16` débito, `F17` crédito,
-   - y lo que escribieron de Alegra (`F10`, `C13`) solo para avisar si no coincide con lo que trae la plataforma.
-   Buscar las celdas por el texto de la etiqueta (ej. "Total Dinero En Caja 1") y no solo por posición, para aguantar filas movidas; si algo no se encuentra, error claro.
-3. Avisos: fecha del Excel ≠ fecha del cierre; valores de Alegra del Excel ≠ Alegra; base escogida en el Excel ≠ base que calcula la plataforma (el total a consignar es el mismo).
-4. El formulario queda lleno; la vendedora revisa y toca Enviar como hoy. Se guarda en el borrador local como si lo hubiera escrito.
-5. Tests con un Excel de ejemplo armado con openpyxl en el test (no versionar el Excel real).
+### Backend
+- `app/services/closing_excel.py` → `parse_closing_excel(content, filename, expected_date)`. Busca las celdas por el **texto de la etiqueta** (sin tildes ni mayúsculas), no por posición fija, para aguantar filas movidas:
+  - Conteo: debajo de "Total Dinero En Caja 1", denominaciones en esa columna y cantidades al lado, hasta "TOTAL BILLETES Y MONEDAS". La base que dejaron: igual bajo "Cierre de turno (Base…" (solo para avisar).
+  - Excedentes, gastos y préstamos (CIERRE CAJA): etiquetas exactas "Excedente Datafono", "Excedente QR/Transferencias", "Excedente Efectivo", "Gastos Operativos", "Préstamos"; valor hasta 2 columnas a la derecha (la etiqueta ocupa B:C y el valor está en D).
+  - Medios (CIERRE ALEGRA): "Transferencia Nequi", "Transferencia Daviplata", "Transferencia (QR)" (sin "Total"), "Datafono Addi", "Tarjeta débito", "Tarjeta Crédito"; valor **solo** en la columna de al lado (a la derecha hay otro cuadro con números que no se debe leer).
+  - Notas de gastos y préstamos: columna NOTA (2 a la derecha de "Gastos operativos ()" / "Préstamos ()" en CIERRE ALEGRA). Ej. "bolsas".
+  - Fecha: "Reporte de ventas diarias del d/m/aaaa"; si no está, del nombre del archivo ("07 de OCTUBRE 2026").
+  - "Efectivo en Alegra" y "Total Facturación Electrónica" del Excel: solo para avisar.
+  - Avisos: fecha distinta a la del cierre, sin fecha, excedente de transferencias (el Excel no dice si fue QR, Nequi o Daviplata: se pone QR), base con más billetes que los contados. Errores claros si faltan las pestañas o los cuadros, o si no es un .xlsx.
+- `POST /api/cash_closing/parse-excel` (`app/routes/cash_closing.py`, admin y vendedoras): multipart `file` (.xlsx/.xlsm) + `date` opcional. Devuelve `coins`, `bills`, `excedentes` [{tipo, subtipo, valor}], `gastos_operativos(_nota)`, `prestamos(_nota)`, `metodos_pago`, `excel_alegra`, `excel_totals` {total_caja, base, consignar}, `warnings`. No crea ni cambia nada en la base.
+- Tests: `tests/test_closing_excel.py` (5; el Excel se arma en el test imitando el formato, el real no se versiona): formato del 7-oct, filas corridas + excedente QR + otra fecha, fecha desde el nombre, archivo que no es el formato, endpoint (no guarda, .csv rechazado, sin archivo, sin token). **268/268.**
+
+### Frontend
+- `src/services/api.js` → `parseClosingExcel(file, date)` (FormData).
+- `Dashboard.jsx`, paso 2 (Efectivo contado): recuadro "¿Ya hicieron el cierre en el Excel?" con botón **Subir Excel del cierre**. Llena conteo, excedentes, gastos y préstamos (con su nota), transferencias y tarjetas; los desfases no se tocan. Muestra "Formulario llenado con <archivo> (en el Excel: $X a consignar)" y los avisos; además compara lo que escribieron de Alegra con la preconsulta (efectivo y total, diferencia ≥ $100) y la base del Excel con la de la plataforma. Los valores entran al borrador local como si se hubieran escrito.
+
+### Verificado
+- Con el Excel real del 7-oct: lee 1.184.000 en caja, 734.000 a consignar, excedente efectivo 600, gastos 3.000 "bolsas", QR 599.550, débito 269.700.
+- Prueba de punta a punta en local (Chromium, 1366 y 390 px, sin scroll horizontal; backend con base temporal y Alegra simulado con los totales del 7-oct): subir el Excel → formulario lleno sin avisos → Realizar Cierre → **Cierre Exitoso** → Sincronizar: EFECTIVO venta 733.400 + excedente 600 = 734.000, QR 599.550, ADDI + DATÁFONO 269.700.
+
+### Límites
+- Si cambian las etiquetas del formato (no solo la posición), hay que ajustar `closing_excel.py`.
+- La plataforma calcula sola qué billetes dejar de base; puede escoger otros que el Excel (el total a consignar es el mismo si la base es la misma).

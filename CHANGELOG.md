@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-10-08] (continuación) - Subir el Excel del cierre para llenar el formulario
+
+Fase 2 de `docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md`.
+- `app/services/closing_excel.py` + `POST /api/cash_closing/parse-excel`: lee el Excel "Formato Cierre Caja" (CIERRE CAJA y CIERRE ALEGRA) buscando las celdas por etiqueta y devuelve conteo, excedentes, gastos y préstamos con nota, transferencias, tarjetas, totales del Excel y avisos (fecha, excedente de transferencias, base). No guarda el archivo ni el cierre.
+- Verificado con el Excel real del 7-oct y de punta a punta en local (Cierre Exitoso y sincronización cuadran con el Excel).
+- Tests: `tests/test_closing_excel.py` (5). **268/268**.
+
 ## [2026-10-08] - Excedentes del cierre en Cuentas y solo un Cierre exitoso se sincroniza
 
 Fase 1 de `docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md` (incluye el análisis del Excel de cierre de las vendedoras).

@@ -1117,3 +1117,52 @@ def preconsulta_alegra():
             'details': str(e),
             'server_timestamp': get_colombia_timestamp()
         }), 500
+
+
+@bp.route('/cash_closing/parse-excel', methods=['POST', 'OPTIONS'])
+@token_required
+@role_required_any(['admin', 'sales'])
+def parse_closing_excel_route():
+    """
+    Lee el Excel del cierre de las vendedoras y devuelve los valores para
+    LLENAR el formulario (conteo, excedentes, gastos, préstamos, transferencias
+    y tarjetas) con avisos. No guarda el archivo ni envía el cierre.
+    Fase 2 de docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md.
+
+    multipart/form-data: file (.xlsx / .xlsm), date (YYYY-MM-DD, opcional:
+    fecha del cierre, para avisar si el Excel es de otro día).
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    from app.services.closing_excel import parse_closing_excel, MAX_FILE_BYTES
+
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({'success': False, 'error': 'No se envió ningún archivo.'}), 400
+    if not upload.filename.lower().endswith(('.xlsx', '.xlsm')):
+        return jsonify({'success': False, 'error': 'El archivo debe ser Excel .xlsx (si es .xls, ábrelo y guárdalo como .xlsx).'}), 400
+
+    expected = None
+    date_str = request.form.get('date')
+    if date_str:
+        try:
+            expected = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Fecha inválida. Use YYYY-MM-DD'}), 400
+
+    # Se lee en memoria con tope de tamaño; el archivo nunca se escribe a disco
+    content = upload.stream.read(MAX_FILE_BYTES + 1)
+    try:
+        data = parse_closing_excel(content, upload.filename, expected)
+    except ValidationError as e:
+        return jsonify({'success': False, 'error': e.message}), 400
+    except Exception as e:
+        current_app.logger.error(f"Error leyendo el Excel del cierre: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': 'No se pudo leer el Excel del cierre.'}), 400
+
+    current_app.logger.info(
+        f"Excel de cierre leído ({upload.filename}, tienda={get_current_store()}): "
+        f"fecha={data['date']}, caja={data['excel_totals']['total_caja']}, avisos={len(data['warnings'])}"
+    )
+    return jsonify({'success': True, **data}), 200

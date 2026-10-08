@@ -73,6 +73,10 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 5. Si es un **préstamo a una empleada**, elige "Préstamo a empleada" y su nombre: queda solo en Empleadas → Préstamos. Si te lo devuelve, usa **"Registrar entrada" → "Devolución de préstamo"**.
 6. Si es algo que **Carreño paga por Primavera**, elige "Préstamo a otra tienda" → Primavera. Abajo verás cuánto te debe Primavera. Cuando te devuelva, **"Registrar entrada" → "Devolución de otra tienda"**.
 
+**Cada noche, al hacer el cierre de caja (8 pm):**
+- Si las vendedoras ya llenaron el **Excel del cierre** (Formato Cierre Caja), no tienen que volver a escribir todo: en **Cierre diario de caja**, elige la fecha, toca **"Realizar Preconsulta"** y en el paso 2 toca **"Subir Excel del cierre"**. Se llenan solos el conteo de monedas y billetes, los excedentes, los gastos y préstamos (con su nota), las transferencias y las tarjetas. El archivo **no se guarda**.
+- Lee los avisos amarillos si salen (ej. "el Excel es de otro día", "el efectivo de Alegra del Excel no es igual al de hoy", "el excedente de transferencias se puso como QR"), revisa los valores y toca **"Realizar Cierre"** como siempre.
+
 **Cada noche, después del cierre de caja:**
 - En **Gestión de cuentas** toca **"Sincronizar ahora"** (o espera el automático de las 9 pm). **Solo pasa a las cuentas un cierre que salió "Cierre exitoso".** Si un cierre salió con diferencia, junto al botón aparece **"Sin Cierre exitoso: (fecha)"** y ese día no se suma: la vendedora corrige los valores en Cierre diario de caja y lo vuelve a enviar; cuando salga exitoso, se sincroniza normal.
 - Los **excedentes** del cierre (plata que entró pero no es venta: la diferencia de un cambio de prenda o de una tarjeta regalo, las vueltas que deja un cliente) entran a la cuenta del medio por el que llegaron (efectivo, QR, Nequi…), **aparte de las ventas**. Así el saldo cuadra con el banco y las ventas, metas e incentivos no cambian.
