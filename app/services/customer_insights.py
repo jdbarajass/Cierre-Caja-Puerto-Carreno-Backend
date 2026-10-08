@@ -438,16 +438,38 @@ class CustomerInsightsService:
 
     def _mass_client_rows(self, start: date, end: date) -> List[Dict[str, Any]]:
         """
-        Compras de 2025 que Alegra ya no cuenta (anulación masiva de POS, ver
-        docs/PLAN_RECONSTRUCCION_2025.md) con el formato de sales-by-client.
-        Vacío fuera de 2025. Usa la base de datos: llamar en el hilo del request.
+        Compras que Alegra ya no cuenta, con el formato de sales-by-client:
+        la anulación masiva de 2025 (docs/PLAN_RECONSTRUCCION_2025.md) y la
+        parte congelada de la copia (app/services/facts_freeze.py; esa parte
+        ya no se le pide a Alegra, ver `_alegra_parts`). Vacío si no aplica.
+        Usa la base de datos: llamar en el hilo del request.
         """
         try:
-            from app.services.history_2025 import mass_voided_client_rows
-            return mass_voided_client_rows(self.store, start, end)
+            from app.services.facts_freeze import copy_client_rows
+            from app.services.history_2025 import mass_voided_client_rows, merge_client_rows
+            return merge_client_rows(mass_voided_client_rows(self.store, start, end),
+                                     copy_client_rows(self.store, start, end))
         except Exception as e:
-            logger.warning(f'[{self.store}] Clientes de la anulación masiva 2025: {e}')
+            logger.warning(f'[{self.store}] Clientes de la copia (2025 / congelada): {e}')
             return []
+
+    def _alegra_parts(self, start: date, end: date):
+        """Partes del rango que se piden a Alegra (sin la congelada). Hilo del request."""
+        try:
+            from app.services.facts_freeze import unfrozen_parts
+            return unfrozen_parts(self.store, start, end)
+        except Exception as e:
+            logger.warning(f'[{self.store}] Partes congeladas: {e}')
+            return [(start, end)]
+
+    def _clients_parts(self, parts) -> List[Dict[str, Any]]:
+        """Clientes de Alegra de varias partes del rango, sumados (sin base de datos: sirve en hilos)."""
+        from app.services.history_2025 import merge_client_rows
+        rows: List[Dict[str, Any]] = []
+        for i, (s, e) in enumerate(parts):
+            part_rows = self._clients(s, e)
+            rows = part_rows if i == 0 else merge_client_rows(rows, part_rows)
+        return rows
 
     def _ttl(self, end: date) -> float:
         return CLOSED_RANGE_TTL if end < self.today else OPEN_RANGE_TTL
@@ -469,11 +491,12 @@ class CustomerInsightsService:
         history_end = start - timedelta(days=1)
         facts = self._stored_facts(start, end)  # base de datos: en el hilo del request
         history_extra = self._mass_client_rows(HISTORY_START, history_end) if history_end >= HISTORY_START else []
+        history_parts = self._alegra_parts(HISTORY_START, history_end) if history_end >= HISTORY_START else []
         with ThreadPoolExecutor(max_workers=4) as pool:
             f_clients = pool.submit(self._clients, start, end) if facts is None else None
             f_seller_sales = pool.submit(self._seller_sales, start, end) if facts is None else None
             f_sellers = pool.submit(self._sellers)
-            f_history = pool.submit(self._clients, HISTORY_START, history_end) if history_end >= HISTORY_START else None
+            f_history = pool.submit(self._clients_parts, history_parts) if history_end >= HISTORY_START else None
 
             if facts is None:
                 client_rows = f_clients.result()
@@ -542,10 +565,12 @@ class CustomerInsightsService:
         from app.services.history_2025 import merge_client_rows
         before_extra = self._mass_client_rows(before_start, before_end)
         recent_extra = self._mass_client_rows(recent_start, self.today)
+        before_parts = self._alegra_parts(before_start, before_end)
+        recent_parts = self._alegra_parts(recent_start, self.today)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
-            f_before = pool.submit(self._clients, before_start, before_end)
-            f_recent = pool.submit(self._clients, recent_start, self.today)
+            f_before = pool.submit(self._clients_parts, before_parts)
+            f_recent = pool.submit(self._clients_parts, recent_parts)
             f_sellers = pool.submit(self._sellers)
             before_rows = merge_client_rows(f_before.result(), before_extra)
             recent_rows = merge_client_rows(f_recent.result(), recent_extra)

@@ -187,11 +187,11 @@ def store_comparison():
             sales[code] = {'available': False, 'error': getattr(e, 'message', None) or str(e)}
 
     # 2025: anulación masiva de POS (base de datos: aquí, no en los hilos)
-    from app.services.history_2025 import mass_ids_for_range
+    from app.services.history_2025 import live_revive_ids
     mass = {}
     for code in clients:
         try:
-            mass[code] = mass_ids_for_range(code, start, end)
+            mass[code] = live_revive_ids(code, start, end)  # + copia congelada (facts_freeze)
         except Exception as e:
             logger.warning(f'Comparativo: anulación masiva 2025 de {code}: {e}')
 

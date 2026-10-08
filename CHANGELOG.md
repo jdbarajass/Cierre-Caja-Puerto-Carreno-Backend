@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-08] (continuación 2) - Blindaje de la copia de facturas (congelar antes de una anulación masiva)
+
+- Pedido del usuario: el próximo año se pueden anular de forma masiva facturas de 2026 (como las POS de 2025). La plataforma debe basarse en lo que ya guardó y solo la anulación masiva debe contar como venta. Plan y detalle: `docs/PLAN_BLINDAJE_COPIA.md`.
+- `app/services/facts_freeze.py` + `app/routes/facts_freeze.py` (`/api/facts-freeze/status|review|freeze|backup.xlsx`, solo admin, por tienda): repaso completo, congelar hasta una fecha (palabra `CONGELAR`, solo con la copia completa, solo extender) y respaldo en Excel.
+- Con la copia congelada: `sync_day` no recarga días congelados, `pending_days` no los repasa aunque suba `FACT_VERSION`, `sync_payments` no toca sus pagos; `revive_mass_voided` / `live_revive_ids` reviven en las pantallas en vivo las que Alegra trae anuladas y la copia tenía vigentes; `real_sales_total` usa la copia; Clientes nuevos/recurrentes e inactivas toman la parte congelada de la copia. **Sin congelar no cambia nada.**
+- Verificado que la carga de las 9 pm sí guarda la copia (paso "Cargar resumen de facturas" del workflow, últimos 3 días + 31 faltantes por noche).
+- `tests/test_facts_freeze.py` (7).
+
 ## [2026-10-08] (continuación) - Subir el Excel del cierre para llenar el formulario
 
 Fase 2 de `docs/PLAN_EXCEDENTES_Y_CARGA_EXCEL.md`.

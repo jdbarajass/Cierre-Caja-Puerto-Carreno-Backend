@@ -122,6 +122,26 @@ Mientras tanto, **Metas** y la **comparación con el año anterior** del cierre 
 
 ---
 
+## Respaldo de facturas (antes de una anulación masiva)
+
+La plataforma guarda su propia copia de **todas** las facturas desde el 1 de enero de 2026 (cada noche a las 9 pm). Esta es la sección para protegerla si algún día se van a anular facturas en Alegra de forma masiva, como pasó con las de 2025.
+
+**Dónde:** Estadísticas → **Respaldo de facturas**.
+
+- **Ver qué hay guardado:** días guardados, facturas, ventas vigentes y prendas, hasta el día que elijas.
+- **Descargar respaldo en Excel:** elige el año y descarga. Guárdalo fuera de la plataforma (por ejemplo, en OneDrive).
+
+**Unos días antes de la anulación masiva:**
+
+1. Arriba, en **"Hasta el día"**, elige hasta qué fecha proteger (por ejemplo, el 31 de diciembre).
+2. Toca **"Repasar todo hasta esa fecha"** y deja la página abierta. Vuelve a traer cada día de Alegra una vez, para que queden también las anulaciones reales que se hicieron días después. Si cierras la página, sigue sola cada noche (31 días por noche).
+3. Cuando diga que no falta ningún día, escribe **CONGELAR** y toca **Congelar**.
+
+**Después de congelar:**
+- Lo que Alegra muestre anulado de esos días **sigue contando como venta** en toda la plataforma: Totales, Documentos, Analytics, Productos, Clientes, Prendas, Metas, Comparativo y Cuentas.
+- Las facturas que ya estaban anuladas antes, las anulaciones de verdad, siguen anuladas.
+- No se puede deshacer; solo se puede extender a una fecha posterior.
+
 ## Preguntas frecuentes
 
 - **¿Dónde veo los excedentes?** En **Cuentas → Mes**, cada cuenta muestra "Ventas (cierres)" (solo ventas), "Excedentes" y "Ventas + excedentes" (el total que entró). En **Cuentas → Año** hay una columna "Excedentes" al lado de Ventas. No suman a la ganancia ni a las ventas.

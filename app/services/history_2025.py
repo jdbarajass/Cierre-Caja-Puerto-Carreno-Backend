@@ -145,11 +145,15 @@ def summary(store: str) -> Dict[str, Any]:
 
 def real_sales_total(store: str, start: date, end: date) -> Optional[int]:
     """
-    Venta real de un rango de 2025 desde la copia (vigentes + anulación
-    masiva). None si el rango no está completo en la copia o no es de 2025.
+    Venta real de un rango desde la copia: en 2025, vigentes + anulación
+    masiva; en días congelados (facts_freeze), las vigentes de la copia.
+    None si el rango no está completo en la copia o no es de esos casos.
     """
+    from app.services.facts_freeze import copy_sales_total
     if start < HISTORY_START or end > HISTORY_END or missing_days(store, start, end):
-        return None
+        if missing_days(store, start, end):
+            return None
+        return copy_sales_total(store, start, end)
     facts = InvoiceFact.query.filter(
         InvoiceFact.store_code == store, InvoiceFact.date >= start, InvoiceFact.date <= end).all()
     mass = mass_voided_ids(store, start, end)
@@ -470,11 +474,11 @@ def merge_client_rows(rows: List[Dict[str, Any]], extra: List[Dict[str, Any]]) -
         return rows
     merged = {str(r.get('idLocal') or ''): dict(r) for r in rows}
     for e in extra:
-        key = str(e['idLocal'])
+        key = str(e.get('idLocal') or '')
         if key in merged:
             m = merged[key]
             for k in ('totalDocuments', 'subtotal', 'discount', 'total'):
-                m[k] = float(m.get(k) or 0) + e[k]
+                m[k] = float(m.get(k) or 0) + float(e.get(k) or 0)
         else:
             merged[key] = dict(e)
     return list(merged.values())
@@ -490,15 +494,33 @@ def revive_mass_voided(invoices: List[Dict[str, Any]], store: str) -> List[Dict[
     Productos, Comparativo): las de la anulación masiva de 2025 vuelven a
     contar como venta (status 'closed', marcadas `mass_voided`). Como sus
     recibos se anularon, se les pone un pago con el medio de la factura para
-    que también cuenten por medio de pago. Las de 2026 no se tocan.
+    que también cuenten por medio de pago. Igual con las de días congelados
+    (facts_freeze) que Alegra muestra anuladas pero en la copia estaban
+    vigentes. Sin congelar, 2026 no se toca.
     """
+    from app.services.facts_freeze import frozen_valid_ids, frozen_until
     from app.utils.formatters import is_invoice_void
-    candidates = [i for i in invoices if str(i.get('date') or '')[:4] == '2025' and is_invoice_void(i)]
-    if not candidates:
-        return invoices
-    dates = sorted(str(i['date'])[:10] for i in candidates)
-    mass = mass_ids_for_range(store, date.fromisoformat(dates[0]), date.fromisoformat(dates[-1]))
+    voided = [i for i in invoices if is_invoice_void(i)]
+    candidates = [i for i in voided if str(i.get('date') or '')[:4] == '2025']
+    mass: Set[str] = set()
+    if candidates:
+        dates = sorted(str(i['date'])[:10] for i in candidates)
+        mass = mass_ids_for_range(store, date.fromisoformat(dates[0]), date.fromisoformat(dates[-1]))
+    until = frozen_until(store)
+    if until is not None:
+        frozen = [str(i.get('id')) for i in voided if '2026-01-01' <= str(i.get('date') or '')[:10] <= until.isoformat()]
+        mass |= frozen_valid_ids(store, frozen)
     return revive_with_ids(invoices, mass)
+
+
+def live_revive_ids(store: str, start: date, end: date) -> Set[str]:
+    """
+    Ids a revivir en una descarga de Alegra del rango, calculados ANTES (para
+    hilos sin base de datos): anulación masiva de 2025 + vigentes de la copia
+    congelada (revive_with_ids solo revive las que Alegra trae anuladas).
+    """
+    from app.services.facts_freeze import frozen_valid_ids_in_range
+    return mass_ids_for_range(store, start, end) | frozen_valid_ids_in_range(store, start, end)
 
 
 def revive_with_ids(invoices: List[Dict[str, Any]], mass: Set[str]) -> List[Dict[str, Any]]:
@@ -508,9 +530,10 @@ def revive_with_ids(invoices: List[Dict[str, Any]], mass: Set[str]) -> List[Dict
     """
     if not mass:
         return invoices
+    from app.utils.formatters import is_invoice_void
     out = []
     for inv in invoices:
-        if str(inv.get('id')) in mass:
+        if str(inv.get('id')) in mass and is_invoice_void(inv):
             inv = dict(inv)
             for k in ('voided_at', 'cancelled_at', 'deleted_at', 'voided_by'):
                 inv.pop(k, None)

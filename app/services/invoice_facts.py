@@ -161,6 +161,13 @@ def invoice_to_void_items(invoice: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def sync_day(alegra_client, store_code: str, day: date) -> int:
     """Reemplaza las facturas guardadas de `day` por las que tiene Alegra. Devuelve cuántas."""
+    # Copia congelada (app/services/facts_freeze.py): un día ya guardado no se
+    # vuelve a descargar, para que una anulación masiva posterior no lo cambie.
+    from app.services.facts_freeze import is_frozen_day
+    if is_frozen_day(store_code, day):
+        loaded = InvoiceSyncDay.query.filter_by(store_code=store_code, date=day).first()
+        if loaded is not None:
+            return loaded.invoice_count or 0
     invoices = alegra_client.get_invoices_by_date(day.isoformat())  # si falla, no se toca nada
     # Si Alegra repitiera una factura entre páginas, se guarda una sola vez.
     unique_invoices = list({str(i['id']): i for i in invoices if i.get('id') is not None}.values())
@@ -283,8 +290,16 @@ def pending_days(store_code: str, start: date, end: date) -> List[date]:
     RECIENTE al más antiguo: así "Este mes" y "Mes anterior" quedan completos
     primero (con el orden contrario, octubre esperaba ~9 noches).
     """
-    return sorted(set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end))
-                  | set(outdated_days(store_code, start, end)), reverse=True)
+    from app.services.facts_freeze import frozen_until
+    until = frozen_until(store_code)
+    loaded_frozen = set()
+    if until is not None:
+        # Días congelados ya cargados: no se repasan aunque suba FACT_VERSION
+        loaded_frozen = {r.date for r in InvoiceSyncDay.query.filter(
+            InvoiceSyncDay.store_code == store_code, InvoiceSyncDay.date >= start,
+            InvoiceSyncDay.date <= min(end, until)).with_entities(InvoiceSyncDay.date)}
+    return sorted((set(missing_days(store_code, start, end)) | set(missing_item_days(store_code, start, end))
+                   | set(outdated_days(store_code, start, end))) - loaded_frozen, reverse=True)
 
 
 def sync_range(alegra_client, store_code: str, days: List[date],

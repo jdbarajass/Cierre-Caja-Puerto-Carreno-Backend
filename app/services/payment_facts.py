@@ -238,6 +238,14 @@ def sync_payments(alegra_client, store_code: str, since: date) -> Dict[str, Any]
     # Un mismo recibo/factura no se repite
     unique = {(r['payment_id'], r['invoice_id']): r for r in rows}
 
+    # Copia congelada (facts_freeze): las ventas de días congelados ya
+    # guardadas no se tocan (una anulación masiva anularía también sus recibos)
+    from app.services.facts_freeze import frozen_until
+    until = frozen_until(store_code)
+    if until is not None and since <= until:
+        since = until + timedelta(days=1)
+        unique = {k: r for k, r in unique.items() if r['invoice_date'] >= since}
+
     PaymentFact.for_store(store_code).filter(PaymentFact.invoice_date >= since).delete(synchronize_session=False)
     for r in unique.values():
         db.session.add(PaymentFact(store_code=store_code, **r))
