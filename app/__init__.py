@@ -255,6 +255,7 @@ def create_app(config_class=Config):
     from app.routes.monthly_summary import bp as monthly_summary_bp
     from app.routes.history_2025 import bp as history_2025_bp
     from app.routes.facts_freeze import bp as facts_freeze_bp
+    from app.routes.reminders import bp as reminders_bp
     from app.routes.finance import bp as finance_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
@@ -283,6 +284,7 @@ def create_app(config_class=Config):
     app.register_blueprint(monthly_summary_bp)  # Cuentas → Año (PLAN_CUENTAS_DIARIAS, Fase 3)
     app.register_blueprint(history_2025_bp)  # Reconstrucción 2025 (docs/PLAN_RECONSTRUCCION_2025.md)
     app.register_blueprint(facts_freeze_bp)  # Blindaje de la copia de facturas (docs/PLAN_BLINDAJE_COPIA.md)
+    app.register_blueprint(reminders_bp)  # Recordatorios del admin (app/services/reminders.py)
     app.register_blueprint(finance_bp)  # Configuración financiera e incentivos (PLAN_CUENTAS_DIARIAS, Fase 4)
 
     # Configurar manejadores de errores

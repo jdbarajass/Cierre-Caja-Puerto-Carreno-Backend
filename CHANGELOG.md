@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-08] (continuación 3) - Recordatorios del administrador
+
+- Pedido del usuario: que la plataforma le avise con una ventana qué hacer, cuándo y dónde. `app/services/reminders.py` + `app/routes/reminders.py` (`GET /api/reminders`, `POST /api/reminders/<key>/snooze|done`; solo admin, por tienda; estado en `app_settings` `reminders_state`). Se calculan solos:
+  - `freeze-AAAA`: del 1-dic al 30-jun, hasta que la copia quede congelada hasta el 31-dic (docs/PLAN_BLINDAJE_COPIA.md).
+  - `month-close-AAAA-MM`: días 1 a 10, si el mes anterior no está cerrado en Cuentas → Mes (desde oct-2026; se quita solo al cerrarlo).
+  - `backup-AAAA-MM`: días 1 a 10 desde nov-2026, bajar el respaldo de facturas en Excel ("Ya lo descargué").
+- `tests/test_reminders.py` (4). **279/279**.
+
 ## [2026-10-08] (continuación 2) - Blindaje de la copia de facturas (congelar antes de una anulación masiva)
 
 - Pedido del usuario: el próximo año se pueden anular de forma masiva facturas de 2026 (como las POS de 2025). La plataforma debe basarse en lo que ya guardó y solo la anulación masiva debe contar como venta. Plan y detalle: `docs/PLAN_BLINDAJE_COPIA.md`.

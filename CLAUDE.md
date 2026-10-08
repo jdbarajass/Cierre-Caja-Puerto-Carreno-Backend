@@ -41,3 +41,6 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 ## Blindaje de la copia (congelar antes de una anulación masiva, 2026-10-08)
 - Plan: **`docs/PLAN_BLINDAJE_COPIA.md`**. Código: `app/services/facts_freeze.py`, `app/routes/facts_freeze.py`, `tests/test_facts_freeze.py`.
 - Con la copia congelada hasta una fecha, esos días **nunca** se vuelven a descargar de Alegra (ni subiendo `FACT_VERSION`) y lo que Alegra muestre anulado después cuenta como venta en las pantallas en vivo. Cualquier cálculo nuevo con facturas descargadas de Alegra debe pasar por `revive_for_current_store` (o `revive_with_ids` + `live_revive_ids` en hilos).
+
+## Recordatorios del admin (2026-10-08)
+- `app/services/reminders.py` (+ `app/routes/reminders.py`, `tests/test_reminders.py`): ventana emergente al entrar. Para agregar uno, escribir un `_builder(store, today)` que devuelva `{key, title, body, steps, path, action_label, done_label}` (o None) y sumarlo a `BUILDERS`. La `key` lleva el periodo (ej. `backup-2026-11`).

@@ -142,6 +142,20 @@ La plataforma guarda su propia copia de **todas** las facturas desde el 1 de ene
 - Las facturas que ya estaban anuladas antes, las anulaciones de verdad, siguen anuladas.
 - No se puede deshacer; solo se puede extender a una fecha posterior.
 
+## Recordatorios
+
+Al entrar a la plataforma como administrador, puede salir una ventana con un **Recordatorio**. Trae los pasos y un botón que te lleva al lugar exacto.
+
+| Cuándo | Qué te recuerda |
+|---|---|
+| Del 1 de diciembre hasta que congeles (o hasta junio) | Proteger las ventas del año antes de la anulación masiva (Respaldo de facturas → Repasar → Congelar) |
+| Del 1 al 10 de cada mes | Cerrar el mes anterior en Cuentas → Mes (comisiones, saldos reales, Cerrar el mes). Se quita sola al cerrarlo |
+| Del 1 al 10 de cada mes | Descargar el respaldo de facturas en Excel y guardarlo en OneDrive |
+
+- **"Recordarme mañana"** la pospone un día.
+- **"Ya lo hice"** la quita hasta el próximo periodo.
+- Si cierras la ventana con la X, vuelve a salir la próxima vez que entres.
+
 ## Preguntas frecuentes
 
 - **¿Dónde veo los excedentes?** En **Cuentas → Mes**, cada cuenta muestra "Ventas (cierres)" (solo ventas), "Excedentes" y "Ventas + excedentes" (el total que entró). En **Cuentas → Año** hay una columna "Excedentes" al lado de Ventas. No suman a la ganancia ni a las ventas.
