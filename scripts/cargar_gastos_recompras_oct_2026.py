@@ -84,47 +84,41 @@ def balances(token):
 
 
 def main():
+    """
+    Estado al 9-oct-2026 noche: las 6 recompras ya están (3 de efectivo que
+    había, con el 4x1000 corregido a 0, y las 3 de QR cargadas). Falta, con la
+    versión nueva desplegada: los 15 gastos y un ajuste en EFECTIVO que anula
+    el ajuste de más del 9-oct (las 3 recompras de efectivo ya estaban
+    descontadas) para que quede en 862.000.
+    """
     run = '--ejecutar' in sys.argv
     st, data = call('POST', '/auth/login', body={'email': os.environ['KOAJ_EMAIL'], 'password': os.environ['KOAJ_PASS']})
     assert st == 200 and data.get('token'), f'Login falló: {st} {data.get("message")}'
     token = data['token']
 
+    st, exp_data = call('GET', '/api/expenses?year=2026&month=10', token)
+    st2, rep_data = call('GET', '/api/repurchase?year=2026&month=10', token)
+    reps = rep_data.get('entries', [])
+    print(f"Octubre: {len(exp_data.get('items', []))} gastos, {len(reps)} recompras")
+
     before = balances(token)
-    out = {k: 0.0 for k in EXPECTED_AFTER}
     key = {'efectivo': 'cash', 'qr': 'qr', 'datafono': 'addi_datafono', 'nequi': 'nequi'}
+    out = {k: 0.0 for k in EXPECTED_AFTER}
     for e in EXPENSES:
         for m, k in key.items():
             amt = e.get(m, 0)
             if amt:
                 out[k] += amt + (0 if (m == 'efectivo' or e.get('apply_fee') is False) else round(amt * 4 / 1000))
-    for r in REPURCHASES:
-        for m, k in key.items():
-            amt = r.get(m, 0)
-            if amt:
-                out[k] += amt + (r['fee_override'] if 'fee_override' in r else round(amt * 4 / 1000))
-    print('Cuenta           antes        sale      queda   esperado')
-    ok = True
+    adjust = EXPECTED_AFTER['cash'] - (before['cash'] - out['cash'])
+    print(f"Ajuste EFECTIVO: {adjust:,.0f} (esperado -6.440.262)")
     for k, exp in EXPECTED_AFTER.items():
-        after = before.get(k, 0) - out[k]
-        flag = '' if round(after) == exp else '  <-- NO CUADRA'
-        ok &= not flag
-        print(f'{k:14} {before.get(k, 0):>11,.0f} {out[k]:>11,.0f} {after:>11,.0f} {exp:>11,.0f}{flag}')
-
-    st, exp_data = call('GET', '/api/expenses?year=2026&month=10', token)
-    st2, rep_data = call('GET', '/api/repurchase?year=2026&month=10', token)
-    existing_exp = exp_data.get('items', [])
-    existing_rep = rep_data.get('entries', rep_data.get('data', []))
-    print(f'Ya hay en octubre: {len(existing_exp)} gastos, {len(existing_rep)} recompras')
-    for x in existing_rep:
-        print('  recompra', x.get('date'), x.get('descripcion'), x.get('total_enviado'))
-    for x in existing_exp:
-        print('  gasto', x.get('date'), x.get('concept'), x.get('total_with_fee'))
-
+        after = before.get(k, 0) - out[k] + (adjust if k == 'cash' else 0)
+        print(f'{k:14} {before.get(k, 0):>11,.0f} -> {after:>11,.0f}  esperado {exp:>11,.0f}{"" if round(after) == exp else "  <-- NO CUADRA"}')
     if not run:
-        print('\nSolo revisión. Para cargar: --ejecutar')
+        print('Solo revisión. Para cargar: --ejecutar')
         return
-    if not ok or existing_exp or existing_rep:
-        sys.exit('No se carga: los saldos no cuadran o ya hay movimientos en octubre.')
+    if exp_data.get('items') or len(reps) != 6 or round(adjust) != -6440262:
+        sys.exit('No se carga: ya hay gastos, no están las 6 recompras o el ajuste no es el esperado.')
 
     for i, e in enumerate(EXPENSES):
         body = {'direction': 'out', 'period': '2026-10', 'account_mode': 'cuentas',
@@ -135,11 +129,12 @@ def main():
             call('DELETE', f"/api/expenses/{data['item']['id']}", token)
             sys.exit('Producción todavía no tiene la versión nueva (falta Manual Deploy). Se borró el gasto de prueba.')
         print('gasto ok', e['date'], e['concept'][:50], data['item']['total_with_fee'])
-    for r in REPURCHASES:
-        st, data = call('POST', '/api/repurchase', token, {'descripcion': 'Recompras Jhonatan', **r})
-        assert st == 201, (r, data)
-        print('recompra ok', r['date'], data['entry']['total_a_descontar'])
 
+    cash_id = next(a['id'] for a in call('GET', '/api/accounts', token)[1]['accounts'] if a['payment_key'] == 'cash')
+    st, data = call('POST', '/api/accounts/manual-adjustment', token, {
+        'account_id': cash_id, 'direction': 'out', 'amount': -adjust,
+        'description': 'Corrige el ajuste del 9-oct: las 3 recompras en efectivo (5 y 7-oct) ya estaban descontadas'})
+    assert st in (200, 201), data
     after = balances(token)
     print('\nSaldos finales:')
     for k, exp in EXPECTED_AFTER.items():
