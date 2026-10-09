@@ -30,6 +30,12 @@ bp = Blueprint('accounts', __name__)
 # Es por tienda: se guarda con store_setting_key().
 SYNC_FAILURE_SETTING_KEY = 'last_sync_failure'
 
+# Tarjeta "NOTAS IMPORTANTES" de Cuentas → Resumen (texto libre del admin, por
+# tienda: se guarda con store_setting_key()).
+IMPORTANT_NOTES_SETTING_KEY = 'accounts_important_notes'
+NOTE_MAX_LENGTH = 2000
+IMPORTANT_NOTES_MAX_LENGTH = 10000
+
 # Cuentas por defecto (payment_key -> nombre/color), sembradas una sola vez si la
 # tabla está vacía. El campo de cierre de caja que acredita cada una se resuelve
 # en sync_daily().
@@ -393,6 +399,67 @@ def update_contemplated_until(account_id):
         db.session.rollback()
         logger.error(f"Error actualizando contemplated_until: {e}")
         return jsonify({'success': False, 'message': 'Error al guardar la fecha'}), 500
+
+
+# ─────────────────────────────────────────────
+#  NOTAS: una por tarjeta y la tarjeta "NOTAS IMPORTANTES" de la tienda.
+#  Solo texto para el admin, no tocan saldos.
+# ─────────────────────────────────────────────
+
+@bp.route('/api/accounts/<int:account_id>/note', methods=['PATCH', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def update_account_note(account_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+    data = request.get_json() or {}
+    note = (data.get('note') or '').strip()
+    if len(note) > NOTE_MAX_LENGTH:
+        return jsonify({'success': False, 'message': f'La nota no puede pasar de {NOTE_MAX_LENGTH} caracteres'}), 400
+    account = Account.for_current_store().filter(Account.id == account_id).first()
+    if not account:
+        return jsonify({'success': False, 'message': 'Cuenta no encontrada'}), 404
+    try:
+        account.note = note or None
+        db.session.commit()
+        return jsonify({'success': True, 'account': account.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando la nota de la cuenta {account_id}: {e}")
+        return jsonify({'success': False, 'message': 'Error al guardar la nota'}), 500
+
+
+@bp.route('/api/accounts/important-notes', methods=['GET', 'PUT', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def important_notes():
+    if request.method == 'OPTIONS':
+        return '', 204
+    key = store_setting_key(IMPORTANT_NOTES_SETTING_KEY)
+    setting = AppSetting.query.get(key)
+    if request.method == 'GET':
+        return jsonify({
+            'success': True,
+            'text': setting.value if setting else '',
+            'updated_at': _iso_utc(setting.updated_at) if setting else None,
+        }), 200
+
+    data = request.get_json() or {}
+    text_value = (data.get('text') or '').strip()
+    if len(text_value) > IMPORTANT_NOTES_MAX_LENGTH:
+        return jsonify({'success': False, 'message': f'Las notas no pueden pasar de {IMPORTANT_NOTES_MAX_LENGTH} caracteres'}), 400
+    try:
+        if setting is None:
+            setting = AppSetting(key=key)
+            db.session.add(setting)
+        setting.value = text_value
+        setting.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'text': setting.value, 'updated_at': _iso_utc(setting.updated_at)}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando las notas importantes: {e}")
+        return jsonify({'success': False, 'message': 'Error al guardar las notas'}), 500
 
 
 # ─────────────────────────────────────────────

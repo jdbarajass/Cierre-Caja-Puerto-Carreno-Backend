@@ -65,12 +65,15 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 **Cada vez que salga plata que no sea una recompra** (sueldo, arriendo, aseo, un préstamo, una ganancia de un socio, algo para Primavera):
 1. **Cuentas → Gastos → "Registrar gasto"** (o **"Registrar pago"** al lado del gasto fijo, que ya llena el formulario).
 2. Llena: concepto, valor en el medio por el que salió (efectivo, QR, Nequi…), categoría.
+   - **Categoría:** la lista tiene arriendo, internet, luz, sueldos, ganancias de cada socio, aseo, moto carro, flete, etc. Debajo dice en qué grupo suma (gasto operativo, flete, retiro de socio…), que es lo que usan Mes y Año. Si no está, elige **"Otra…"** y escribe qué es.
+   - **4x1000:** escribe el valor **sin** el 4x1000 (ej. internet 266.000); el sistema lo calcula aparte (1.064) para lo que no es efectivo. Si el banco no lo cobró, quita "cobrar".
 3. **¿De dónde sale la plata?**
    - **De las cuentas:** la plata salió de una cuenta (QR, Nequi, banco, o el efectivo que ya estaba guardado). El sistema la resta de Resumen.
    - **De la caja del día:** las empleadas la sacaron de la caja ese día, antes de hacer el cierre (sueldo que se pagan ellas, aseo, arriendo pagado de la caja). **No** se vuelve a restar, porque el cierre ya la descontó.
    - **No mover cuentas:** solo para dejarlo anotado (algo viejo o que ya se restó a mano).
 4. **Mes al que corresponde:** si pagas en octubre algo de septiembre (internet, cuota), elige septiembre. Sirve para saber la ganancia real de cada mes.
 5. Si es un **préstamo a una empleada**, elige "Préstamo a empleada" y su nombre: queda solo en Empleadas → Préstamos. Si te lo devuelve, usa **"Registrar entrada" → "Devolución de préstamo"**.
+7. **Notas:** en Resumen cada tarjeta tiene una nota (se guarda al salir del campo) y arriba está la tarjeta **NOTAS IMPORTANTES** para lo urgente. Solo las ve el administrador.
 6. Si es algo que **Carreño paga por Primavera**, elige "Préstamo a otra tienda" → Primavera. Abajo verás cuánto te debe Primavera. Cuando te devuelva, **"Registrar entrada" → "Devolución de otra tienda"**.
 
 **Cada noche, al hacer el cierre de caja (8 pm):**

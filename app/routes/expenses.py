@@ -18,7 +18,7 @@ from app.models.account import Account, AccountMovement
 from app.models.employee_records import EmployeeLoan, EmployeePayment
 from app.models.expense import (
     Expense, FixedExpense, EXPENSE_ACCOUNT_MAP, EXPENSE_METHODS,
-    OUT_CATEGORIES, IN_CATEGORIES, ACCOUNT_MODES,
+    OUT_CATEGORIES, IN_CATEGORIES, ACCOUNT_MODES, EXPENSE_SUBCATEGORIES,
 )
 from app.stores import STORES, get_current_store
 from app.utils.timezone import get_colombia_now
@@ -32,20 +32,20 @@ PERIOD_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 # "GASTOS FIJOS MES A MES" de septiembre/octubre). Valores de referencia,
 # editables después. Los incentivos (dependen de la meta) no van aquí.
 FIXED_EXPENSES_TEMPLATE = [
-    {'name': 'Cuota Scotiabank', 'amount': 1110000, 'due_day': 5, 'category': 'cuota_credito'},
-    {'name': 'Internet', 'amount': 266000, 'due_day': 5, 'category': 'operativo'},
-    {'name': 'Sueldos empleadas 1ra quincena', 'amount': 1500000, 'due_day': 15, 'category': 'sueldo'},
-    {'name': 'Sueldo Jhonatan por recompras (1ra quincena)', 'amount': 200000, 'due_day': 15, 'category': 'sueldo'},
-    {'name': 'YouTube', 'amount': 41900, 'due_day': 20, 'category': 'operativo'},
-    {'name': 'Alegra', 'amount': 139900, 'due_day': 22, 'category': 'operativo'},
-    {'name': 'Sueldos empleadas 2da quincena', 'amount': 1500000, 'due_day': 30, 'category': 'sueldo'},
-    {'name': 'Sueldo Jhonatan por recompras (2da quincena)', 'amount': 200000, 'due_day': 30, 'category': 'sueldo'},
-    {'name': 'Luz', 'amount': 380000, 'due_day': 30, 'category': 'operativo'},
-    {'name': 'Arriendo', 'amount': 1052000, 'due_day': 30, 'category': 'operativo'},
-    {'name': 'Cuota de manejo Bancolombia', 'amount': 14900, 'due_day': 30, 'category': 'financiero'},
-    {'name': 'Ganancia Cristhian', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio'},
-    {'name': 'Ganancia Jhonatan', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio'},
-    {'name': 'Ganancia José', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio'},
+    {'name': 'Cuota Scotiabank', 'amount': 1110000, 'due_day': 5, 'category': 'cuota_credito', 'subcategory': 'cuota_banco'},
+    {'name': 'Internet', 'amount': 266000, 'due_day': 5, 'category': 'operativo', 'subcategory': 'internet'},
+    {'name': 'Sueldos empleadas 1ra quincena', 'amount': 1500000, 'due_day': 15, 'category': 'sueldo', 'subcategory': 'sueldos_empleadas_1'},
+    {'name': 'Sueldo Jhonatan por recompras (1ra quincena)', 'amount': 200000, 'due_day': 15, 'category': 'sueldo', 'subcategory': 'sueldo_jhonatan_recompras'},
+    {'name': 'YouTube', 'amount': 41900, 'due_day': 20, 'category': 'operativo', 'subcategory': 'youtube'},
+    {'name': 'Alegra', 'amount': 139900, 'due_day': 22, 'category': 'operativo', 'subcategory': 'alegra'},
+    {'name': 'Sueldos empleadas 2da quincena', 'amount': 1500000, 'due_day': 30, 'category': 'sueldo', 'subcategory': 'sueldos_empleadas_2'},
+    {'name': 'Sueldo Jhonatan por recompras (2da quincena)', 'amount': 200000, 'due_day': 30, 'category': 'sueldo', 'subcategory': 'sueldo_jhonatan_recompras'},
+    {'name': 'Luz', 'amount': 380000, 'due_day': 30, 'category': 'operativo', 'subcategory': 'luz'},
+    {'name': 'Arriendo', 'amount': 1052000, 'due_day': 30, 'category': 'operativo', 'subcategory': 'arriendo'},
+    {'name': 'Cuota de manejo Bancolombia', 'amount': 14900, 'due_day': 30, 'category': 'financiero', 'subcategory': 'cuota_manejo'},
+    {'name': 'Ganancia Cristhian', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_cristian'},
+    {'name': 'Ganancia Jhonatan', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_jhonatan'},
+    {'name': 'Ganancia José', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_jose'},
 ]
 
 
@@ -104,11 +104,27 @@ def _apply_payload(expense, data, creating):
     if expense.direction not in ('out', 'in'):
         raise ExpenseError("direction debe ser 'out' o 'in'")
 
-    if creating or 'category' in data:
+    if creating or 'subcategory' in data:
+        expense.subcategory = (data.get('subcategory') or '').strip() or None
+    if expense.direction != 'out':
+        expense.subcategory = None
+    if expense.subcategory:
+        # La categoría detallada manda: el grupo sale de ella
+        if expense.subcategory not in EXPENSE_SUBCATEGORIES:
+            raise ExpenseError(f'Categoría inválida: {expense.subcategory}')
+        expense.category = EXPENSE_SUBCATEGORIES[expense.subcategory]
+    elif creating or 'category' in data:
         expense.category = data.get('category') or ('operativo' if expense.direction == 'out' else 'ingreso_extra')
     valid = OUT_CATEGORIES if expense.direction == 'out' else IN_CATEGORIES
     if expense.category not in valid:
         raise ExpenseError(f'Categoría inválida para este tipo de movimiento: {expense.category}')
+
+    if creating or 'category_detail' in data:
+        expense.category_detail = (data.get('category_detail') or '').strip()[:120] or None
+    if expense.subcategory != 'otra':
+        expense.category_detail = None
+    elif not expense.category_detail:
+        raise ExpenseError('Escribe qué otra categoría es')
 
     for m in EXPENSE_METHODS:
         if creating or m in data:
@@ -436,7 +452,13 @@ def _apply_fixed_payload(item, data, creating):
             raise ExpenseError('Día de pago inválido')
     if not 1 <= item.due_day <= 31:
         raise ExpenseError('El día de pago debe estar entre 1 y 31')
-    if creating or 'category' in data:
+    if creating or 'subcategory' in data:
+        item.subcategory = (data.get('subcategory') or '').strip() or None
+    if item.subcategory:
+        if item.subcategory not in EXPENSE_SUBCATEGORIES:
+            raise ExpenseError(f'Categoría inválida: {item.subcategory}')
+        item.category = EXPENSE_SUBCATEGORIES[item.subcategory]
+    elif creating or 'category' in data:
         item.category = data.get('category') or 'operativo'
     if item.category not in OUT_CATEGORIES:
         raise ExpenseError(f'Categoría inválida: {item.category}')

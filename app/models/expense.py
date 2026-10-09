@@ -38,6 +38,37 @@ OUT_CATEGORIES = (
     'retiro_socio',       # ganancia que retira un socio
     'otro',
 )
+# Categoría detallada que elige el usuario al registrar una salida (lista del
+# usuario, 2026-10-09). Cada una cae en un grupo de OUT_CATEGORIES, que es el
+# que usan la ganancia, Mes y Año (app/services/monthly_summary.py), Empleadas
+# y los préstamos entre tiendas. 'otra' exige escribir qué es (category_detail).
+# Los gastos guardados antes no tienen subcategoría: se muestran con su grupo.
+EXPENSE_SUBCATEGORIES = {
+    'cuota_banco':               'cuota_credito',
+    'sueldos_empleadas_1':       'sueldo',        # 15 de cada mes
+    'sueldos_empleadas_2':       'sueldo',        # 30 de cada mes
+    'internet':                  'operativo',     # 5 de cada mes
+    'youtube':                   'operativo',     # 20 de cada mes
+    'alegra':                    'operativo',     # 22 de cada mes
+    'luz':                       'operativo',     # 30 de cada mes
+    'arriendo':                  'operativo',     # 30 de cada mes
+    'cuota_manejo':              'financiero',    # cuota de manejo Bancolombia
+    'sueldo_jhonatan_recompras': 'sueldo',
+    'incentivo_1':               'sueldo',
+    'incentivo_2':               'sueldo',
+    'ganancia_jhonatan':         'retiro_socio',
+    'ganancia_cristian':         'retiro_socio',
+    'ganancia_jose':             'retiro_socio',
+    'prestamo_empleada':         'prestamo_empleada',
+    'prestamo_tienda':           'prestamo_tienda',
+    'flete':                     'flete',
+    'aseo':                      'operativo',
+    'moto_carro':                'flete',         # aeropuerto de Carreño -> local
+    'inversion':                 'inversion',
+    'operativo':                 'operativo',     # gasto operativo general
+    'otra':                      'otro',
+}
+
 IN_CATEGORIES = (
     'devolucion_prestamo',        # una empleada u otra persona devuelve plata
     'devolucion_prestamo_tienda', # la otra tienda devuelve lo que se le prestó
@@ -61,6 +92,11 @@ class Expense(StoreScopedMixin, db.Model):
     period = db.Column(db.String(7), nullable=False, index=True)
     concept = db.Column(db.String(255), nullable=False)
     category = db.Column(db.String(30), nullable=False, default='operativo')
+    # Categoría detallada (EXPENSE_SUBCATEGORIES); NULL en entradas y en los
+    # gastos guardados antes del 2026-10-09
+    subcategory = db.Column(db.String(40), nullable=True)
+    # Qué es, cuando la subcategoría es 'otra'
+    category_detail = db.Column(db.String(120), nullable=True)
     direction = db.Column(db.String(3), nullable=False, default='out')  # 'out' | 'in'
 
     efectivo  = db.Column(db.Float, default=0, nullable=False)
@@ -130,6 +166,8 @@ class Expense(StoreScopedMixin, db.Model):
             'period': self.period,
             'concept': self.concept,
             'category': self.category,
+            'subcategory': self.subcategory,
+            'category_detail': self.category_detail,
             'direction': self.direction,
             'apply_fee': bool(self.apply_fee),
             'fee_override': self.fee_override,
@@ -161,6 +199,7 @@ class FixedExpense(StoreScopedMixin, db.Model):
     amount = db.Column(db.Float, default=0, nullable=False)  # valor de referencia
     due_day = db.Column(db.Integer, nullable=False, default=30)  # día de pago (1-31)
     category = db.Column(db.String(30), nullable=False, default='operativo')
+    subcategory = db.Column(db.String(40), nullable=True)  # ver EXPENSE_SUBCATEGORIES
     default_method = db.Column(db.String(20), nullable=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
     sort_order = db.Column(db.Integer, default=0, nullable=False)
@@ -175,6 +214,7 @@ class FixedExpense(StoreScopedMixin, db.Model):
             'amount': self.amount,
             'due_day': self.due_day,
             'category': self.category,
+            'subcategory': self.subcategory,
             'default_method': self.default_method,
             'active': bool(self.active),
             'sort_order': self.sort_order,

@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-10-09] - Categorías detalladas en Gastos y notas en Cuentas
+
+- Pedido del usuario: personalizar las categorías de Gastos con su lista (cuota banco, sueldos empleadas 1 y 2, internet, YouTube, Alegra, luz, arriendo, cuota de manejo, sueldo Jhonatan por recompras, incentivos 1 y 2, ganancias de Jhonatan/Cristian/José, préstamo empleada, préstamo a otra tienda, flete, aseo, moto carro, inversión, gasto operativo y "Otra" con texto).
+- `Expense.subcategory` + `Expense.category_detail` y `FixedExpense.subcategory` (migración segura en `_migrate_employee_tables`; los gastos fijos de la plantilla toman la suya por nombre). `EXPENSE_SUBCATEGORIES` (`app/models/expense.py`) dice en qué grupo de `OUT_CATEGORIES` cae cada una: la categoría (grupo) **sale de la subcategoría**, así la ganancia, Mes, Año, Empleadas y préstamos entre tiendas siguen igual. Moto carro (aeropuerto → local) suma como flete. "otra" exige `category_detail`. Sin subcategoría todo funciona como antes (gastos viejos, 4x1000 de comisiones de Mes); las entradas no la guardan.
+- Los incentivos pagados quedan con `incentivo_1` / `incentivo_2` según la meta (`app/routes/finance.py`).
+- Cuentas → Resumen: `Account.note` (nota libre por tarjeta, `PATCH /api/accounts/<id>/note`) y tarjeta NOTAS IMPORTANTES por tienda (`GET|PUT /api/accounts/important-notes`, `app_settings` `accounts_important_notes` con `store_setting_key`). Solo admin; no tocan saldos.
+- Tests: 8 nuevos en `tests/test_expenses.py` + subcategoría del incentivo en `tests/test_finance.py`. 71/71 en expenses, finance, monthly_summary, month_sheet y multi_store (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-08] - Nuevo orden de las cuentas
 
 - Pedido del usuario: EFECTIVO, QR BANCOLOMBIA, ADDI + DATÁFONO, NEQUI, DAVIPLATA, SisteCrédito, BBVA, AHORRO (Jhonatan, que no es cuenta, lo pone el frontend después de NEQUI). `DEFAULT_ACCOUNTS` con el orden nuevo y `apply_account_order()` reordena una sola vez las cuentas existentes de las dos tiendas al arrancar (bandera `accounts_order_2026_10_08_applied` en `app_settings`; solo toca `sort_order`). Aplica también al orden de Cuentas → Mes. Test en `tests/test_multi_store.py`.

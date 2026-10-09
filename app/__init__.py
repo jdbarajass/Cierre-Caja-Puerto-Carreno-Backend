@@ -654,6 +654,22 @@ def _migrate_employee_tables(db, app):
             add_column_if_missing(conn, 'cash_closings', column, 'FLOAT')
         add_column_if_missing(conn, 'cash_closings', 'validation_status', 'VARCHAR(10)')
         add_column_if_missing(conn, 'cash_closings', 'validation_message', 'VARCHAR(500)')
+
+        # Categoría detallada de Gastos y nota por tarjeta de Cuentas
+        # (2026-10-09). NULL en lo ya guardado (se muestra con su grupo).
+        add_column_if_missing(conn, 'expenses', 'subcategory', 'VARCHAR(40)')
+        add_column_if_missing(conn, 'expenses', 'category_detail', 'VARCHAR(120)')
+        add_column_if_missing(conn, 'fixed_expenses', 'subcategory', 'VARCHAR(40)')
+        add_column_if_missing(conn, 'accounts', 'note', 'TEXT')
+        if 'fixed_expenses' in tables:
+            # Los gastos fijos cargados de la plantilla toman su categoría
+            # detallada por nombre (solo los que no tienen; idempotente)
+            from app.routes.expenses import FIXED_EXPENSES_TEMPLATE
+            for item in FIXED_EXPENSES_TEMPLATE:
+                conn.execute(text(
+                    'UPDATE fixed_expenses SET subcategory = :sub '
+                    'WHERE subcategory IS NULL AND name = :name AND category = :cat'
+                ), {'sub': item['subcategory'], 'name': item['name'], 'cat': item['category']})
         conn.commit()
 
 

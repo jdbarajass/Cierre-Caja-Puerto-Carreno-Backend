@@ -54,6 +54,9 @@ class Account(StoreScopedMixin, db.Model):
     # después de la transacción). No afecta ningún cálculo - solo ayuda a
     # corroborar si ya tocaría revisar/actualizar el saldo.
     contemplated_until = db.Column(db.Date, nullable=True)
+    # Nota libre del admin en la tarjeta (algo que no se le puede olvidar de
+    # esa cuenta). No afecta ningún cálculo.
+    note = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -68,6 +71,7 @@ class Account(StoreScopedMixin, db.Model):
             'active': self.active,
             'sort_order': self.sort_order,
             'contemplated_until': self.contemplated_until.isoformat() if self.contemplated_until else None,
+            'note': self.note,
             'created_at': _iso_utc(self.created_at),
             'updated_at': _iso_utc(self.updated_at),
         }

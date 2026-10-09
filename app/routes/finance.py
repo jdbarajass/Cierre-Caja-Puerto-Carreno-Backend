@@ -22,6 +22,8 @@ bp = Blueprint('finance', __name__)
 MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
              'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 PAID_MARKER = 'auto:incentivo:{rule}:{period}'
+# Meta del incentivo -> categoría detallada del gasto (EXPENSE_SUBCATEGORIES)
+INCENTIVE_SUBCATEGORY = {'meta1': 'incentivo_1', 'meta2': 'incentivo_2'}
 
 # Plantilla del Excel (INCENTIVO 1 = $200.000 + $100.000; INCENTIVO 2 = $100.000 + $50.000)
 INCENTIVES_TEMPLATE = [
@@ -247,6 +249,8 @@ def pay_incentive():
             period=period,
             concept=f'{rule.name} - {MONTHS_ES[month - 1]} {year}',
             category=rule.category,
+            # Incentivo de sueldo: queda con su categoría detallada (Gastos)
+            subcategory=INCENTIVE_SUBCATEGORY.get(rule.threshold) if rule.category == 'sueldo' else None,
             direction='out',
             account_mode=mode,
             apply_fee=True,

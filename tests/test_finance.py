@@ -100,6 +100,7 @@ def test_incentivos_plantilla_estado_y_pago_una_vez(client, h, monkeypatch):
     assert resp.status_code == 201, resp.get_json()
     exp = resp.get_json()['expense']
     assert exp['category'] == 'sueldo' and exp['efectivo'] == 300000 and exp['period'] == '2026-10'
+    assert exp['subcategory'] == 'incentivo_1'
     assert exp['date'] == '2026-10-20'
     assert pay(rules['meta1']).status_code == 400                                 # una sola vez
     assert 'no alcanza' in pay(rules['meta2']).get_json()['message']              # META 2 no se alcanzó
