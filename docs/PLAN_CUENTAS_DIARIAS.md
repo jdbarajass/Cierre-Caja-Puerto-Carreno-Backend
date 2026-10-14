@@ -17,7 +17,7 @@ Estado de las fases (actualizar al cerrar cada una):
 
 ## 1. Qué hace el Excel hoy (análisis completo)
 
-Archivo `KOAJ_CARRENO2026.xlsx` (raíz de `CIERRE_KOAJ`, no versionado). Una hoja por mes (ENERO…OCTUBRE) con la misma plantilla, más `DATOS_ANUALES_2026`, `CierreGeneral2026` y `Bonos Regalos_2026`.
+Archivo `KOAJ_CARRENO2026.xlsx` (nunca se versionó; se quitó de la carpeta `CIERRE_KOAJ` el 2026-10-14 porque el análisis quedó en este documento). Una hoja por mes (ENERO…OCTUBRE) con la misma plantilla, más `DATOS_ANUALES_2026`, `CierreGeneral2026` y `Bonos Regalos_2026`.
 
 ### Hoja de cada mes
 1. **Ventas diarias** (A3:L35): fecha, EFECTIVO, QR, AHORRO (datáfono débito), CRÉDITO (datáfono crédito), NEQUI, ADDI, BBVA, DAVIPLATA, BOLD; total del día; excedente (medio + valor). Calificación del día: `≤680.000 VENTA MALA`, `≤1.000.000 BAJITA`, `≤2.000.000 BUENA`, `>2.000.000 ALTA` (con conteo y suma por categoría, M36:O41). Subtotales 1-15 y 16-31.
