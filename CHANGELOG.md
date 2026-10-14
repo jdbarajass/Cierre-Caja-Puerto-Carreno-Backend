@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-10-14] - Limpieza de archivos que no se usan
+
+- Quitados del repo (siguen en el historial de git): `DESPLIEGUE_PYTHONANYWHERE.md` (el backend está en Render), `docs/archive/` (7 documentos viejos ya reemplazados) y `scripts/cargar_gastos_recompras_oct_2026.py` (carga única del 9-oct ya hecha; correrla otra vez duplicaría los gastos).
+- Sin cambios de código. `Dockerfile` y `runtime.txt` se dejan hasta confirmar cómo arma Render el servicio.
+
 ## [2026-10-09] - Categorías detalladas en Gastos y notas en Cuentas
 
 - Pedido del usuario: personalizar las categorías de Gastos con su lista (cuota banco, sueldos empleadas 1 y 2, internet, YouTube, Alegra, luz, arriendo, cuota de manejo, sueldo Jhonatan por recompras, incentivos 1 y 2, ganancias de Jhonatan/Cristian/José, préstamo empleada, préstamo a otra tienda, flete, aseo, moto carro, inversión, gasto operativo y "Otra" con texto).
