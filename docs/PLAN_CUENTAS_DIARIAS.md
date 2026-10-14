@@ -58,7 +58,7 @@ Tarjetas de regalo: valor, número, medio de pago, fecha de compra, fecha de red
 ### Medios de pago (decisión del usuario)
 Ventas: **EFECTIVO, QR, AHORRO (datáfono débito), CRÉDITO (datáfono crédito), NEQUI, ADDI, BBVA, DAVIPLATA, SISTECRÉDITO, BOLD.**
 
-Cuentas donde vive la plata (ya existen en Resumen): EFECTIVO (`cash`), QR BANCOLOMBIA (`qr`, cuenta …5494), ADDI + DATÁFONO (`addi_datafono`, Bancolombia …6018: ahí llegan datáfono y Addi), NEQUI, DAVIPLATA, BBVA, SisteCrédito, AHORRO (`ahorro`, fondo de ahorro: no confundir con "AHORRO" = tarjeta débito del datáfono).
+Cuentas donde vive la plata (ya existen en Resumen): EFECTIVO (`cash`), QR BANCOLOMBIA (`qr`, cuenta Bancolombia …5494 de José), ADDI + DATÁFONO (`addi_datafono`, cuenta de Cristhian …6018, banco por confirmar: ahí llegan datáfono y Addi), NEQUI, DAVIPLATA, BBVA, SisteCrédito, AHORRO (`ahorro`, fondo de ahorro: no confundir con "AHORRO" = tarjeta débito del datáfono).
 
 ### Cuándo llega la plata (para la Fase 2)
 - **Datáfono (débito/crédito):** llega el **siguiente día hábil** a la cuenta …6018, menos **3,8 %**.

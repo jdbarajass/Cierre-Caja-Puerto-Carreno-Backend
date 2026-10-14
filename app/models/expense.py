@@ -13,7 +13,7 @@ from app.models.user import db
 from app.models.store_scoped import StoreScopedMixin
 
 # Medio de pago del gasto -> payment_key de la cuenta (Account) de donde sale
-# o a donde entra la plata. 'datafono' es la cuenta Bancolombia …6018 donde
+# o a donde entra la plata. 'datafono' es la cuenta de Cristhian (…6018) donde
 # llegan el datáfono y Addi (ADDI + DATÁFONO en Resumen).
 EXPENSE_ACCOUNT_MAP = {
     'efectivo':  'cash',

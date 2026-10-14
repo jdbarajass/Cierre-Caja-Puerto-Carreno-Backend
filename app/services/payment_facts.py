@@ -32,7 +32,7 @@ SALE_MEDIOS = ('efectivo', 'qr', 'ahorro', 'credito', 'nequi', 'addi',
                'bbva', 'daviplata', 'sistecredito', 'bold')
 
 # Medio de venta -> cuenta de Resumen donde termina la plata.
-# Ahorro/crédito (datáfono) y Addi llegan a Bancolombia …6018 (ADDI + DATÁFONO).
+# Ahorro/crédito (datáfono) y Addi llegan a la cuenta de Cristhian …6018 (ADDI + DATÁFONO).
 # Bold: llega a la misma cuenta del datáfono y Addi (confirmado por el usuario
 # 2026-10-06, "por el momento"); su comisión y días de llegada no se conocen,
 # así que no entra a la plata en tránsito.
