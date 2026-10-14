@@ -17,6 +17,7 @@ MOVEMENT_TYPES = (
     'repurchase_send',
     'expense',      # Cuentas → Gastos: salida (app/routes/expenses.py)
     'expense_in',   # Cuentas → Gastos: entrada que no es venta
+    'card_arrival', # pago de datáfono/Addi que llegó al banco, neto (app/services/card_arrivals.py)
 )
 
 

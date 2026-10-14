@@ -18,6 +18,7 @@ from app.models.month_sheet import AccountReconciliation, MonthClose, SaleMethod
 from app.routes.accounts import sync_token_or_admin_required
 from app.routes.expenses import _sync_expense_account_movements, ExpenseError, PERIOD_RE
 from app.services import month_sheet as svc
+from app.services import card_arrivals
 from app.services.payment_facts import PAYMENTS_START, SALE_MEDIOS, default_since, sync_payments
 from app.stores import get_alegra_client, get_current_store
 from app.utils.timezone import get_colombia_now
@@ -53,7 +54,9 @@ def get_sheet():
         return err
     try:
         year, month = _year_month(request.args)
-        sheet = svc.build_sheet(get_current_store(), year, month, get_colombia_now().date())
+        today = get_colombia_now().date()
+        card_arrivals.credit_arrivals_safely(get_current_store(), today)
+        sheet = svc.build_sheet(get_current_store(), year, month, today)
         return jsonify({'success': True, **sheet}), 200
     except ExpenseError as e:
         return jsonify({'success': False, 'message': str(e)}), 400
@@ -66,7 +69,10 @@ def run_payments_sync(store, since=None):
     """Carga los recibos de Alegra de la tienda. Lo usa también la carga de facturas del cron."""
     client = get_alegra_client(store)
     today = get_colombia_now().date()
-    return sync_payments(client, store, since or default_since(store, today))
+    result = sync_payments(client, store, since or default_since(store, today))
+    # Con los recibos al día, acredita lo que ya llegó del datáfono/Addi
+    card_arrivals.credit_arrivals_safely(store, today)
+    return result
 
 
 @bp.route('/api/month-sheet/sync-payments', methods=['POST', 'OPTIONS'])
@@ -207,6 +213,8 @@ def register_commissions():
     """
     Registra (o actualiza) como gasto financiero las comisiones estimadas del
     mes (datáfono 3,8 % y Addi 7,735 %), descontándolas de ADDI + DATÁFONO.
+    Con "plata real del banco" activo (card_arrivals), desde el mes en que se
+    activó es un gasto informativo (sin_mover): los pagos ya llegan sin comisión.
     Un solo gasto por mes (marcado en notes); si la comisión queda en 0 se borra.
     """
     if request.method == 'OPTIONS':
@@ -236,7 +244,8 @@ def register_commissions():
         expense.concept = svc.COMMISSION_CONCEPT.format(label=svc.period_label(year, month))
         expense.category = 'financiero'
         expense.direction = 'out'
-        expense.account_mode = 'cuentas'
+        card_since = card_arrivals.since(store)
+        expense.account_mode = 'sin_mover' if card_since and period >= card_since.strftime('%Y-%m') else 'cuentas'
         expense.apply_fee = False
         expense.fee_override = None
         for m in ('efectivo', 'qr', 'daviplata', 'nequi', 'bbva', 'ahorro'):

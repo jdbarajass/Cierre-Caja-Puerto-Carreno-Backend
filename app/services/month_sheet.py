@@ -24,6 +24,7 @@ from app.models.cash_closing import CashClosing
 from app.models.expense import Expense
 from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose, SaleMethodCorrection
 from app.models.repurchase import RepurchaseEntry
+from app.services import card_arrivals
 from app.services.payment_facts import (
     SALE_MEDIOS, FEES, TRANSIT_MEDIOS, PAYMENTS_START, arrival_date, net_amount,
 )
@@ -40,6 +41,7 @@ RATING_ORDER = ('mala', 'bajita', 'buena', 'alta')
 MOVEMENT_COLUMNS = {
     'cash_closing': 'ventas',
     'excedente': 'excedentes',  # no es venta: se muestra aparte (subtotal ventas + excedentes = total)
+    'card_arrival': 'llegadas',  # datáfono/Addi que llegó al banco, neto (app/services/card_arrivals.py)
     'repurchase_send': 'recompras',
     'expense': 'gastos',
     'expense_in': 'entradas',
@@ -47,7 +49,7 @@ MOVEMENT_COLUMNS = {
     'transfer_in': 'transferencias',
     'transfer_out': 'transferencias',
 }
-STATEMENT_COLUMNS = ('ventas', 'excedentes', 'recompras', 'gastos', 'entradas', 'ajustes', 'transferencias')
+STATEMENT_COLUMNS = ('ventas', 'excedentes', 'llegadas', 'recompras', 'gastos', 'entradas', 'ajustes', 'transferencias')
 
 COMMISSION_MARKER = 'auto:comisiones:{period}'
 COMMISSION_CONCEPT = 'Comisiones datáfono y Addi {label}'
@@ -174,6 +176,8 @@ def _effective_dates(movements: List[AccountMovement]) -> Dict[int, date]:
         d = None
         if m.cash_closing_id:
             d = closings.get(m.cash_closing_id)
+        elif ref.startswith(card_arrivals.REF_PREFIX):
+            d = card_arrivals.parse_reference(ref)
         elif ref.startswith('repurchase-entry-'):
             d = entries.get(int(ref.rsplit('-', 1)[1]))
         elif ref.startswith('expense-'):
@@ -304,13 +308,22 @@ def build_sheet(store: str, year: int, month: int, today: date) -> Dict[str, Any
     comm = commissions(store, start, end, period)
 
     # Cuenta ADDI + DATÁFONO: cuánto de su saldo todavía no llega y la
-    # comisión del mes que aún no se ha registrado como gasto.
+    # comisión del mes que aún no se ha registrado como gasto. Con "plata real
+    # del banco" activo (card_arrivals) el saldo ya es lo que llegó, neto: lo
+    # que falta por llegar va aparte y no hay comisión por descontar.
+    card_since = card_arrivals.since(store)
     for row in statement:
         if row['payment_key'] == 'addi_datafono':
-            pending_fee = max(0, comm['total'] - comm['registered_amount'])
-            row['in_transit_gross'] = tr['gross']
-            row['pending_commission'] = pending_fee
-            row['estimated_available'] = row['final'] - tr['gross'] - pending_fee
+            if card_since:
+                row['in_transit_gross'] = 0
+                row['in_transit_net_apart'] = tr['net']
+                row['pending_commission'] = 0
+                row['estimated_available'] = row['final']
+            else:
+                pending_fee = max(0, comm['total'] - comm['registered_amount'])
+                row['in_transit_gross'] = tr['gross']
+                row['pending_commission'] = pending_fee
+                row['estimated_available'] = row['final'] - tr['gross'] - pending_fee
 
     close = MonthClose.for_store(store).filter_by(period=period).first()
     close_info = None
@@ -338,6 +351,7 @@ def build_sheet(store: str, year: int, month: int, today: date) -> Dict[str, Any
         'corrections': [c.to_dict() for c in corrections(store, start, end)],
         'closed': close_info,
         'payments_start': PAYMENTS_START.isoformat(),
+        'card_arrivals_since': card_since.isoformat() if card_since else None,
     }
 
 

@@ -93,7 +93,7 @@ Los cambios ya están guardados en tu computador ("commit"). Falta **subirlos a 
 **Para ver cómo va el año:** **Cuentas → Año**. Por cada mes: ventas, recompras, gastos, ganancia bruta / neta / real con su %, inventario y cuánto subió o bajó; abajo, ventas por medio de pago y la plata que salió sin ser gasto (inversiones, préstamos, retiros) y lo que tiene Jhonatan. Si un dato está mal, toca el lápiz ✎ del mes y escríbelo a mano (queda marcado con ✎ y se puede volver al calculado).
 
 **A fin de mes:**
-1. En **Cuentas → Mes**, toca **"Registrar en Gastos"** en el cuadro de comisiones: resta de ADDI + DATÁFONO lo que cobran el datáfono (3,8 %) y Addi (7,735 %).
+1. En **Cuentas → Mes**, toca **"Registrar en Gastos"** en el cuadro de comisiones: queda como gasto lo que cobran el datáfono (3,8 %) y Addi (7,735 %). Si ADDI + DATÁFONO ya es "plata real del banco" (ver abajo), no se resta otra vez de la cuenta porque los pagos llegan sin comisión; solo queda en Gastos para ver cuánto se pagó.
 2. Revisa los gastos fijos del mes en **Gastos**: ninguno debe quedar "Vencido" sin pagar.
 3. Escribe los saldos reales, que todo diga "Cuadra" y toca **"Cerrar el mes"** (con una nota si quieres). Si después cambias algo de ese mes, la plataforma te avisa; puedes **Reabrir** y volver a cerrar.
 
@@ -166,5 +166,18 @@ Al entrar a la plataforma como administrador, puede salir una ventana con un **R
 - **¿Lo que sobra de un mes pasa al siguiente?** Sí, solo. El "saldo inicial" de cada cuenta es lo que quedó el mes anterior. Ya no hace falta anotar recompras en el mes anterior como hacías en el Excel.
 - **¿Me equivoqué en un gasto?** Edítalo o bórralo con el lápiz / la caneca en Gastos: el saldo de las cuentas se corrige solo.
 - **¿Por qué la venta del mes de Alegra no es igual a "Ventas (cierres)" en una cuenta?** La tabla de ventas viene de Alegra (lo vendido); "Ventas (cierres)" es lo que se abonó a cada cuenta con el cierre de caja (el efectivo ya viene sin lo que se sacó de la caja ese día). Los excedentes van aparte, en su columna.
-- **Bold:** sus ventas salen en la tabla y la plata se toma como que llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Su comisión y en cuántos días llega no se conocen, así que no aparece en "por llegar".
+- **Bold:** sus ventas salen en la tabla y la plata se toma como que llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Su comisión y en cuántos días llega no se conocen, así que no aparece en "por llegar" (con "plata real del banco" entra el mismo día de la venta, completa).
+
+## ADDI + DATÁFONO = plata real del banco (desde el 14-oct-2026)
+
+Antes, la tarjeta ADDI + DATÁFONO sumaba todo lo vendido por datáfono y Addi el mismo día de la venta, aunque Addi pagara un mes después. Así parecía que había más plata disponible para recompras.
+
+**Cómo arrancar (una sola vez por tienda):** en **Cuentas → Resumen**, en la tarjeta ADDI + DATÁFONO, escribe lo que hay **hoy en el banco** y toca **"Igualar al banco"**. La cuenta queda en ese valor.
+
+**Desde el día siguiente:**
+- El cierre de caja ya no suma a esa cuenta lo vendido por datáfono ni por Addi.
+- Cada venta entra **sola el día en que llega al banco, ya sin comisión**: datáfono el siguiente día hábil (lo del viernes llega el lunes, o el martes si el lunes es festivo), menos 3,8 %; Addi a los 30 días (o el siguiente día hábil), menos 7,735 %. En Cuentas → Mes sale en la columna **"Llegadas tarjetas"**.
+- La tarjeta muestra el **saldo disponible** (lo que ya llegó), aparte **"Por llegar (no está en el saldo)"** con Datáfono y Addi (tócalos para ver el detalle) y el **total entre las dos**.
+- Si corriges a mano el saldo (por ejemplo después de ver el banco) con "Ajuste manual", lo que falta por llegar de Addi no cambia.
+- Si una venta se corrige con el lápiz ✎ (ej. era efectivo), lo que había entrado por ella se quita solo.
 - **¿Qué es cada ganancia?** Bruta = ventas − recompras. Neta = ventas − gastos (como tu Excel). Real = ventas − recompras − gastos. "G. real + inventario" suma lo que subió el inventario: si subió, esa plata está en la tienda en ropa.

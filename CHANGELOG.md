@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-10-14] - ADDI + DATÁFONO = plata real del banco
+
+Pedido del usuario: que el saldo de la tarjeta sea lo que hay en el banco y que lo que Addi o el datáfono todavía deben vaya aparte, para no tomarlo como disponible para recompras.
+
+- `app/services/card_arrivals.py` (nuevo): activación por tienda (`card_arrivals_since` en app_settings). Desde el día siguiente cada venta de datáfono/Addi (y Bold, el mismo día) entra sola el día que llega, neta de comisión (`payment_facts.arrival_date`/`net_amount`), como movimiento `card_arrival` (un movimiento por día de llegada y medio, `reference_id=card-arrival-<medio>-<día>`). Se recalculan los últimos 40 días cada vez (sin duplicar; si una corrección cambia una venta, se corrige solo).
+- Se acredita al consultar `GET /api/accounts` y `GET /api/month-sheet`, y después de cargar los recibos de Alegra (`run_payments_sync`, también en el cron).
+- `POST /api/accounts/card-arrivals/start` `{real_balance}` (admin, una vez por tienda, 409 si ya está): ajuste para dejar la cuenta igual al banco y la comisión del mes en curso pasa a `sin_mover` antes de calcularlo.
+- `_claim_and_credit_closing`: con el modo activo, el cierre ya no suma `addi_datafono` (los excedentes del datáfono siguen entrando).
+- Comisiones (`POST /api/month-sheet/commissions`): desde el mes de activación quedan como gasto informativo (`account_mode='sin_mover'`).
+- Cuentas → Mes: columna nueva `llegadas` en el estado por cuenta (`STATEMENT_COLUMNS`, fecha = día de llegada), `card_arrivals_since` en la hoja y en `/api/accounts`; la fila ADDI + DATÁFONO trae `in_transit_net_apart` y `estimated_available = final`.
+- Tests: `tests/test_card_arrivals.py` (10).
+
 ## [2026-10-14] - Limpieza de archivos que no se usan
 
 - Quitados del repo (siguen en el historial de git): `DESPLIEGUE_PYTHONANYWHERE.md` (el backend está en Render), `docs/archive/` (7 documentos viejos ya reemplazados) y `scripts/cargar_gastos_recompras_oct_2026.py` (carga única del 9-oct ya hecha; correrla otra vez duplicaría los gastos).

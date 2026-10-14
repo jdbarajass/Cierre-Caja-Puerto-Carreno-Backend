@@ -21,6 +21,7 @@ from app.config import Config
 from app.utils.timezone import get_colombia_now, parse_colombia_date
 from app.routes.cash_closing import _get_or_init_pending_closings_tracking_start
 from app.stores import STORES, get_current_store, store_setting_key
+from app.services import card_arrivals
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('accounts', __name__)
@@ -142,17 +143,84 @@ def list_accounts():
     if request.method == 'OPTIONS':
         return '', 204
 
+    # ADDI + DATÁFONO = plata real del banco: antes de mostrar los saldos se
+    # suman los pagos de datáfono/Addi que ya llegaron (ver card_arrivals).
+    store = get_current_store()
+    card_arrivals.credit_arrivals_safely(store, get_colombia_now().date())
+
     accounts = Account.for_current_store().filter_by(active=True).order_by(Account.sort_order.asc()).all()
     # No incluye cuentas como AHORRO - ver ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
     total_balance = sum(
         a.balance for a in accounts if a.payment_key not in ACCOUNTS_EXCLUDED_FROM_RECOMPRA_TOTAL
     )
+    card_since = card_arrivals.since(store)
 
     return jsonify({
         'success': True,
         'accounts': [a.to_dict() for a in accounts],
-        'total_balance': total_balance
+        'total_balance': total_balance,
+        'card_arrivals_since': card_since.isoformat() if card_since else None,
     }), 200
+
+
+@bp.route('/api/accounts/card-arrivals/start', methods=['POST', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def start_card_arrivals():
+    """
+    Arranca "ADDI + DATÁFONO = plata real del banco" en la tienda activa
+    (app/services/card_arrivals.py). Body: {"real_balance": <saldo del banco hoy>}.
+    Deja la cuenta igual al banco con un ajuste, pasa la comisión del mes en
+    curso a gasto informativo y, desde mañana, los pagos entran solos.
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+    from app.models.expense import Expense
+    from app.routes.expenses import _sync_expense_account_movements
+    from app.services.month_sheet import COMMISSION_MARKER
+
+    store = get_current_store()
+    if card_arrivals.is_active(store):
+        return jsonify({'success': False, 'message': 'Ya está activo. Para corregir el saldo usa "Ajuste manual".'}), 409
+    try:
+        real = float((request.get_json() or {}).get('real_balance'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Escribe el saldo real del banco'}), 400
+    if real < 0:
+        return jsonify({'success': False, 'message': 'El saldo no puede ser negativo'}), 400
+
+    try:
+        today = get_colombia_now().date()
+        # La comisión del mes en curso ya no se descuenta de la cuenta (los
+        # pagos llegarán sin comisión): se quita su movimiento ANTES de
+        # calcular el ajuste, que deja la cuenta igual al banco de todas formas.
+        commission = Expense.for_store(store).filter_by(
+            notes=COMMISSION_MARKER.format(period=today.strftime('%Y-%m'))).first()
+        if commission and commission.account_mode == 'cuentas':
+            commission.account_mode = 'sin_mover'
+            _sync_expense_account_movements(commission)
+
+        account = (Account.for_store(store).filter_by(payment_key=card_arrivals.ACCOUNT_KEY)
+                   .with_for_update().first())
+        if not account:
+            db.session.rollback()
+            return jsonify({'success': False, 'message': 'Esta tienda no tiene la cuenta ADDI + DATÁFONO'}), 404
+        diff = round(real - account.balance)
+        if diff:
+            db.session.add(AccountMovement(
+                account_id=account.id, type='manual_adjustment', amount=diff,
+                description='Saldo igual al banco: desde mañana el datáfono y Addi entran el día que llegan, ya sin comisión',
+                created_by=get_current_user().get('userId')))
+            account.balance += diff
+        card_arrivals.set_since(store, today)
+        db.session.commit()
+        logger.info(f'[{store}] Llegadas datáfono/Addi activadas desde {today}: ajuste {diff}')
+        return jsonify({'success': True, 'account': account.to_dict(), 'adjustment': diff,
+                        'card_arrivals_since': today.isoformat()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'Error activando llegadas datáfono/Addi: {e}', exc_info=True)
+        return jsonify({'success': False, 'message': 'No se pudo activar. Intenta de nuevo.'}), 500
 
 
 # ─────────────────────────────────────────────
@@ -539,7 +607,9 @@ def _claim_and_credit_closing(closing, user_id):
         ('nequi', closing.nequi),
         ('daviplata', closing.daviplata),
         ('qr', closing.qr),
-        ('addi_datafono', closing.addi_datafono),
+        # Con "plata real del banco" activo, las ventas por datáfono/Addi entran
+        # el día que llegan (card_arrivals), no el día del cierre.
+        ('addi_datafono', 0 if card_arrivals.is_active(closing.store_code) else closing.addi_datafono),
     ]
 
     # Solo las cuentas de la tienda del cierre
