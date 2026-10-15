@@ -97,12 +97,17 @@ def test_llegada_addi_igual_al_reporte_de_addi():
     # Reporte de pagos de Addi del usuario: venta -> pago
     for sale, pay in (('2026-10-05', '2026-11-04'), ('2026-10-03', '2026-11-03'), ('2026-10-01', '2026-11-03'),
                       ('2026-09-29', '2026-10-29'), ('2026-09-25', '2026-10-26'), ('2026-09-20', '2026-10-20'),
-                      ('2026-09-11', '2026-10-12'), ('2026-09-04', '2026-10-05'), ('2026-08-28', '2026-09-28')):  # Addi sí paga el 12-oct
+                      ('2026-09-04', '2026-10-05'), ('2026-08-28', '2026-09-28'),
+                      # Reportes de pagos descargados el 15-oct: festivos 12-ene y 20-jul -> martes
+                      ('2025-12-11', '2026-01-13'), ('2026-06-19', '2026-07-21'), ('2026-09-03', '2026-10-05'),
+                      ('2026-09-11', '2026-10-15')):  # Addi corrió este pago al 15-oct (ADDI_PAYMENT_OVERRIDES)
         assert arrival_date('addi', date.fromisoformat(sale)).isoformat() == pay
     assert round(net_amount('addi', 204700), 2) == 188866.45      # mismo neto del reporte
     assert arrival_date('ahorro', date(2026, 10, 3)) == date(2026, 10, 5)    # sábado -> lunes
     assert arrival_date('credito', date(2026, 10, 30)) == date(2026, 11, 3)  # viernes, lunes festivo
     assert arrival_date('efectivo', date(2026, 10, 3)) is None
+    assert arrival_date('bold', date(2026, 10, 9)) == date(2026, 10, 13)     # como el datáfono (12-oct festivo)
+    assert round(net_amount('bold', 100000)) == 96200
 
 
 def test_clasificacion():
@@ -355,3 +360,20 @@ def test_por_llegar_addi_una_fila_por_venta_como_el_reporte_de_addi(app):
     assert [(s['date'], s['net']) for s in by_arrival['2026-11-03']['by_sale']] == [
         ('2026-10-01', 166077), ('2026-10-03', 156943)]          # = "Total a pagar" de Addi
     assert by_arrival['2026-10-29']['by_sale'] == [{'date': '2026-09-29', 'gross': 159800, 'net': 147439}]   # mes pasado
+
+
+def test_llego_en_el_mes_por_dia_de_llegada(app):
+    """Cuentas → Resumen, "Llegó en <mes>": lo que llegó entre el 1 y hoy, por día de llegada y neto."""
+    from app.services.month_sheet import arrived
+    _load(app, [_pay(1, '2026-09-30', 100000, 'debit-card', 'DATAFONO'),   # llega jue 1-oct
+                _pay(2, '2026-09-04', 180000, 'transfer', 'ADDI'),          # llega lun 5-oct
+                _pay(3, '2026-10-09', 50000, 'credit-card', 'DATAFONO'),    # llega mar 13-oct (12 festivo)
+                _pay(4, '2026-10-05', 204700, 'transfer', 'ADDI'),          # llega 4-nov: no cuenta
+                _pay(5, '2026-09-29', 70000, 'credit-card', 'DATAFONO')],   # llegó 30-sep: no cuenta
+          since=date(2026, 9, 1))
+    with app.app_context():
+        arr = arrived('carreno', date(2026, 10, 1), date(2026, 10, 12))
+        assert [(i['arrival_date'], i['medio'], i['net']) for i in arr['items']] == [
+            ('2026-10-01', 'ahorro', 96200), ('2026-10-05', 'addi', 166077)]      # 166.077 = "Total a pagar" de Addi
+        assert arr['items'][1]['by_sale'] == [{'date': '2026-09-04', 'gross': 180000, 'net': 166077}]
+        assert arrived('carreno', date(2026, 10, 1), date(2026, 10, 13))['net'] == 96200 + 166077 + 48100

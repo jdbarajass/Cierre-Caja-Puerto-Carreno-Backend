@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-15] - Lo que llegó en el mes (datáfono y Addi), Addi según su reporte y Bold como datáfono
+
+Pedido del usuario: separar la tarjeta ADDI + DATÁFONO de Resumen en dos casillas (Datáfono y Addi) con lo que llegó y lo que falta por llegar de cada una, y ventana con los pagos que entraron.
+
+- `month_sheet.arrived(store, start, cutoff)` (nuevo) y `arrived` en `GET /api/month-sheet`: lo que llegó en el mes por día de llegada y medio, neto, con una fila por día de venta. Se calcula desde las ventas con la misma regla de `card_arrivals`, así que cubre todo el mes aunque "plata real del banco" se active a mitad de mes. Comparte la agrupación con `transit` (`_by_arrival`).
+- Addi: se revisaron los 90 Reportes de pagos de Addi (ago-2025 a oct-2026, carpeta `pagos addi` del usuario, fuera de los repos): 89 siguen la regla (30 días, siguiente día hábil, 7,735 %). Addi no paga festivos (12-ene y 20-jul -> martes), así que se quitó la excepción del 12-oct del 2026-10-07: Addi corrió ese pago (venta 11-sep, $236.844) al 15-oct. `ADDI_PAYMENT_OVERRIDES` en `payment_facts.py` guarda los pagos que Addi corrió (manda el reporte de Addi, no Alegra).
+- Bold (pedido del usuario): igual que el datáfono, siguiente día hábil y −3,8 % (`FEES`, `TRANSIT_MEDIOS`, `DATAFONO_MEDIOS`); entra en tránsito, en las llegadas y en la comisión del mes. Antes entraba el mismo día y completo. Al 15-oct no hay ninguna venta por Bold (Alegra no tiene cuenta Bold).
+- Tests: `test_llego_en_el_mes_por_dia_de_llegada`, fechas nuevas del reporte de Addi y Bold en `tests/test_month_sheet.py`; `test_bold_llega_como_el_datafono` en `tests/test_card_arrivals.py`. Suite completa 298/298 (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-14] - ADDI + DATÁFONO = plata real del banco
 
 Pedido del usuario: que el saldo de la tarjeta sea lo que hay en el banco y que lo que Addi o el datáfono todavía deben vaya aparte, para no tomarlo como disponible para recompras.

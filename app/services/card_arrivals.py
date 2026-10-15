@@ -13,8 +13,8 @@ Desde que el admin lo activa (por tienda, con el saldo real del banco):
   del datáfono siguen entrando el día del cierre.
 - Cada venta entra sola el día en que llega al banco y ya sin comisión
   (`payment_facts.arrival_date` / `net_amount`): datáfono el siguiente día
-  hábil −3,8 %, Addi a los 30 días −7,735 %. Bold (sin reglas conocidas)
-  entra el mismo día, completo. Un movimiento `card_arrival` por día de
+  hábil −3,8 %, Addi a los 30 días −7,735 %. Bold igual que el datáfono
+  (desde 2026-10-15). Un movimiento `card_arrival` por día de
   llegada y medio (reference_id `card-arrival-<medio>-<AAAA-MM-DD>`), que se
   recalcula si cambian los recibos de Alegra o una corrección a mano.
 - La comisión del mes se sigue registrando en Gastos, pero como gasto
@@ -43,7 +43,7 @@ SETTING = 'card_arrivals_since'
 ACCOUNT_KEY = 'addi_datafono'
 MOVEMENT_TYPE = 'card_arrival'
 REF_PREFIX = 'card-arrival-'
-ARRIVAL_MEDIOS = TRANSIT_MEDIOS + ('bold',)
+ARRIVAL_MEDIOS = TRANSIT_MEDIOS   # incluye Bold (como el datáfono)
 MEDIO_LABEL = {'ahorro': 'Datáfono débito', 'credito': 'Datáfono crédito', 'addi': 'Addi', 'bold': 'Bold'}
 # Solo se recalculan las llegadas de estos últimos días; las más viejas quedan
 # como estaban (los recibos de hace más de un mes ya no cambian).

@@ -167,7 +167,7 @@ Nueva pestaña **Cuentas → Gastos** (solo admin, por tienda).
 - Septiembre: cargar los gastos del Excel como `sin_mover` (no tocan cuentas) para que el resumen arranque en septiembre.
 
 **Cómo quedó (2026-10-06)**
-- Decisiones: Bold llega a ADDI + DATÁFONO (`MEDIO_ACCOUNT['bold']`), sin tránsito ni comisión (desconocidos). `PAYMENTS_START` pasa a **1-sep-2026** para tener ventas por medio de septiembre (el resumen arranca ahí).
+- Decisiones: Bold llega a ADDI + DATÁFONO (`MEDIO_ACCOUNT['bold']`), sin tránsito ni comisión (desconocidos). **Cambiado 2026-10-15:** Bold como el datáfono (siguiente día hábil, −3,8 %). `PAYMENTS_START` pasa a **1-sep-2026** para tener ventas por medio de septiembre (el resumen arranca ahí).
 - Backend: `app/models/monthly_summary.py` (`InventorySnapshot` por tienda y mes con `as_of`; `MonthlySummaryOverride` por tienda, mes y dato), `app/services/monthly_summary.py` (`computed_month`, `build_year`, `fetch_inventory`, `months_needing_inventory`), `app/routes/monthly_summary.py`:
   - `GET /api/monthly-summary?year`: 12 meses (los futuros solo marcados; antes de sep-2026 se calculan pero no suman), totales, promedios, ventas por medio del año.
   - Definiciones: ventas = `InvoiceFact.total` no anuladas; recompras = `RepurchaseEntry.total_enviado`; gastos operativos = gastos con `period` del mes de categorías operativo/sueldo/flete/financiero/cuota_credito/otro (con 4x1000) + 4x1000 de las recompras; aparte inversiones, retiros, préstamos (empleada + tienda), fletes (incluidos en operativos); Jhonatan al cierre = `_carryover_before(día siguiente)`.

@@ -34,8 +34,9 @@ SALE_MEDIOS = ('efectivo', 'qr', 'ahorro', 'credito', 'nequi', 'addi',
 # Medio de venta -> cuenta de Resumen donde termina la plata.
 # Ahorro/crédito (datáfono) y Addi llegan a la cuenta de Cristhian …6018 (ADDI + DATÁFONO).
 # Bold: llega a la misma cuenta del datáfono y Addi (confirmado por el usuario
-# 2026-10-06, "por el momento"); su comisión y días de llegada no se conocen,
-# así que no entra a la plata en tránsito.
+# 2026-10-06, "por el momento"). Desde 2026-10-15 se maneja igual que el
+# datáfono (pedido del usuario): siguiente día hábil, −3,8 %, y se muestra
+# dentro del grupo Datáfono. Hasta esa fecha no había ninguna venta por Bold.
 MEDIO_ACCOUNT = {
     'efectivo': 'cash', 'qr': 'qr', 'ahorro': 'addi_datafono', 'credito': 'addi_datafono',
     'addi': 'addi_datafono', 'nequi': 'nequi', 'daviplata': 'daviplata', 'bbva': 'bbva',
@@ -45,8 +46,17 @@ MEDIO_ACCOUNT = {
 DATAFONO_FEE = 0.038             # datáfono débito y crédito
 ADDI_FEE = 0.065 * 1.19          # tarifa de intermediación 6,5 % + IVA 19 % = 7,735 %
 ADDI_DAYS = 30
-FEES = {'ahorro': DATAFONO_FEE, 'credito': DATAFONO_FEE, 'addi': ADDI_FEE}
-TRANSIT_MEDIOS = ('ahorro', 'credito', 'addi')
+FEES = {'ahorro': DATAFONO_FEE, 'credito': DATAFONO_FEE, 'bold': DATAFONO_FEE, 'addi': ADDI_FEE}
+TRANSIT_MEDIOS = ('ahorro', 'credito', 'bold', 'addi')
+DATAFONO_MEDIOS = ('ahorro', 'credito', 'bold')
+
+# Pagos de Addi que no siguieron la regla: día de la venta -> día en que Addi
+# lo paga según su Reporte de pagos (ahí manda Addi, no Alegra).
+# - Venta 11-sep-2026: por regla llegaba el 13-oct (12-oct festivo); Addi lo
+#   corrió al 15-oct ("Pendiente de pago" en el reporte del 15-oct).
+ADDI_PAYMENT_OVERRIDES = {
+    date(2026, 9, 11): date(2026, 10, 15),
+}
 
 
 # ─────────────────────────────────────────────
@@ -101,9 +111,11 @@ def next_business_day(d: date) -> date:
 
 def arrival_date(medio: str, sale_date: date) -> Optional[date]:
     """Cuándo llega a la cuenta la plata de una venta (None = llega el mismo día)."""
-    if medio in ('ahorro', 'credito'):
+    if medio in DATAFONO_MEDIOS:
         return next_business_day(sale_date)
     if medio == 'addi':
+        if sale_date in ADDI_PAYMENT_OVERRIDES:
+            return ADDI_PAYMENT_OVERRIDES[sale_date]
         d = sale_date + timedelta(days=ADDI_DAYS)
         while not _addi_pays_on(d):
             d += timedelta(days=1)
@@ -113,14 +125,12 @@ def arrival_date(medio: str, sale_date: date) -> Optional[date]:
 
 def _addi_pays_on(d: date) -> bool:
     """
-    Días en que Addi consigna. Según el Reporte de pagos de Addi (oct-2026)
-    salta fines de semana y festivos (2-nov -> 3-nov), pero SÍ paga el festivo
-    del 12 de octubre (Día de la Raza, que la ley pasa al lunes): venta del
-    11-sep -> pago lunes 12-oct-2026.
+    Días en que Addi consigna: salta fines de semana y festivos. Verificado con
+    los 90 reportes de pagos de Addi (ago-2025 a oct-2026): 12-ene y 20-jul
+    festivos -> paga el martes. (El 7-oct se creyó que pagaba el festivo del
+    12-oct; Addi corrió ese pago al 15-oct, ver ADDI_PAYMENT_OVERRIDES.)
     """
-    if d.weekday() >= 5:
-        return False
-    return d not in colombia_holidays(d.year) or d == _next_monday(date(d.year, 10, 12))
+    return is_business_day(d)
 
 
 def net_amount(medio: str, amount: float) -> float:

@@ -176,7 +176,8 @@ def test_comision_del_mes_ya_registrada_pasa_a_informativa_al_activar(app, clien
     assert expense['account_mode'] == 'sin_mover'
 
 
-def test_bold_entra_el_mismo_dia_completo(app, client, h, today):
+def test_bold_llega_como_el_datafono(app, client, h, today):
+    """Desde 2026-10-15 Bold se maneja igual que el datáfono: siguiente día hábil, −3,8 %."""
     _load(app, [_pay(1, '2026-10-07', 90000, 'transfer', 'BOLD')])
     from app.models.month_sheet import PaymentFact
     with app.app_context():
@@ -185,7 +186,9 @@ def test_bold_entra_el_mismo_dia_completo(app, client, h, today):
         pytest.skip(f'La cuenta BOLD de prueba se clasifica como {medios}')
     _start(client, h, 0)
     today(date(2026, 10, 7))
-    assert _card(client, h)[0]['balance'] == 90000
+    assert _card(client, h)[0]['balance'] == 0          # vendido el miércoles, todavía no llega
+    today(date(2026, 10, 8))
+    assert _card(client, h)[0]['balance'] == round(net_amount('bold', 90000)) == 86580
 
 
 def test_otra_tienda_no_se_activa(app, client, h, today):

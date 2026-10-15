@@ -246,13 +246,12 @@ def account_statement(store: str, start: date, end: date, period: str) -> List[D
 #  Plata en tránsito y comisiones
 # ─────────────────────────────────────────────
 
-def transit(store: str, cutoff: date) -> Dict[str, Any]:
-    """Ventas de datáfono/Addi hechas hasta `cutoff` que todavía no llegan a esa fecha."""
-    entries = sale_entries(store, cutoff - timedelta(days=45), cutoff, TRANSIT_MEDIOS)
+def _by_arrival(entries, keep) -> Dict[str, Any]:
+    """Agrupa ventas de datáfono/Addi por (día de llegada, medio), solo las que cumplen `keep(llegada)`."""
     groups: Dict[tuple, Dict[str, Any]] = {}
     for sale_date, medio, amount, _ in entries:
         arrives = arrival_date(medio, sale_date)
-        if arrives is None or arrives <= cutoff:
+        if arrives is None or not keep(arrives):
             continue
         g = groups.setdefault((arrives, medio), {
             'arrival_date': arrives.isoformat(), 'medio': medio, 'gross': 0, 'net': 0,
@@ -271,11 +270,29 @@ def transit(store: str, cutoff: date) -> Dict[str, Any]:
         g['sales_dates'] = [s['date'] for s in g['by_sale']]
         g['net'] = round(g['net'])
     return {
-        'cutoff': cutoff.isoformat(),
         'items': items,
         'gross': sum(g['gross'] for g in items),
         'net': sum(g['net'] for g in items),
     }
+
+
+def transit(store: str, cutoff: date) -> Dict[str, Any]:
+    """Ventas de datáfono/Addi hechas hasta `cutoff` que todavía no llegan a esa fecha."""
+    entries = sale_entries(store, cutoff - timedelta(days=45), cutoff, TRANSIT_MEDIOS)
+    return {'cutoff': cutoff.isoformat(), **_by_arrival(entries, lambda arrives: arrives > cutoff)}
+
+
+def arrived(store: str, start: date, cutoff: date) -> Dict[str, Any]:
+    """
+    Datáfono/Addi que llegó al banco entre `start` y `cutoff` (por día de
+    llegada, neto), con la misma regla de card_arrivals. Se calcula desde las
+    ventas, así que sirve para todo el mes aunque "plata real del banco" se haya
+    activado a mitad de mes. Lo vendido a fin de mes que llega el mes siguiente
+    cuenta en el mes en que llega.
+    """
+    entries = sale_entries(store, start - timedelta(days=45), cutoff, TRANSIT_MEDIOS)
+    return {'start': start.isoformat(), 'cutoff': cutoff.isoformat(),
+            **_by_arrival(entries, lambda arrives: start <= arrives <= cutoff)}
 
 
 def commissions(store: str, start: date, end: date, period: str) -> Dict[str, Any]:
@@ -305,6 +322,7 @@ def build_sheet(store: str, year: int, month: int, today: date) -> Dict[str, Any
     sales = sales_by_day(store, start, end, today)
     statement = account_statement(store, start, end, period)
     tr = transit(store, cutoff)
+    arr = arrived(store, start, cutoff)
     comm = commissions(store, start, end, period)
 
     # Cuenta ADDI + DATÁFONO: cuánto de su saldo todavía no llega y la
@@ -347,6 +365,7 @@ def build_sheet(store: str, year: int, month: int, today: date) -> Dict[str, Any
         'sales': sales,
         'statement': statement,
         'transit': tr,
+        'arrived': arr,
         'commissions': comm,
         'corrections': [c.to_dict() for c in corrections(store, start, end)],
         'closed': close_info,

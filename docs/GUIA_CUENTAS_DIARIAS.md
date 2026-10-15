@@ -166,7 +166,7 @@ Al entrar a la plataforma como administrador, puede salir una ventana con un **R
 - **¿Lo que sobra de un mes pasa al siguiente?** Sí, solo. El "saldo inicial" de cada cuenta es lo que quedó el mes anterior. Ya no hace falta anotar recompras en el mes anterior como hacías en el Excel.
 - **¿Me equivoqué en un gasto?** Edítalo o bórralo con el lápiz / la caneca en Gastos: el saldo de las cuentas se corrige solo.
 - **¿Por qué la venta del mes de Alegra no es igual a "Ventas (cierres)" en una cuenta?** La tabla de ventas viene de Alegra (lo vendido); "Ventas (cierres)" es lo que se abonó a cada cuenta con el cierre de caja (el efectivo ya viene sin lo que se sacó de la caja ese día). Los excedentes van aparte, en su columna.
-- **Bold:** sus ventas salen en la tabla y la plata se toma como que llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Su comisión y en cuántos días llega no se conocen, así que no aparece en "por llegar" (con "plata real del banco" entra el mismo día de la venta, completa).
+- **Bold:** sus ventas salen en la tabla y la plata llega a ADDI + DATÁFONO (como dijiste, "por el momento"). Desde el 15-oct-2026 se maneja igual que el datáfono: llega el siguiente día hábil, menos 3,8 %, y en Resumen se suma dentro de la casilla Datáfono. Si Bold cobra otra comisión, avisa para ajustarla.
 
 ## ADDI + DATÁFONO = plata real del banco (desde el 14-oct-2026)
 
