@@ -2,6 +2,17 @@
 
 ---
 
+## [2026-10-28] - Primavera: fecha de apertura (25-oct) y credenciales de Alegra
+
+Pedido del usuario: Primavera abrió el 25-oct-2026; los días de cierre anteriores no cuentan.
+
+- `opening_date` en `STORES` (`app/stores.py`, Primavera = 2026-10-25) y `get_opening_date(code)`.
+- `_get_or_init_pending_closings_tracking_start` (`app/routes/cash_closing.py`): el aviso de "cierre pendiente" (y el ancla de "Última sincronización" en Cuentas) nunca empieza antes de la apertura de la tienda. Carreño no tiene fecha de apertura y sigue igual.
+- La copia de facturas de Primavera sigue empezando el 1-ene (esos días están vacíos y no molestan); no se tocó para no cambiar el congelado de la copia.
+- Render: el usuario puso `ALEGRA_USER_PRIMAVERA` / `ALEGRA_PASS_PRIMAVERA` (cuenta "Nous Primavera", verificada por API el 2026-10-28). Sin cambio de código.
+- En Alegra de Primavera (por API, no es código): creados BERMUDA 105900 (tallas 28-38, `1051421059028`…`38`), MEDIAS 20000 (`104820000`) y MEDIAS 8900 (`10488900`) con el mismo esquema de los demás (atributo de variante "NOMBRE PRECIO" con los códigos de barras, categoría BERMUDA/MEDIAS, sin impuesto). Alegra deja el costo en 0 mientras no haya unidades; el ajuste de entrada fija el costo.
+- Test: `test_cierres_pendientes_no_cuentan_antes_de_la_apertura_de_la_tienda` en `tests/test_multi_store.py`. Suite completa 299/299 (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-15] - Lo que llegó en el mes (datáfono y Addi), Addi según su reporte y Bold como datáfono
 
 Pedido del usuario: separar la tarjeta ADDI + DATÁFONO de Resumen en dos casillas (Datáfono y Addi) con lo que llegó y lo que falta por llegar de cada una, y ventana con los pagos que entraron.

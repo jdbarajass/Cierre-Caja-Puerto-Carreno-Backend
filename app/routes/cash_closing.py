@@ -21,6 +21,7 @@ from app.stores import (
     get_alegra_credentials,
     get_base_objetivo,
     get_current_store,
+    get_opening_date,
     store_setting_key,
 )
 from app.exceptions import (
@@ -486,13 +487,16 @@ def _get_or_init_pending_closings_tracking_start(today):
     la idea es que el aviso solo vigile hacia adelante desde que se activó.
 
     Es por tienda (ver store_setting_key): una tienda nueva empieza a vigilar
-    desde su primer uso, no desde la fecha en que se activó en Carreño.
+    desde su primer uso, no desde la fecha en que se activó en Carreño. Si la
+    tienda tiene fecha de apertura (app/stores.py), nunca vigila antes de ella.
     """
+    store_opening = get_opening_date(get_current_store())
     setting_key = store_setting_key(PENDING_CLOSINGS_TRACKING_SETTING_KEY)
     setting = AppSetting.query.get(setting_key)
     if setting and setting.value:
         try:
-            return datetime.strptime(setting.value, '%Y-%m-%d').date()
+            start = datetime.strptime(setting.value, '%Y-%m-%d').date()
+            return max(start, store_opening) if store_opening else start
         except ValueError:
             pass  # Valor corrupto/inesperado - se reinicia abajo como si no existiera
 
@@ -503,7 +507,7 @@ def _get_or_init_pending_closings_tracking_start(today):
     )
     db.session.merge(setting)
     db.session.commit()
-    return today
+    return max(today, store_opening) if store_opening else today
 
 
 @bp.route('/cash_closing/pending-dates', methods=['GET', 'OPTIONS'])

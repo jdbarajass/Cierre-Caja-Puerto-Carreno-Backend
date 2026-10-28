@@ -24,8 +24,13 @@ Credenciales de Alegra por tienda (variables de entorno):
 
 Base de caja por tienda: BASE_OBJETIVO_<SUFIJO>, con respaldo a BASE_OBJETIVO
 (450.000 por defecto).
+
+Fecha de apertura (`opening_date`, opcional): primer día de operación de la
+tienda. El aviso de "cierre pendiente" nunca marca días antes de esa fecha
+(Primavera abrió el 25-oct-2026; antes no hubo ventas ni cierres).
 """
 import os
+from datetime import date
 
 from flask import g, has_request_context, request
 
@@ -46,6 +51,7 @@ STORES = {
         'name': 'KOAJ Primavera',
         'short_name': 'Primavera',
         'env_suffix': 'PRIMAVERA',
+        'opening_date': date(2026, 10, 25),
     },
 }
 
@@ -93,6 +99,11 @@ def get_alegra_credentials(code):
         # Compatibilidad: Carreño usa las variables de siempre si no tiene las suyas.
         user, password = Config.ALEGRA_USER, Config.ALEGRA_PASS
     return user, password
+
+
+def get_opening_date(code):
+    """Primer día de operación de la tienda, o None si no se configuró."""
+    return STORES[code].get('opening_date')
 
 
 def get_base_objetivo(code):

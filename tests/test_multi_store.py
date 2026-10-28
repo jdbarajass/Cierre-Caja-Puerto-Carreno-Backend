@@ -440,3 +440,24 @@ def test_orden_de_cuentas_y_reordenar_las_existentes_sin_tocar_saldos(app, clien
     assert keys() == expected and keys('primavera') == expected
     qr = next(a for a in client.get('/api/accounts', headers=admin_headers()).get_json()['accounts'] if a['payment_key'] == 'qr')
     assert qr['balance'] == 4394541
+
+
+# ─── Fecha de apertura de Primavera (pedido del usuario, 2026-10-28) ─────────
+
+def test_cierres_pendientes_no_cuentan_antes_de_la_apertura_de_la_tienda(app, client, admin_headers, monkeypatch):
+    from datetime import datetime
+    from app.models.app_setting import AppSetting
+    from app.models.user import db
+    from app.routes import cash_closing
+    from app.routes.cash_closing import PENDING_CLOSINGS_TRACKING_SETTING_KEY as KEY
+    monkeypatch.setattr(cash_closing, 'get_colombia_now', lambda: datetime(2026, 10, 28, 10, 0))
+    # Las dos tiendas empezaron a vigilar el 1-oct (como en producción)
+    with app.app_context():
+        for key in (KEY, f'{KEY}:primavera'):
+            db.session.merge(AppSetting(key=key, value='2026-10-01', updated_at=datetime.utcnow()))
+        db.session.commit()
+
+    pending = lambda store: client.get('/api/cash_closing/pending-dates',
+                                       headers=admin_headers(store)).get_json()['missing_dates']
+    assert pending('primavera') == ['2026-10-25', '2026-10-26', '2026-10-27']
+    assert pending('carreno')[0] == '2026-10-01' and len(pending('carreno')) == 27
