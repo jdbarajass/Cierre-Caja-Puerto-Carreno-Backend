@@ -25,9 +25,10 @@ Credenciales de Alegra por tienda (variables de entorno):
 Base de caja por tienda: BASE_OBJETIVO_<SUFIJO>, con respaldo a BASE_OBJETIVO
 (450.000 por defecto).
 
-Fecha de apertura (`opening_date`, opcional): primer día de operación de la
-tienda. El aviso de "cierre pendiente" nunca marca días antes de esa fecha
-(Primavera abrió el 25-oct-2026; antes no hubo ventas ni cierres).
+Primer cierre en la plataforma (`closings_start`, opcional): el aviso de
+"cierre pendiente" nunca marca días antes de esa fecha. Primavera abrió el
+25-oct-2026, pero del 25 al 27 se vendió a mano y esas ventas se cargaron
+directo en Alegra (sin cierre): sus cierres empiezan el 28-oct-2026.
 """
 import os
 from datetime import date
@@ -51,7 +52,7 @@ STORES = {
         'name': 'KOAJ Primavera',
         'short_name': 'Primavera',
         'env_suffix': 'PRIMAVERA',
-        'opening_date': date(2026, 10, 25),
+        'closings_start': date(2026, 10, 28),
     },
 }
 
@@ -101,9 +102,9 @@ def get_alegra_credentials(code):
     return user, password
 
 
-def get_opening_date(code):
-    """Primer día de operación de la tienda, o None si no se configuró."""
-    return STORES[code].get('opening_date')
+def get_closings_start(code):
+    """Primer día con cierre de caja en la plataforma, o None si no se configuró."""
+    return STORES[code].get('closings_start')
 
 
 def get_base_objetivo(code):

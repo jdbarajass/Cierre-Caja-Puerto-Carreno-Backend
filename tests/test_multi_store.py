@@ -442,15 +442,16 @@ def test_orden_de_cuentas_y_reordenar_las_existentes_sin_tocar_saldos(app, clien
     assert qr['balance'] == 4394541
 
 
-# ─── Fecha de apertura de Primavera (pedido del usuario, 2026-10-28) ─────────
+# ─── Primer cierre de Primavera (pedido del usuario, 2026-10-28) ─────────────
 
-def test_cierres_pendientes_no_cuentan_antes_de_la_apertura_de_la_tienda(app, client, admin_headers, monkeypatch):
+def test_cierres_pendientes_no_cuentan_antes_del_primer_cierre_de_la_tienda(app, client, admin_headers, monkeypatch):
     from datetime import datetime
     from app.models.app_setting import AppSetting
     from app.models.user import db
     from app.routes import cash_closing
     from app.routes.cash_closing import PENDING_CLOSINGS_TRACKING_SETTING_KEY as KEY
-    monkeypatch.setattr(cash_closing, 'get_colombia_now', lambda: datetime(2026, 10, 28, 10, 0))
+    now = {'value': datetime(2026, 10, 28, 10, 0)}
+    monkeypatch.setattr(cash_closing, 'get_colombia_now', lambda: now['value'])
     # Las dos tiendas empezaron a vigilar el 1-oct (como en producción)
     with app.app_context():
         for key in (KEY, f'{KEY}:primavera'):
@@ -459,5 +460,8 @@ def test_cierres_pendientes_no_cuentan_antes_de_la_apertura_de_la_tienda(app, cl
 
     pending = lambda store: client.get('/api/cash_closing/pending-dates',
                                        headers=admin_headers(store)).get_json()['missing_dates']
-    assert pending('primavera') == ['2026-10-25', '2026-10-26', '2026-10-27']
+    # 25 al 27 se cargaron directo en Alegra: no se piden
+    assert pending('primavera') == []
     assert pending('carreno')[0] == '2026-10-01' and len(pending('carreno')) == 27
+    now['value'] = datetime(2026, 10, 30, 10, 0)
+    assert pending('primavera') == ['2026-10-28', '2026-10-29']

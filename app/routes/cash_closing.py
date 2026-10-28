@@ -21,7 +21,7 @@ from app.stores import (
     get_alegra_credentials,
     get_base_objetivo,
     get_current_store,
-    get_opening_date,
+    get_closings_start,
     store_setting_key,
 )
 from app.exceptions import (
@@ -488,9 +488,10 @@ def _get_or_init_pending_closings_tracking_start(today):
 
     Es por tienda (ver store_setting_key): una tienda nueva empieza a vigilar
     desde su primer uso, no desde la fecha en que se activó en Carreño. Si la
-    tienda tiene fecha de apertura (app/stores.py), nunca vigila antes de ella.
+    tienda tiene primer cierre (`closings_start`, app/stores.py), nunca vigila
+    antes de él.
     """
-    store_opening = get_opening_date(get_current_store())
+    store_opening = get_closings_start(get_current_store())
     setting_key = store_setting_key(PENDING_CLOSINGS_TRACKING_SETTING_KEY)
     setting = AppSetting.query.get(setting_key)
     if setting and setting.value:

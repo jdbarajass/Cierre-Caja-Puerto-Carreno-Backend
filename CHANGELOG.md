@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-28] (continuación) - Primavera: los cierres empiezan el 28-oct
+
+Pedido del usuario: las ventas del 25 al 27-oct (hechas a mano) se cargaron directo en Alegra, sin cierre; los cierres de Primavera arrancan el 28-oct.
+
+- `opening_date` pasa a `closings_start` (`app/stores.py`, Primavera = 2026-10-28) y `get_opening_date` a `get_closings_start`. Solo lo usa el ancla del aviso de "cierre pendiente" (`_get_or_init_pending_closings_tracking_start`).
+- Saldo de Cuentas → Resumen del 25 al 27: con ajuste manual por la plata real (sin cierres); los gastos del 27 en Cuentas → Gastos con "De la caja del día". Las ventas de Mes y Año salen de Alegra.
+- En Alegra (por API, no es código): BLUSA 44900 y SHORT 105900 creados en las dos tiendas; en Carreño se desactivaron las 5 variantes de "*****" (id 2304) que repetían los códigos del Boxer 29900.
+- Test ajustado: `test_cierres_pendientes_no_cuentan_antes_del_primer_cierre_de_la_tienda`. Suite completa 299/299 (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-28] - Primavera: fecha de apertura (25-oct) y credenciales de Alegra
 
 Pedido del usuario: Primavera abrió el 25-oct-2026; los días de cierre anteriores no cuentan.
