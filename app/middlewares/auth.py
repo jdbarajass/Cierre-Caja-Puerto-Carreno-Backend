@@ -21,6 +21,31 @@ def get_current_user():
 # verificación de sesión ni la carga del selector de tiendas.
 STORE_AGNOSTIC_ENDPOINTS = {'auth.verify_token', 'stores.list_user_stores'}
 
+# Admin de solo lectura: además de GET, solo estos endpoints (no guardan nada).
+READ_ONLY_ALLOWED_ENDPOINTS = {'inventory.upload_inventory_file'}
+
+
+def _apply_read_only(user):
+    """
+    El admin de solo lectura (READ_ONLY_ROLE) se trata como admin para VER
+    (todas las tiendas, todas las pantallas), pero cualquier petición que
+    modifique algo se rechaza aquí, antes de llegar a la ruta. Devuelve una
+    respuesta 403 si se rechaza, o None.
+    """
+    from app.models.user import READ_ONLY_ROLE
+    if user.get('role') != READ_ONLY_ROLE:
+        return None
+    user['role'] = 'admin'
+    user['read_only'] = True
+    if request.method in ('GET', 'HEAD') or request.endpoint in READ_ONLY_ALLOWED_ENDPOINTS:
+        return None
+    logger.warning(f"Solo lectura: bloqueado {request.method} {request.path} - Usuario: {user.get('email')}")
+    return jsonify({
+        'success': False,
+        'read_only': True,
+        'message': 'Usuario de solo lectura: no puede modificar nada'
+    }), 403
+
 
 def _check_store_access(user):
     """
@@ -112,6 +137,10 @@ def token_required(f):
             }
 
             logger.debug(f"Token válido para usuario: {payload.get('email')}")
+
+            read_only_error = _apply_read_only(g.current_user)
+            if read_only_error:
+                return read_only_error
 
             store_error = _check_store_access(g.current_user)
             if store_error:

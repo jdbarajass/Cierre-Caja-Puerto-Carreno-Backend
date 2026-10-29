@@ -136,10 +136,11 @@ def resolve_request_store():
 def stores_for_user(user):
     """
     Códigos de las tiendas que puede operar el usuario (dict de g.current_user
-    o User.to_dict()): el admin opera todas; cualquier otro rol (sales,
-    partner), solo la tienda que tiene asignada.
+    o User.to_dict()): el admin (y el admin de solo lectura) opera todas;
+    cualquier otro rol (sales, partner), solo la tienda que tiene asignada.
     """
-    if user and user.get('role') == 'admin':
+    from app.models.user import READ_ONLY_ROLE
+    if user and user.get('role') in ('admin', READ_ONLY_ROLE):
         return list(STORES)
     store_code = (user or {}).get('store_code')
     return [store_code if is_valid_store(store_code) else DEFAULT_STORE]

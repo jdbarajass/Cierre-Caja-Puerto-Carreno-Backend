@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-29] (continuación) - Administrador de solo lectura
+
+Pedido del usuario: un usuario que ve todo lo que ve el admin, en las dos tiendas, pero no puede modificar nada.
+
+- Rol nuevo `viewer` (`READ_ONLY_ROLE` y `VALID_ROLES` en `app/models/user.py`); se puede crear y editar desde `/api/users`.
+- `token_required` (`app/middlewares/auth.py`, `_apply_read_only`): el usuario de solo lectura queda como `role: 'admin'` con `read_only: True` en `g.current_user` (así pasa todos los chequeos de admin para VER), y cualquier método distinto de GET/HEAD se rechaza con 403 `{read_only: true}` antes de llegar a la ruta. Única excepción: `inventory.upload_inventory_file` (analiza un archivo, no guarda nada). Tampoco puede cambiar su propia contraseña (lo hace el admin).
+- `stores_for_user` (`app/stores.py`): opera las dos tiendas, como el admin. El login devuelve `read_only`.
+- Tests: `tests/test_read_only_user.py` (3). Suite completa 302/302 (con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-29] - Primavera: los cierres empiezan el 29-oct
 
 Pedido del usuario: el 28-oct tampoco se pudo vender por la plataforma (se vendió a mano); esas ventas se cargaron directo en Alegra y el cierre del 28 no se pide.

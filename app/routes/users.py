@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 
 from app.middlewares.auth import token_required, role_required, get_current_user
-from app.models.user import db, User
+from app.models.user import db, User, VALID_ROLES
 from app.stores import DEFAULT_STORE, STORES, is_valid_store, normalize_store_code
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ def create_user():
               type: string
             role:
               type: string
-              enum: [admin, sales, partner]
+              enum: [admin, sales, partner, viewer]
             store_code:
               type: string
               enum: [carreno, primavera]
@@ -213,10 +213,10 @@ def create_user():
             }), 400
 
         # Validar rol
-        if role not in ['admin', 'sales', 'partner']:
+        if role not in VALID_ROLES:
             return jsonify({
                 'success': False,
-                'message': 'Rol invalido. Debe ser admin, sales o partner'
+                'message': 'Rol invalido. Debe ser admin, sales, partner o viewer'
             }), 400
 
         # Tienda asignada (multi-tienda). Opcional: por defecto Carreño. Para
@@ -358,7 +358,7 @@ def update_user(user_id):
 
         if 'role' in data and data['role']:
             role = data['role'].strip().lower()
-            if role not in ['admin', 'sales', 'partner']:
+            if role not in VALID_ROLES:
                 return jsonify({
                     'success': False,
                     'message': 'Rol invalido'

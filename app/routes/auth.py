@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 
 from app.services.jwt_service import JWTService
-from app.models.user import db, User
+from app.models.user import db, User, READ_ONLY_ROLE
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +206,7 @@ def login():
                 'email': user.email,
                 'name': user.name,
                 'role': user.role,
+                'read_only': user.role == READ_ONLY_ROLE,
                 'store_code': user.store_code,
                 'stores': _user_stores(user.to_dict())
             }

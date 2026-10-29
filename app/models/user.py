@@ -6,6 +6,12 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# Admin de solo lectura (pedido del usuario, 2026-10-29): ve todo lo que ve el
+# admin en las dos tiendas, pero no puede modificar nada (ver
+# app/middlewares/auth.py, token_required).
+READ_ONLY_ROLE = 'viewer'
+VALID_ROLES = ('admin', 'sales', 'partner', READ_ONLY_ROLE)
+
 
 class User(db.Model):
     """Modelo de usuario para autenticación"""
