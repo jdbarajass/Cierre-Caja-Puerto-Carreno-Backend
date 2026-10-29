@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-29] - Primavera: los cierres empiezan el 29-oct
+
+Pedido del usuario: el 28-oct tampoco se pudo vender por la plataforma (se vendió a mano); esas ventas se cargaron directo en Alegra y el cierre del 28 no se pide.
+
+- `closings_start` de Primavera pasa a 2026-10-29 (`app/stores.py`).
+- En Alegra de Primavera (por API, no es código): ajuste de entrada 4 y facturas 64-76 del 28-oct (total $859.500: efectivo $289.200 en Caja general, QR $570.300), vendedora YESICA; inventario de lo vendido de nuevo en 0.
+- En la plataforma (Primavera): ajuste manual EFECTIVO +289.200 y QR +570.300 (sin gastos el 28), recibos y copia de facturas recargados.
+- Test ajustado: `test_cierres_pendientes_no_cuentan_antes_del_primer_cierre_de_la_tienda`.
+
 ## [2026-10-28] (continuación) - Primavera: los cierres empiezan el 28-oct
 
 Pedido del usuario: las ventas del 25 al 27-oct (hechas a mano) se cargaron directo en Alegra, sin cierre; los cierres de Primavera arrancan el 28-oct.

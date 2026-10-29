@@ -27,8 +27,8 @@ Base de caja por tienda: BASE_OBJETIVO_<SUFIJO>, con respaldo a BASE_OBJETIVO
 
 Primer cierre en la plataforma (`closings_start`, opcional): el aviso de
 "cierre pendiente" nunca marca días antes de esa fecha. Primavera abrió el
-25-oct-2026, pero del 25 al 27 se vendió a mano y esas ventas se cargaron
-directo en Alegra (sin cierre): sus cierres empiezan el 28-oct-2026.
+25-oct-2026, pero del 25 al 28 se vendió a mano y esas ventas se cargaron
+directo en Alegra (sin cierre): sus cierres empiezan el 29-oct-2026.
 """
 import os
 from datetime import date
@@ -52,7 +52,7 @@ STORES = {
         'name': 'KOAJ Primavera',
         'short_name': 'Primavera',
         'env_suffix': 'PRIMAVERA',
-        'closings_start': date(2026, 10, 28),
+        'closings_start': date(2026, 10, 29),
     },
 }
 
