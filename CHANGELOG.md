@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-10-30] (continuación) - Gastos operativos del cierre pasan a Cuentas → Gastos
+
+Pedido del usuario: los gastos operativos que se sacan de la caja y se escriben en el cierre deben quedar en Gastos con su descripción.
+
+- `POST /api/sum_payments` acepta `gastos_detalle: [{concepto, valor, subcategoria}]` (popup del frontend). Se valida antes de consultar Alegra (400 si falta concepto/valor o si no suma `gastos_operativos`). Subcategorías permitidas: operativo, flete, moto_carro, aseo, inversion.
+- Después de guardar el cierre, `_sync_closing_expenses` reemplaza los gastos de ese día marcados con la nota "Gasto operativo del cierre de caja AAAA-MM-DD" por las líneas nuevas, con `account_mode='caja'` (no vuelven a descontar EFECTIVO: el cierre ya abona lo que quedó). Si el cierre ya se sincronizó con Cuentas no se tocan (se corrigen en Gastos). Sin `gastos_detalle` (frontend viejo) no se toca Gastos. Igual de aditivo que la persistencia del cierre: si falla, el cierre queda y solo se loguea.
+- Tests: `tests/test_gastos_cierre.py` (3).
+- Hecho a mano en producción (Primavera): cierre del 29-oct con el Excel (exitoso, consignar 891.800) y gastos 33 "Escalera" 290.000 y 34 "Arreglo de vestieres: puerta y material" 160.000 con esa misma nota; sincronizado: EFECTIVO 3.234.000, QR 3.059.196.
+
 ## [2026-10-30] - Excel del cierre: el total de Alegra sale de la fila "Total"
 
 Bug real (cierre del 29-oct en Primavera): la vendedora escribió la venta en "Total Alegra" y dejó "Total Facturación Electrónica" en 0, y la carga del Excel avisaba "En el Excel el total de Alegra es $ 0, pero Alegra hoy dice $ 2.094.700" aunque todo cuadraba.

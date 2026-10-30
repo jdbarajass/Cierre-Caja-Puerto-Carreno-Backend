@@ -32,6 +32,7 @@ from app.exceptions import (
 from sqlalchemy.exc import IntegrityError
 from app.models.user import db
 from app.models.cash_closing import CashClosing
+from app.models.expense import EXPENSE_SUBCATEGORIES
 from app.models.app_setting import AppSetting
 from app.utils.timezone import (
     get_current_datetime,
@@ -156,6 +157,10 @@ def sum_payments():
         raise ValidationError(f"Errores de validación: {'; '.join(errors)}")
 
     current_app.logger.info(f"Fecha solicitada: {cash_request.date}")
+
+    # Detalle de los gastos operativos (popup del cierre): se valida antes de
+    # consultar Alegra para que la vendedora lo corrija en el mismo envío.
+    gastos_detalle = _parse_gastos_detalle(data.get('gastos_detalle'), cash_request.gastos_operativos)
 
     # ========================================
     # VALIDAR ZONA HORARIA
@@ -449,6 +454,16 @@ def sum_payments():
         db.session.rollback()
         current_app.logger.error(f"No se pudo persistir el cierre de caja: {e}", exc_info=True)
 
+    # Los gastos operativos del popup quedan en Cuentas → Gastos. Igual de
+    # aditivo: si falla, el cierre ya quedó y el admin los registra a mano.
+    if gastos_detalle is not None:
+        try:
+            _sync_closing_expenses(store_code, cierre_date.date(), gastos_detalle,
+                                   (get_current_user() or {}).get('userId'))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"No se pudieron guardar los gastos del cierre: {e}", exc_info=True)
+
     # Validación de EFECTIVO (crítica)
     diff_efectivo = validacion_cierre['diferencias']['efectivo']
     current_app.logger.info(
@@ -468,6 +483,66 @@ def sum_payments():
     current_app.logger.info("=" * 80)
 
     return jsonify(response), 200
+
+
+# Gastos operativos que salieron de la caja del día y se escriben en el popup
+# del cierre. Se guardan como "De la caja del día" (account_mode 'caja': el
+# cierre ya abonó a EFECTIVO lo que quedó) y se reconocen por la nota para
+# reemplazarlos si el cierre se reenvía.
+CLOSING_EXPENSE_NOTE = 'Gasto operativo del cierre de caja {date}'
+CLOSING_EXPENSE_SUBCATEGORIES = ('operativo', 'flete', 'moto_carro', 'aseo', 'inversion')
+
+
+def _parse_gastos_detalle(raw, gastos_total):
+    """
+    None si el frontend no mandó detalle (versión vieja: no se toca Gastos).
+    Si lo mandó, cada línea necesita concepto y valor, y la suma debe ser el
+    total de gastos operativos del cierre.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValidationError('gastos_detalle debe ser una lista')
+    lines = []
+    for item in raw:
+        item = item if isinstance(item, dict) else {}
+        concept = str(item.get('concepto') or '').strip()[:255]
+        try:
+            value = float(item.get('valor') or 0)
+        except (TypeError, ValueError):
+            value = -1
+        sub = item.get('subcategoria') or 'operativo'
+        if not concept or value <= 0:
+            raise ValidationError('Cada gasto operativo necesita en qué se gastó y su valor')
+        if sub not in CLOSING_EXPENSE_SUBCATEGORIES:
+            raise ValidationError(f'Categoría de gasto inválida: {sub}')
+        lines.append({'concepto': concept, 'valor': value, 'subcategoria': sub})
+    if abs(sum(l['valor'] for l in lines) - (gastos_total or 0)) >= 1:
+        raise ValidationError('El detalle de los gastos operativos no suma el total de gastos del cierre')
+    return lines
+
+
+def _sync_closing_expenses(store_code, closing_date, lines, user_id):
+    """Reemplaza los gastos del cierre de ese día por las líneas del popup."""
+    from app.models.expense import Expense
+
+    note = CLOSING_EXPENSE_NOTE.format(date=closing_date.isoformat())
+    closing = CashClosing.query.filter_by(store_code=store_code, closing_date=closing_date).first()
+    if closing and closing.synced_to_accounts:
+        current_app.logger.warning(
+            f"Cierre {closing_date} ya sincronizado: los gastos del popup no se cambian (corregir en Gastos)")
+        return
+    for old in Expense.for_store(store_code).filter_by(date=closing_date, notes=note, account_mode='caja').all():
+        db.session.delete(old)
+    for line in lines:
+        db.session.add(Expense(
+            store_code=store_code, date=closing_date, period=closing_date.strftime('%Y-%m'),
+            concept=line['concepto'], subcategory=line['subcategoria'],
+            category=EXPENSE_SUBCATEGORIES[line['subcategoria']], direction='out',
+            efectivo=line['valor'], account_mode='caja', notes=note, created_by=user_id,
+        ))
+    db.session.commit()
+    current_app.logger.info(f"Gastos del cierre {closing_date} tienda={store_code}: {len(lines)} guardados")
 
 
 PENDING_CLOSINGS_TRACKING_SETTING_KEY = 'pending_closings_tracking_start_date'
