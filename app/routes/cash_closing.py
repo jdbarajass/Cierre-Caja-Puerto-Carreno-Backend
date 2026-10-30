@@ -160,7 +160,8 @@ def sum_payments():
 
     # Detalle de los gastos operativos (popup del cierre): se valida antes de
     # consultar Alegra para que la vendedora lo corrija en el mismo envío.
-    gastos_detalle = _parse_gastos_detalle(data.get('gastos_detalle'), cash_request.gastos_operativos)
+    gastos_detalle = _parse_gastos_detalle(data.get('gastos_detalle'), cash_request.gastos_operativos,
+                                           cash_request.gastos_operativos_nota)
 
     # ========================================
     # VALIDAR ZONA HORARIA
@@ -491,16 +492,23 @@ def sum_payments():
 # reemplazarlos si el cierre se reenvía.
 CLOSING_EXPENSE_NOTE = 'Gasto operativo del cierre de caja {date}'
 CLOSING_EXPENSE_SUBCATEGORIES = ('operativo', 'flete', 'moto_carro', 'aseo', 'inversion')
+NO_DESCRIPTION_CONCEPT = 'Gasto del cierre sin descripción'
 
 
-def _parse_gastos_detalle(raw, gastos_total):
+def _parse_gastos_detalle(raw, gastos_total, nota=''):
     """
-    None si el frontend no mandó detalle (versión vieja: no se toca Gastos).
+    Sin detalle (página vieja guardada en el navegador o llamada directa a la
+    API): si hubo gastos, igual queda un gasto con la nota del cierre o "Gasto
+    del cierre sin descripción", para que ningún descuento quede sin registro
+    (luego se edita en Gastos); sin gastos, None y no se toca Gastos.
     Si lo mandó, cada línea necesita concepto y valor, y la suma debe ser el
     total de gastos operativos del cierre.
     """
     if raw is None:
-        return None
+        if not gastos_total or gastos_total <= 0:
+            return None
+        concept = (nota or '').strip()[:255] or NO_DESCRIPTION_CONCEPT
+        return [{'concepto': concept, 'valor': float(gastos_total), 'subcategoria': 'operativo'}]
     if not isinstance(raw, list):
         raise ValidationError('gastos_detalle debe ser una lista')
     lines = []

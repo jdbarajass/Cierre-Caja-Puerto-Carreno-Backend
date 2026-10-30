@@ -54,8 +54,18 @@ def test_detalle_que_no_suma_el_total_se_rechaza(app, client, h):
     assert _gastos(app) == []
 
 
-def test_sin_detalle_no_toca_gastos(app, client, h, alegra):
+def test_sin_detalle_igual_queda_el_gasto_con_la_nota_o_sin_descripcion(app, client, h, alegra):
     alegra['cash'] = 50600 + 4500
     r = client.post('/api/sum_payments', headers=h, json=_cierre(4500, None))
     assert r.status_code == 200
+    assert _gastos(app) == [('Gasto del cierre sin descripción', 4500, 'caja', 'operativo', DAY)]
+
+    p = _cierre(4500, None)
+    p['gastos_operativos_nota'] = 'bolsas'
+    assert client.post('/api/sum_payments', headers=h, json=p).status_code == 200
+    assert _gastos(app) == [('bolsas', 4500, 'caja', 'operativo', DAY)]
+
+
+def test_sin_gastos_ni_detalle_no_toca_gastos(app, client, h):
+    assert client.post('/api/sum_payments', headers=h, json=_cierre(0, None)).status_code == 200
     assert _gastos(app) == []
