@@ -198,9 +198,17 @@ def parse_closing_excel(content: bytes, filename: str = '', expected_date: Optio
     prestamos_nota = note(lambda t: t.startswith('prestamos'))
 
     # Lo que escribieron de Alegra: solo para avisar si no coincide
+    # El total va en la fila "Total" (= Facturación Electrónica + Total Alegra):
+    # unas vendedoras escriben la venta en una fila y otras en la otra (bug real
+    # del 29-oct en Primavera: FE en 0 y la venta en "Total Alegra").
+    total_alegra = _value_right(alegra, _find(la, lambda t: t == 'total'), 1)
+    if total_alegra is None:
+        parts = [_value_right(alegra, _find(la, lambda t: t.startswith(p)), 1)
+                 for p in ('total facturacion electronica', 'total alegra')]
+        total_alegra = sum(p for p in parts if p is not None) if any(p is not None for p in parts) else None
     excel_alegra = {
         'efectivo': _value_right(alegra, _find(la, lambda t: t.startswith('efectivo en alegra')), 1),
-        'total': _value_right(alegra, _find(la, lambda t: t.startswith('total facturacion electronica')), 1),
+        'total': total_alegra,
     }
 
     excedentes = []

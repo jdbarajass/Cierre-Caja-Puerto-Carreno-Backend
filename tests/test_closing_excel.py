@@ -135,3 +135,22 @@ def test_endpoint_llena_sin_guardar_nada(app, client):
     assert client.post('/api/cash_closing/parse-excel', headers=h, data={}).status_code == 400
     assert client.post('/api/cash_closing/parse-excel', content_type='multipart/form-data',
                        data={'file': (BytesIO(_workbook()), 'c.xlsx')}).status_code == 401
+
+
+def test_total_en_la_fila_total_alegra_con_facturacion_electronica_en_cero():
+    """Excel del 29-oct en Primavera: FE en 0 y la venta en "Total Alegra"; manda la fila "Total"."""
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(_workbook()))
+    alegra = wb['CIERRE ALEGRA']
+    alegra.cell(row=13, column=3, value=0)
+    alegra.cell(row=14, column=2, value='Total Alegra')
+    alegra.cell(row=14, column=3, value=1605650)
+    buf = BytesIO()
+    wb.save(buf)
+    r = parse_closing_excel(buf.getvalue(), 'cierre.xlsx', date(2026, 10, 7))
+    assert r['excel_alegra']['total'] == 1605650  # sin fila "Total": se suman las dos
+    alegra.cell(row=15, column=2, value='Total')
+    alegra.cell(row=15, column=3, value=1605650)
+    buf = BytesIO()
+    wb.save(buf)
+    assert parse_closing_excel(buf.getvalue(), 'cierre.xlsx', date(2026, 10, 7))['excel_alegra']['total'] == 1605650

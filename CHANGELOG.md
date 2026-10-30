@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-10-30] - Excel del cierre: el total de Alegra sale de la fila "Total"
+
+Bug real (cierre del 29-oct en Primavera): la vendedora escribió la venta en "Total Alegra" y dejó "Total Facturación Electrónica" en 0, y la carga del Excel avisaba "En el Excel el total de Alegra es $ 0, pero Alegra hoy dice $ 2.094.700" aunque todo cuadraba.
+
+- `app/services/closing_excel.py`: `excel_alegra.total` se lee de la fila "Total" (= FE + Total Alegra); si no está, se suman las dos filas. Solo afecta el aviso, no los valores del formulario.
+- Test nuevo en `tests/test_closing_excel.py` (6/6 con el parche de WMI; repetir en el PC personal).
+
 ## [2026-10-29] (continuación) - Administrador de solo lectura
 
 Pedido del usuario: un usuario que ve todo lo que ve el admin, en las dos tiendas, pero no puede modificar nada.
