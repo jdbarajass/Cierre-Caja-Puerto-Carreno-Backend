@@ -107,7 +107,9 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
     - conteo: [{code, physical_qty}] -> sube o baja la diferencia con el sistema.
     - tarjeta_regalo: gift_card_code (entra 1) + lines [{code, quantity}] que salen.
     - cambio_prenda: in_lines [{code, quantity}] que devuelve el cliente + lines
-      que se lleva. Nunca se devuelve plata: lo que sale vale igual o más.
+      que se lleva.
+    En los dos últimos NUNCA se devuelve plata (regla de la tienda, para todo):
+    lo que sale vale igual o más que lo que entra.
     """
     lines: List[Dict[str, Any]] = []
     seen = set()
@@ -133,6 +135,13 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
 
     def quantity_of(row, found):
         return _int(row.get('quantity') or 1, f'Cantidad de {found["code"]}', minimum=1)
+
+    def check_never_refund(what_in):
+        if price_difference(lines) < 0:
+            raise RequestError(
+                f'Lo que se lleva ({_money(value_of(lines, "out"))}) vale menos que {what_in} '
+                f'({_money(value_of(lines, "in"))}). Nunca se devuelve plata: debe llevar otra prenda '
+                'hasta igualar o pasar el valor.')
 
     def add_out_lines():
         for row in rows_of('lines', 'Agrega la prenda que sale.'):
@@ -161,6 +170,7 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
             raise RequestError(f'El código {card["code"]} es {card["name"]}, no una tarjeta regalo.')
         lines.append(line(card, 'in', 1))
         add_out_lines()
+        check_never_refund('la tarjeta')
         return lines
 
     if kind == 'cambio_prenda':
@@ -170,12 +180,7 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
                 raise RequestError(f'{found["code"]} es una tarjeta regalo: usa "Redimir tarjeta regalo".')
             lines.append(line(found, 'in', quantity_of(row, found)))
         add_out_lines()
-        diff = price_difference(lines)
-        if diff < 0:
-            raise RequestError(
-                f'Lo que se lleva ({_money(value_of(lines, "out"))}) vale menos que lo que devuelve '
-                f'({_money(value_of(lines, "in"))}). Nunca se devuelve plata: debe llevar otra prenda '
-                'hasta igualar o pasar el valor.')
+        check_never_refund('lo que devuelve')
         return lines
 
     raise RequestError('Tipo de ajuste no válido.')

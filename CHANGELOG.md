@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-11-03] (continuación) - Nunca se devuelve plata, también en tarjeta regalo
+
+Regla del usuario: nunca se devuelve dinero, en ningún caso.
+
+- `tarjeta_regalo` valida igual que `cambio_prenda`: 400 si lo que sale vale menos que la tarjeta (debe llevar otra prenda) o si vale más y falta el excedente con su medio (`check_never_refund` en `app/services/inventory_requests.py`).
+- Tests: 1 nuevo (13). Suite 319/320 con el parche de WMI (la que falla, de llegadas datáfono/Addi, ya fallaba antes).
+
 ## [2026-11-03] (continuación) - Cambio de prenda en las solicitudes de ajuste
 
 El usuario aclaró que un cambio de prenda siempre es un ajuste (entra la que devuelven, sale la que se llevan), que lo que sale vale igual o más y que nunca se devuelve plata: no depende del contador.

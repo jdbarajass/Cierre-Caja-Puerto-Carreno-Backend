@@ -18,6 +18,8 @@ Alegra y la vendedora ve el número.
   se lleva. A precio de venta de Alegra, lo que sale debe valer igual o más que
   lo que entra (si vale menos, debe llevar otra prenda); si vale más, el
   excedente y su medio son obligatorios (se reporta también en el cierre).
+- **Nunca se devuelve plata, en ningún caso** (regla del usuario): la tarjeta
+  regalo valida igual que el cambio (lo que sale vale igual o más que la tarjeta).
 - Fecha del ajuste en Alegra: la del día de la solicitud (hora Colombia). El
   admin acepta a los pocos minutos, así que es el mismo día.
 - "¿Quién lo pide?": obligatorio, se elige entre las empleadas de la tienda.

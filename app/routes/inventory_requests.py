@@ -130,8 +130,8 @@ def create_request():
     except Exception as e:
         return _alegra_error(e, store, 'crear')
 
-    if kind == 'cambio_prenda' and svc.price_difference(lines) > 0 and not excedente_valor:
-        return _error(f'Lo que se lleva vale {svc._money(svc.price_difference(lines))} más que lo que devuelve: '
+    if kind in EXCEDENTE_KINDS and svc.price_difference(lines) > 0 and not excedente_valor:
+        return _error(f'Lo que se lleva vale {svc._money(svc.price_difference(lines))} más de lo que entra: '
                       'escribe el excedente que pagó y por qué medio.', 400)
 
     req = InventoryRequest(kind=kind, request_date=get_colombia_now().date(), requested_by=requested_by,

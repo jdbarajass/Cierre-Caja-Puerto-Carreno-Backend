@@ -303,3 +303,18 @@ def test_cambio_nunca_devuelve_plata(app, client, fake):
     assert client.post('/api/inventory-requests', headers=h, json=igual).status_code == 201
     tarjeta = {**CAMBIO, 'in_lines': [{'code': '1510000015'}]}
     assert 'Redimir tarjeta regalo' in client.post('/api/inventory-requests', headers=h, json=tarjeta).get_json()['message']
+
+
+def test_tarjeta_regalo_tampoco_devuelve_plata(app, client, fake):
+    h = _headers(app, 2, 'sales')
+    # Tarjeta de 100.000 por una camiseta de 39.900: debe llevar más
+    menor = {**TARJETA, 'lines': [{'code': '1054399004'}], 'excedente_valor': 0}
+    msg = client.post('/api/inventory-requests', headers=h, json=menor).get_json()['message']
+    assert 'Nunca se devuelve plata' in msg and 'que la tarjeta' in msg
+    # Jean de 119.900 sin excedente: lo pide
+    sin = {**TARJETA, 'excedente_valor': 0}
+    assert 'escribe el excedente' in client.post('/api/inventory-requests', headers=h, json=sin).get_json()['message']
+    # Dos camisetas y un buzo (139.700): vale con excedente
+    mas = {**TARJETA, 'lines': [{'code': '1054399004', 'quantity': 2}, {'code': '105485992'}], 'excedente_valor': 39700}
+    resp = client.post('/api/inventory-requests', headers=h, json=mas)
+    assert resp.status_code == 201 and resp.get_json()['request']['price_difference'] == 39700
