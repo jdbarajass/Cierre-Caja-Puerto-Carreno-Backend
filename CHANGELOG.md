@@ -2,6 +2,17 @@
 
 ---
 
+## [2026-11-03] - Solicitudes de ajuste de inventario (Fase 1, backend)
+
+Pedido del usuario: que las vendedoras registren los ajustes (conteo de inventario y redimir tarjeta regalo) y que solo se apliquen en Alegra cuando el admin los acepte. Plan: `docs/PLAN_AJUSTES_INVENTARIO.md`. Cambios de prenda quedan fuera hasta hablar con el contador.
+
+- Tabla nueva `inventory_requests` (por tienda; `db.create_all` la crea). Estados pendiente / aplicando / revisar / aplicada / rechazada / cancelada.
+- `/api/inventory-requests`: `GET lookup?code=` (nombre y existencia de la prenda; el código se busca al final del nombre de la variante), `GET` (abiertas o `?status=all`), `POST` (sales y admin; no toca Alegra, guarda la diferencia del conteo contra Alegra), `POST <id>/cancel`; solo admin: `GET <id>/check` (existencia de hoy y avisos), `POST <id>/approve`, `POST approve-all`, `POST <id>/reject` (con motivo).
+- Al aceptar: relee cada ítem en Alegra, usa su costo promedio y la bodega por defecto, no deja existencias en negativo, fecha = día de la solicitud. Marca `[KOAJ-AJ-<id>]` en observaciones: si Alegra no responde queda "revisar" y al reintentar se busca primero en los ajustes de ese día. Un "aplicando" de más de 5 min se puede retomar. Tras aplicar se borra la caché de ítems de la tienda.
+- `AlegraClient.get_item`, `get_inventory_adjustments`, `invalidate_items_cache`; `TTLCache.delete`.
+- Recordatorio del admin "N ajustes de inventario por aceptar" (prioridad 0; la llave cambia con cada solicitud nueva).
+- Tests: `tests/test_inventory_requests.py` (10). Suite 316/317 con el parche de WMI; la que falla (`test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa`) ya fallaba antes de este cambio.
+
 ## [2026-10-30] (continuación) - Gastos operativos del cierre pasan a Cuentas → Gastos
 
 Pedido del usuario: los gastos operativos que se sacan de la caja y se escriben en el cierre deben quedar en Gastos con su descripción.

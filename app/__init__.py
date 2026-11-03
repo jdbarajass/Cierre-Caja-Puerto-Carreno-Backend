@@ -70,6 +70,7 @@ def create_app(config_class=Config):
     from app.models.month_sheet import PaymentFact, AccountReconciliation, MonthClose, SaleMethodCorrection  # Cuentas → Mes (Fase 2)
     from app.models.monthly_summary import InventorySnapshot, MonthlySummaryOverride  # Cuentas → Año (Fase 3)
     from app.models.incentive import IncentiveRule  # Incentivos por meta (Fase 4)
+    from app.models.inventory_request import InventoryRequest  # Ajustes de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
 
     db.init_app(app)
 
@@ -258,6 +259,7 @@ def create_app(config_class=Config):
     from app.routes.facts_freeze import bp as facts_freeze_bp
     from app.routes.reminders import bp as reminders_bp
     from app.routes.finance import bp as finance_bp
+    from app.routes.inventory_requests import bp as inventory_requests_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -287,6 +289,7 @@ def create_app(config_class=Config):
     app.register_blueprint(facts_freeze_bp)  # Blindaje de la copia de facturas (docs/PLAN_BLINDAJE_COPIA.md)
     app.register_blueprint(reminders_bp)  # Recordatorios del admin (app/services/reminders.py)
     app.register_blueprint(finance_bp)  # Configuración financiera e incentivos (PLAN_CUENTAS_DIARIAS, Fase 4)
+    app.register_blueprint(inventory_requests_bp)  # Solicitudes de ajuste de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

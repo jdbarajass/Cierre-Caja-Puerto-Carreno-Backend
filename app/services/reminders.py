@@ -11,6 +11,8 @@ plataforma, por tienda:
   cerrado en Cuentas → Mes (desde octubre de 2026).
 - backup-AAAA-MM: del 1 al 10 de cada mes, bajar el respaldo de facturas
   en Excel (se marca a mano "Ya lo hice").
+- inventory-requests: hay solicitudes de ajuste de inventario por aceptar
+  (docs/PLAN_AJUSTES_INVENTARIO.md); se quita sola al no quedar ninguna.
 
 "Recordarme después" lo pospone N días; "Ya lo hice" / "No aplica" lo quita
 para ese periodo. Se guarda en app_settings (por tienda).
@@ -140,7 +142,34 @@ def _backup(store: str, today: date) -> Optional[Dict[str, Any]]:
     }
 
 
-BUILDERS = (_freeze, _month_close, _backup)
+def _inventory_requests(store: str, today: date) -> Optional[Dict[str, Any]]:
+    """Solicitudes de ajuste de inventario esperando al admin (docs/PLAN_AJUSTES_INVENTARIO.md)."""
+    from app.models.inventory_request import InventoryRequest, OPEN_STATUSES
+    q = InventoryRequest.for_store(store).filter(InventoryRequest.status.in_(OPEN_STATUSES))
+    count = q.count()
+    if not count:
+        return None
+    # La llave cambia con cada solicitud nueva: "Recordarme después" no esconde las que lleguen luego
+    latest = q.order_by(InventoryRequest.id.desc()).first().id
+    plural = count != 1
+    return {
+        'key': f'inventory-requests-{latest}',
+        'kind': 'inventory_requests',
+        'priority': 0,
+        'title': f'{count} ajuste{"s" if plural else ""} de inventario por aceptar',
+        'body': 'Las vendedoras pidieron ajustes de inventario. No se aplican en Alegra hasta que los aceptes.',
+        'steps': [
+            'Entra a Inventario → Ajustes de inventario.',
+            'Revisa cada solicitud (prenda, cantidades y lo que dice Alegra hoy).',
+            'Toca "Aceptar" (o "Aceptar todas"), o "Rechazar" con el motivo.',
+        ],
+        'path': '/ajustes-inventario',
+        'action_label': 'Ir a Ajustes de inventario',
+        'done_label': None,   # se quita solo cuando no queda ninguna pendiente
+    }
+
+
+BUILDERS = (_inventory_requests, _freeze, _month_close, _backup)
 
 
 def active(store: str, today: date) -> List[Dict[str, Any]]:

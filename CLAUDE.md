@@ -46,3 +46,7 @@ API Flask del sistema de cierre de caja KOAJ (Render, Postgres). Ver `README.md`
 
 ## Recordatorios del admin (2026-10-08)
 - `app/services/reminders.py` (+ `app/routes/reminders.py`, `tests/test_reminders.py`): ventana emergente al entrar. Para agregar uno, escribir un `_builder(store, today)` que devuelva `{key, title, body, steps, path, action_label, done_label}` (o None) y sumarlo a `BUILDERS`. La `key` lleva el periodo (ej. `backup-2026-11`).
+
+## Ajustes de inventario pedidos por las vendedoras (2026-11-03)
+- Plan: **`docs/PLAN_AJUSTES_INVENTARIO.md`**. Código: `app/models/inventory_request.py`, `app/services/inventory_requests.py`, `app/routes/inventory_requests.py`, `tests/test_inventory_requests.py`.
+- Nada toca Alegra hasta que el admin acepta. El código de la prenda va al final del NOMBRE de la variante en Alegra ("... / 1054399004"), no en la referencia. Un ajuste por solicitud con la marca `[KOAJ-AJ-<id>]` en observaciones (así un reintento tras un timeout no duplica). Tipos: conteo y tarjeta regalo; cambios de prenda pendientes del contador.

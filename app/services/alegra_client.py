@@ -7,7 +7,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
 
 from app.exceptions import (
@@ -1053,6 +1053,37 @@ class AlegraClient:
                 f'Alegra no aceptó el ajuste de inventario (HTTP {response.status_code})',
                 details={'status_code': response.status_code, 'response': detail})
         return response.json()
+
+    def invalidate_items_cache(self) -> None:
+        """Olvida la lista de ítems en caché de esta cuenta (tras un ajuste de inventario)."""
+        _items_cache.delete(f"{self.username}|active_items")
+
+    def _get_json(self, url: str, params: Optional[Dict] = None, what: str = 'Alegra'):
+        try:
+            response = self.session.get(url, params=params, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            raise AlegraConnectionError(f'No se pudo conectar con Alegra: {e}')
+        if response.status_code in (401, 403):
+            raise AlegraAuthError('Credenciales de Alegra inválidas o sin permiso')
+        if response.status_code >= 400:
+            raise AlegraConnectionError(f'Alegra respondió HTTP {response.status_code} al pedir {what}',
+                                        details={'status_code': response.status_code})
+        try:
+            return response.json()
+        except ValueError:
+            raise AlegraConnectionError(f'Respuesta inválida de Alegra al pedir {what}')
+
+    def get_item(self, item_id: str) -> Dict:
+        """Un ítem con su inventario del momento (`GET /items/{id}`, sin caché)."""
+        return self._get_json(f"{self.base_url}/items/{item_id}", {'fields': 'inventory'}, 'el ítem')
+
+    def get_inventory_adjustments(self, day: str) -> List[Dict]:
+        """Ajustes de inventario de un día (`GET /inventory-adjustments?date=`), hasta 30."""
+        data = self._get_json(f"{self.base_url}/inventory-adjustments",
+                              {'date': day, 'limit': 30}, 'los ajustes de inventario')
+        if isinstance(data, dict) and isinstance(data.get('data'), list):
+            data = data['data']
+        return data if isinstance(data, list) else []
 
     def health_check(self) -> bool:
         """

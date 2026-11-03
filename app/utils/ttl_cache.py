@@ -29,6 +29,10 @@ class TTLCache:
         with self._lock:
             self._store[key] = (value, time.monotonic() + ttl_seconds)
 
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._store.pop(key, None)
+
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
