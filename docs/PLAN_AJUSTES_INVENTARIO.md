@@ -77,5 +77,14 @@ promedio del momento).
   frontend 28748d2..709cedc). Backend: 13 pruebas de ajustes OK (suite 319/320
   con el parche de WMI; la que falla, de llegadas datáfono/Addi, ya fallaba
   antes). Frontend: npm test, eslint y build OK.
-- Pendiente: Manual Deploy en Render; probar en producción con UNA solicitud real
+- 2026-11-03 (después): varias tarjetas regalo en una misma redención
+  (`gift_card_codes`; caso real de 4 tarjetas de $50.000). SUBIDO 2026-11-03
+  (backend e3b5ee8 + este estado, frontend 1e21a58). 14 pruebas de ajustes OK.
+- Validación "nunca se devuelve plata" (tarjeta regalo y cambio): se hace ANTES
+  de llegar al admin, en la pantalla (no deja enviar) y en el backend al crear
+  la solicitud (400). Compara precios de lista de Alegra: suma de lo que entra
+  (todas las tarjetas / prendas devueltas) contra suma de lo que sale (precio ×
+  cantidad). Si hubo descuento, el admin ve un aviso cuando el excedente no
+  coincide con la diferencia.
+- Pendiente: Manual Deploy en Render (otra vez, por e3b5ee8); probar en producción con UNA solicitud real
   pequeña (crea un ajuste de verdad en Alegra); repetir pruebas en el PC personal.
