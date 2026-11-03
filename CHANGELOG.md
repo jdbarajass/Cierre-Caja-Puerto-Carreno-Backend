@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-11-03] (continuación) - Cambio de prenda en las solicitudes de ajuste
+
+El usuario aclaró que un cambio de prenda siempre es un ajuste (entra la que devuelven, sale la que se llevan), que lo que sale vale igual o más y que nunca se devuelve plata: no depende del contador.
+
+- Tipo `cambio_prenda`: `in_lines` (entran) + `lines` (salen). 400 si lo que sale vale menos que lo que entra (precio de venta de Alegra) o si vale más y no viene el excedente con su medio. Una tarjeta regalo no puede ser ni la que entra (para eso está "Redimir tarjeta regalo") ni la que sale.
+- Cada renglón guarda el precio; `to_dict` trae `price_difference` (tarjeta regalo y cambio). Las observaciones del ajuste llevan el excedente en los dos tipos.
+- Tests: 2 nuevos (12 en `tests/test_inventory_requests.py`).
+
 ## [2026-11-03] - Solicitudes de ajuste de inventario (Fase 1, backend)
 
 Pedido del usuario: que las vendedoras registren los ajustes (conteo de inventario y redimir tarjeta regalo) y que solo se apliquen en Alegra cuando el admin los acepte. Plan: `docs/PLAN_AJUSTES_INVENTARIO.md`. Cambios de prenda quedan fuera hasta hablar con el contador.

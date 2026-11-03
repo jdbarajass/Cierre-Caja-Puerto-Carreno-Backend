@@ -102,15 +102,17 @@ def _int(value, field: str, minimum: int = 0) -> int:
 
 def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Renglones validados contra Alegra. El código, nombre y existencia se toman
-    de Alegra (nunca de lo que mande la pantalla).
+    Renglones validados contra Alegra. El código, nombre, precio y existencia
+    se toman de Alegra (nunca de lo que mande la pantalla).
     - conteo: [{code, physical_qty}] -> sube o baja la diferencia con el sistema.
-    - tarjeta_regalo: gift_card_code (entra 1) + [{code, quantity}] que salen.
+    - tarjeta_regalo: gift_card_code (entra 1) + lines [{code, quantity}] que salen.
+    - cambio_prenda: in_lines [{code, quantity}] que devuelve el cliente + lines
+      que se lleva. Nunca se devuelve plata: lo que sale vale igual o más.
     """
     lines: List[Dict[str, Any]] = []
     seen = set()
 
-    def take(code, what):
+    def take(code):
         found = find_item(items, code)
         if found['item_id'] in seen:
             raise RequestError(f'El código {found["code"]} está repetido en la solicitud.')
@@ -119,16 +121,33 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
 
     def line(found, type_, quantity, **extra):
         return {'code': found['code'], 'item_id': found['item_id'], 'name': found['name'], 'type': type_,
-                'quantity': quantity, 'system_qty': found['available'], **extra}
+                'quantity': quantity, 'system_qty': found['available'], 'price': found['price'], **extra}
 
-    if kind == 'conteo':
-        rows = data.get('lines') or []
+    def rows_of(key, empty_message):
+        rows = data.get(key) or []
         if not rows:
-            raise RequestError('Agrega al menos una prenda.')
+            raise RequestError(empty_message)
         if len(rows) > MAX_LINES:
             raise RequestError(f'Máximo {MAX_LINES} prendas por solicitud.')
-        for row in rows:
-            found = take(row.get('code'), 'prenda')
+        return rows
+
+    def quantity_of(row, found):
+        return _int(row.get('quantity') or 1, f'Cantidad de {found["code"]}', minimum=1)
+
+    def add_out_lines():
+        for row in rows_of('lines', 'Agrega la prenda que sale.'):
+            found = take(row.get('code'))
+            if is_gift_card(found['name']):
+                raise RequestError(f'{found["code"]} es una tarjeta regalo: no puede ser la prenda que sale.')
+            quantity = quantity_of(row, found)
+            if quantity > found['available']:
+                raise RequestError(f'{found["code"]}: en Alegra hay {found["available"]} y salen {quantity}. '
+                                   'Revisa el código o pide primero un conteo.')
+            lines.append(line(found, 'out', quantity))
+
+    if kind == 'conteo':
+        for row in rows_of('lines', 'Agrega al menos una prenda.'):
+            found = take(row.get('code'))
             physical = _int(row.get('physical_qty'), f'Físico de {found["code"]}')
             diff = physical - found['available']
             if diff == 0:
@@ -137,25 +156,43 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
         return lines
 
     if kind == 'tarjeta_regalo':
-        card = take(data.get('gift_card_code'), 'tarjeta')
+        card = take(data.get('gift_card_code'))
         if not is_gift_card(card['name']):
             raise RequestError(f'El código {card["code"]} es {card["name"]}, no una tarjeta regalo.')
         lines.append(line(card, 'in', 1))
-        rows = data.get('lines') or []
-        if not rows:
-            raise RequestError('Agrega la prenda que sale.')
-        if len(rows) > MAX_LINES:
-            raise RequestError(f'Máximo {MAX_LINES} prendas por solicitud.')
-        for row in rows:
-            found = take(row.get('code'), 'prenda')
-            quantity = _int(row.get('quantity') or 1, f'Cantidad de {found["code"]}', minimum=1)
-            if quantity > found['available']:
-                raise RequestError(f'{found["code"]}: en Alegra hay {found["available"]} y salen {quantity}. '
-                                   'Revisa el código o pide primero un conteo.')
-            lines.append(line(found, 'out', quantity))
+        add_out_lines()
+        return lines
+
+    if kind == 'cambio_prenda':
+        for row in rows_of('in_lines', 'Agrega la prenda que devuelve el cliente.'):
+            found = take(row.get('code'))
+            if is_gift_card(found['name']):
+                raise RequestError(f'{found["code"]} es una tarjeta regalo: usa "Redimir tarjeta regalo".')
+            lines.append(line(found, 'in', quantity_of(row, found)))
+        add_out_lines()
+        diff = price_difference(lines)
+        if diff < 0:
+            raise RequestError(
+                f'Lo que se lleva ({_money(value_of(lines, "out"))}) vale menos que lo que devuelve '
+                f'({_money(value_of(lines, "in"))}). Nunca se devuelve plata: debe llevar otra prenda '
+                'hasta igualar o pasar el valor.')
         return lines
 
     raise RequestError('Tipo de ajuste no válido.')
+
+
+def _money(value) -> str:
+    return f'${value:,.0f}'.replace(',', '.')
+
+
+def value_of(lines: List[Dict[str, Any]], type_: str) -> float:
+    """Valor a precio de venta de lo que entra ('in') o sale ('out')."""
+    return sum((l.get('price') or 0) * l['quantity'] for l in lines if l['type'] == type_)
+
+
+def price_difference(lines: List[Dict[str, Any]]) -> float:
+    """Lo que debe pagar de más el cliente: lo que sale menos lo que entra (precio de venta)."""
+    return value_of(lines, 'out') - value_of(lines, 'in')
 
 
 # ─── Aplicar en Alegra ───────────────────────────────────────────────────────
@@ -163,8 +200,8 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
 def observations(req) -> str:
     from app.models.inventory_request import KIND_LABELS
     text = f'{KIND_LABELS.get(req.kind, req.kind)} - pedido por {req.requested_by} desde la plataforma KOAJ'
-    if req.kind == 'tarjeta_regalo' and req.excedente_valor:
-        text += f'. Excedente ${req.excedente_valor:,.0f}'.replace(',', '.')
+    if req.excedente_valor:
+        text += f'. Excedente {_money(req.excedente_valor)}'
         if req.excedente_medio:
             text += f' ({req.excedente_medio})'
     if req.notes:

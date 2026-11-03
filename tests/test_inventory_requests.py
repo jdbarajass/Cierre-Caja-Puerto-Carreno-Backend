@@ -266,3 +266,40 @@ def test_cada_tienda_ve_solo_lo_suyo_y_solo_lectura_no_acepta(app, client, fake)
     assert client.get('/api/inventory-requests', headers=viewer).status_code == 200
     assert client.post(f'/api/inventory-requests/{rid}/approve', headers=viewer).status_code == 403
     assert fake.created == []
+
+
+CAMBIO = {'kind': 'cambio_prenda', 'requested_by': 'Yesica',
+          'in_lines': [{'code': '1054399008', 'quantity': 1}],          # devuelve camiseta 39.900
+          'lines': [{'code': '105485992', 'quantity': 1}],             # se lleva buzo 59.900
+          'excedente_valor': 20000, 'excedente_medio': 'qr'}
+
+
+def test_cambio_de_prenda_entra_la_devuelta_y_sale_la_nueva(app, client, fake):
+    resp = client.post('/api/inventory-requests', headers=_headers(app, 2, 'sales'), json=CAMBIO)
+    assert resp.status_code == 201, resp.get_json()
+    req = resp.get_json()['request']
+    assert req['kind_label'] == 'Cambio de prenda' and req['price_difference'] == 20000
+    assert [(l['code'], l['type'], l['quantity']) for l in req['lines']] == [('1054399008', 'in', 1), ('105485992', 'out', 1)]
+    done = client.post(f'/api/inventory-requests/{req["id"]}/approve', headers=_headers(app, 1, 'admin')).get_json()['request']
+    assert done['status'] == 'aplicada'
+    payload = fake.created[0]
+    assert [(i['id'], i['type']) for i in payload['items']] == [('1645', 'in'), ('2189', 'out')]
+    assert 'Cambio de prenda - pedido por Yesica' in payload['observations'] and 'Excedente $20.000 (qr)' in payload['observations']
+
+
+def test_cambio_nunca_devuelve_plata(app, client, fake):
+    h = _headers(app, 2, 'sales')
+    menor = {**CAMBIO, 'in_lines': [{'code': '105485992'}], 'lines': [{'code': '1054399008'}], 'excedente_valor': 0}
+    msg = client.post('/api/inventory-requests', headers=h, json=menor).get_json()['message']
+    assert 'Nunca se devuelve plata' in msg and '$39.900' in msg and '$59.900' in msg
+    # Llevando dos prendas iguala o pasa el valor: vale
+    dos = {**menor, 'lines': [{'code': '1054399008'}, {'code': '1054399004'}], 'excedente_valor': 19900, 'excedente_medio': 'efectivo'}
+    assert client.post('/api/inventory-requests', headers=h, json=dos).status_code == 201
+    # Más caro sin excedente: lo pide
+    sin = {**CAMBIO, 'excedente_valor': 0}
+    assert 'escribe el excedente' in client.post('/api/inventory-requests', headers=h, json=sin).get_json()['message']
+    # Mismo valor: sin excedente está bien
+    igual = {**CAMBIO, 'lines': [{'code': '1054399004'}], 'excedente_valor': 0}
+    assert client.post('/api/inventory-requests', headers=h, json=igual).status_code == 201
+    tarjeta = {**CAMBIO, 'in_lines': [{'code': '1510000015'}]}
+    assert 'Redimir tarjeta regalo' in client.post('/api/inventory-requests', headers=h, json=tarjeta).get_json()['message']

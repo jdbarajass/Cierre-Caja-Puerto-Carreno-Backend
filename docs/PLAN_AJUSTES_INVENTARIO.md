@@ -11,10 +11,13 @@ Alegra y la vendedora ve el número.
 
 ## Decisiones (con el usuario, 2026-11-03)
 
-- Tipos por ahora: **conteo de inventario** y **redimir tarjeta regalo**.
-  **Cambios de prenda quedan fuera** hasta hablar con el contador (si se hacen
-  con nota crédito + factura y no con ajuste). Se agregan después como un tipo
-  más (misma forma que la tarjeta regalo: entra una prenda, sale otra).
+- Tipos: **conteo de inventario**, **redimir tarjeta regalo** y **cambio de
+  prenda** (agregado el mismo día: el usuario aclaró que el cambio siempre es un
+  ajuste y que nunca se devuelve plata, así que no depende del contador).
+- Cambio de prenda: entran las prendas que devuelve el cliente y salen las que
+  se lleva. A precio de venta de Alegra, lo que sale debe valer igual o más que
+  lo que entra (si vale menos, debe llevar otra prenda); si vale más, el
+  excedente y su medio son obligatorios (se reporta también en el cierre).
 - Fecha del ajuste en Alegra: la del día de la solicitud (hora Colombia). El
   admin acepta a los pocos minutos, así que es el mismo día.
 - "¿Quién lo pide?": obligatorio, se elige entre las empleadas de la tienda.

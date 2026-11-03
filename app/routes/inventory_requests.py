@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify
 
 from app.exceptions import ConfigurationError
 from app.middlewares.auth import token_required, role_required_any, get_current_user
-from app.models.inventory_request import InventoryRequest, KINDS, OPEN_STATUSES
+from app.models.inventory_request import InventoryRequest, KINDS, OPEN_STATUSES, EXCEDENTE_KINDS
 from app.models.user import db
 from app.services import inventory_requests as svc
 from app.stores import get_alegra_client, get_current_store
@@ -90,9 +90,10 @@ def list_requests():
 @role_required_any(ROLES)
 def create_request():
     """
-    Body: {kind: 'conteo'|'tarjeta_regalo', requested_by, notes?,
+    Body: {kind: 'conteo'|'tarjeta_regalo'|'cambio_prenda', requested_by, notes?,
            conteo: lines [{code, physical_qty}];
-           tarjeta_regalo: gift_card_code, lines [{code, quantity}], excedente_valor?, excedente_medio?}
+           tarjeta_regalo: gift_card_code, lines [{code, quantity}] (salen), excedente_valor?, excedente_medio?;
+           cambio_prenda: in_lines [{code, quantity}] (entran), lines (salen), excedente_valor?, excedente_medio?}
     No toca Alegra (solo lee): queda pendiente hasta que el admin la acepte.
     """
     data = request.get_json(silent=True) or {}
@@ -107,7 +108,7 @@ def create_request():
     notes = (data.get('notes') or '').strip()[:500] or None
 
     excedente_valor, excedente_medio = None, None
-    if kind == 'tarjeta_regalo':
+    if kind in EXCEDENTE_KINDS:
         try:
             excedente_valor = float(data.get('excedente_valor') or 0)
         except (TypeError, ValueError):
@@ -128,6 +129,10 @@ def create_request():
         return _error(str(e), 400)
     except Exception as e:
         return _alegra_error(e, store, 'crear')
+
+    if kind == 'cambio_prenda' and svc.price_difference(lines) > 0 and not excedente_valor:
+        return _error(f'Lo que se lleva vale {svc._money(svc.price_difference(lines))} más que lo que devuelve: '
+                      'escribe el excedente que pagó y por qué medio.', 400)
 
     req = InventoryRequest(kind=kind, request_date=get_colombia_now().date(), requested_by=requested_by,
                            notes=notes, excedente_valor=excedente_valor, excedente_medio=excedente_medio,

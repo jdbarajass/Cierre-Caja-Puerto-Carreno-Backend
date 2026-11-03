@@ -18,8 +18,11 @@ from datetime import datetime
 from app.models.user import db
 from app.models.store_scoped import StoreScopedMixin
 
-KINDS = ('conteo', 'tarjeta_regalo')
-KIND_LABELS = {'conteo': 'Conteo de inventario', 'tarjeta_regalo': 'Redimir tarjeta regalo'}
+KINDS = ('conteo', 'tarjeta_regalo', 'cambio_prenda')
+KIND_LABELS = {'conteo': 'Conteo de inventario', 'tarjeta_regalo': 'Redimir tarjeta regalo',
+               'cambio_prenda': 'Cambio de prenda'}
+# Tipos donde el cliente paga la diferencia (excedente; la plata entra por el cierre de caja)
+EXCEDENTE_KINDS = ('tarjeta_regalo', 'cambio_prenda')
 STATUSES = ('pendiente', 'aplicando', 'revisar', 'aplicada', 'rechazada', 'cancelada')
 OPEN_STATUSES = ('pendiente', 'revisar')
 
@@ -35,7 +38,7 @@ class InventoryRequest(StoreScopedMixin, db.Model):
     notes = db.Column(db.Text, nullable=True)
     # Renglones [{code, item_id, name, type 'in'|'out', quantity, system_qty, physical_qty?}]
     lines_json = db.Column(db.Text, nullable=False, default='[]')
-    # Tarjeta regalo: lo que pagó de más el cliente (solo nota; la plata entra por el cierre)
+    # Tarjeta regalo / cambio: lo que pagó de más el cliente (solo nota; la plata entra por el cierre)
     excedente_valor = db.Column(db.Float, nullable=True)
     excedente_medio = db.Column(db.String(30), nullable=True)
 
@@ -56,12 +59,23 @@ class InventoryRequest(StoreScopedMixin, db.Model):
     def lines(self, value):
         self.lines_json = json.dumps(value, ensure_ascii=False)
 
+    def _price_difference(self):
+        if self.kind not in EXCEDENTE_KINDS:
+            return None
+        lines = self.lines
+        if any(l.get('price') is None for l in lines):
+            return None   # solicitudes guardadas antes de guardar el precio
+        sign = {'out': 1, 'in': -1}
+        return sum(sign[l['type']] * l['price'] * l['quantity'] for l in lines)
+
     def to_dict(self):
         return {
             'id': self.id, 'kind': self.kind, 'kind_label': KIND_LABELS.get(self.kind, self.kind),
             'status': self.status, 'request_date': self.request_date.isoformat() if self.request_date else None,
             'requested_by': self.requested_by, 'notes': self.notes, 'lines': self.lines,
             'excedente_valor': self.excedente_valor, 'excedente_medio': self.excedente_medio,
+            # Precio de venta de lo que sale menos lo que entra (lo que debía pagar de más)
+            'price_difference': self._price_difference(),
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'reviewed_at': self.reviewed_at.isoformat() + 'Z' if self.reviewed_at else None,
             'reject_reason': self.reject_reason, 'last_error': self.last_error,
