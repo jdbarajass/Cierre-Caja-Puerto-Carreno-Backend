@@ -72,9 +72,10 @@ promedio del momento).
 
 ## Estado
 
-- 2026-11-03: fases 1-3 hechas y commiteadas (backend 347e2fb, frontend 28748d2), sin push.
-  Backend: 10 pruebas nuevas OK (suite 316/317 con el parche de WMI; la que falla
-  ya fallaba antes). Frontend: npm test, eslint y build OK.
-- Pendiente: push y Manual Deploy; probar en producción con UNA solicitud real
-  pequeña (crea un ajuste de verdad en Alegra); repetir pruebas en el PC personal;
-  cambios de prenda tras hablar con el contador.
+- 2026-11-03: fases 1-3 hechas, más cambio de prenda y "nunca se devuelve plata"
+  también en tarjeta regalo. SUBIDO 2026-11-03 (backend 347e2fb..277bcdd,
+  frontend 28748d2..709cedc). Backend: 13 pruebas de ajustes OK (suite 319/320
+  con el parche de WMI; la que falla, de llegadas datáfono/Addi, ya fallaba
+  antes). Frontend: npm test, eslint y build OK.
+- Pendiente: Manual Deploy en Render; probar en producción con UNA solicitud real
+  pequeña (crea un ajuste de verdad en Alegra); repetir pruebas en el PC personal.
