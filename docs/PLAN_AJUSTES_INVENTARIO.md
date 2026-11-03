@@ -67,4 +67,9 @@ promedio del momento).
 
 ## Estado
 
-- 2026-11-03: plan escrito; fases 1-3 en curso.
+- 2026-11-03: fases 1-3 hechas y commiteadas (backend 347e2fb, frontend 28748d2), sin push.
+  Backend: 10 pruebas nuevas OK (suite 316/317 con el parche de WMI; la que falla
+  ya fallaba antes). Frontend: npm test, eslint y build OK.
+- Pendiente: push y Manual Deploy; probar en producción con UNA solicitud real
+  pequeña (crea un ajuste de verdad en Alegra); repetir pruebas en el PC personal;
+  cambios de prenda tras hablar con el contador.
