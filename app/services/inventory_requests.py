@@ -105,7 +105,8 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
     Renglones validados contra Alegra. El código, nombre, precio y existencia
     se toman de Alegra (nunca de lo que mande la pantalla).
     - conteo: [{code, physical_qty}] -> sube o baja la diferencia con el sistema.
-    - tarjeta_regalo: gift_card_code (entra 1) + lines [{code, quantity}] que salen.
+    - tarjeta_regalo: gift_card_codes [códigos] (entra 1 de cada tarjeta; también
+      acepta gift_card_code, uno solo) + lines [{code, quantity}] que salen.
     - cambio_prenda: in_lines [{code, quantity}] que devuelve el cliente + lines
       que se lleva.
     En los dos últimos NUNCA se devuelve plata (regla de la tienda, para todo):
@@ -165,10 +166,17 @@ def build_lines(kind: str, data: Dict[str, Any], items: List[Dict[str, Any]]) ->
         return lines
 
     if kind == 'tarjeta_regalo':
-        card = take(data.get('gift_card_code'))
-        if not is_gift_card(card['name']):
-            raise RequestError(f'El código {card["code"]} es {card["name"]}, no una tarjeta regalo.')
-        lines.append(line(card, 'in', 1))
+        # Varias tarjetas en una sola redención (ej. 4 de $50.000): cada código es una tarjeta
+        codes = [c for c in (data.get('gift_card_codes') or [data.get('gift_card_code')]) if normalize_code(c)]
+        if not codes:
+            raise RequestError('Escribe el código de la tarjeta regalo.')
+        if len(codes) > MAX_LINES:
+            raise RequestError(f'Máximo {MAX_LINES} tarjetas por solicitud.')
+        for code in codes:
+            card = take(code)
+            if not is_gift_card(card['name']):
+                raise RequestError(f'El código {card["code"]} es {card["name"]}, no una tarjeta regalo.')
+            lines.append(line(card, 'in', 1))
         add_out_lines()
         check_never_refund('la tarjeta')
         return lines

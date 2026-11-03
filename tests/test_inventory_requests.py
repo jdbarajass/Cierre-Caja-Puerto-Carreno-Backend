@@ -47,6 +47,11 @@ ITEMS = [
     item('1645', 'CAMISETA NIÑA 39900 / 1054399008', 1, 39900),
     item('2189', 'BUZO NIÑA 59900 / 105485992', 2, 59900),
     item('2119', 'TARJETA REGALO 100000 / 1510000015', 0, 100000),
+    item('2151', 'TARJETA REGALO 50000 / 15500007', 0, 50000),
+    item('2153', 'TARJETA REGALO 50000 / 15500009', 0, 50000),
+    item('2154', 'TARJETA REGALO 50000 / 155000010', 0, 50000),
+    item('2156', 'TARJETA REGALO 50000 / 155000012', 0, 50000),
+    item('1163', 'BERMUDA 99900 / 1051429990034', 4, 97479.99, price=99900),
     item('1820', 'JEAN MUJER BOTA CAMPANA 119900 / 105224119908', 3, 118500.5, price=119900),
 ]
 
@@ -318,3 +323,32 @@ def test_tarjeta_regalo_tampoco_devuelve_plata(app, client, fake):
     mas = {**TARJETA, 'lines': [{'code': '1054399004', 'quantity': 2}, {'code': '105485992'}], 'excedente_valor': 39700}
     resp = client.post('/api/inventory-requests', headers=h, json=mas)
     assert resp.status_code == 201 and resp.get_json()['request']['price_difference'] == 39700
+
+
+def test_varias_tarjetas_regalo_en_una_redencion(app, client, fake):
+    # Mensaje real del grupo: entran 4 tarjetas de 50.000, salen un jean y una bermuda, excedente 20.000
+    payload = {'kind': 'tarjeta_regalo', 'requested_by': 'Yesica',
+               'gift_card_codes': ['15500007', '15500009', '155000010', '155000012'],
+               'lines': [{'code': '105224119908', 'quantity': 1}, {'code': '1051429990034', 'quantity': 1}],
+               'excedente_valor': 20000, 'excedente_medio': 'efectivo'}
+    resp = client.post('/api/inventory-requests', headers=_headers(app, 2, 'sales'), json=payload)
+    assert resp.status_code == 201, resp.get_json()
+    req = resp.get_json()['request']
+    assert [(l['code'], l['type'], l['quantity']) for l in req['lines']] == [
+        ('15500007', 'in', 1), ('15500009', 'in', 1), ('155000010', 'in', 1), ('155000012', 'in', 1),
+        ('105224119908', 'out', 1), ('1051429990034', 'out', 1)]
+    assert req['price_difference'] == 19800          # 219.800 - 200.000
+    client.post(f'/api/inventory-requests/{req["id"]}/approve', headers=_headers(app, 1, 'admin'))
+    assert [(i['id'], i['type']) for i in fake.created[0]['items']] == [
+        ('2151', 'in'), ('2153', 'in'), ('2154', 'in'), ('2156', 'in'), ('1820', 'out'), ('1163', 'out')]
+
+    h = _headers(app, 2, 'sales')
+    repetida = {**payload, 'gift_card_codes': ['15500007', '15500007']}
+    assert 'repetido' in client.post('/api/inventory-requests', headers=h, json=repetida).get_json()['message']
+    con_prenda = {**payload, 'gift_card_codes': ['15500007', '1054399004']}
+    assert 'no una tarjeta regalo' in client.post('/api/inventory-requests', headers=h, json=con_prenda).get_json()['message']
+    # 4 tarjetas (200.000) por solo el jean (119.900): nunca se devuelve plata
+    menos = {**payload, 'lines': [{'code': '1054399004'}], 'excedente_valor': 0}
+    assert 'Nunca se devuelve plata' in client.post('/api/inventory-requests', headers=h, json=menos).get_json()['message']
+    assert 'código de la tarjeta' in client.post('/api/inventory-requests', headers=h,
+                                                  json={**payload, 'gift_card_codes': []}).get_json()['message']

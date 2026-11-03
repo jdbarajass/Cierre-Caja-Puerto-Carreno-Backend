@@ -92,7 +92,8 @@ def create_request():
     """
     Body: {kind: 'conteo'|'tarjeta_regalo'|'cambio_prenda', requested_by, notes?,
            conteo: lines [{code, physical_qty}];
-           tarjeta_regalo: gift_card_code, lines [{code, quantity}] (salen), excedente_valor?, excedente_medio?;
+           tarjeta_regalo: gift_card_codes [..] (o gift_card_code), lines [{code, quantity}] (salen),
+                           excedente_valor?, excedente_medio?;
            cambio_prenda: in_lines [{code, quantity}] (entran), lines (salen), excedente_valor?, excedente_medio?}
     No toca Alegra (solo lee): queda pendiente hasta que el admin la acepte.
     """

@@ -43,8 +43,8 @@ promedio del momento).
   diferencia contra Alegra al enviar y guarda la diferencia (+N / −N). Si
   entre el envío y la aprobación se vende algo, bajan sistema y físico por
   igual: la diferencia sigue siendo correcta. Se avisa si la existencia cambió.
-- Tarjeta regalo: entra 1 tarjeta (el código debe ser una TARJETA/BONO
-  REGALO), salen una o más prendas.
+- Tarjeta regalo: entran una o varias tarjetas (cada código es una tarjeta;
+  debe ser una TARJETA/BONO REGALO), salen una o más prendas.
 - Costo de cada renglón: costo promedio del ítem en Alegra (lo que Alegra pone
   solo en "Costo promedio"); si no tiene, el precio.
 - Bodega: la bodega por defecto del ítem (Carreño "Principal" id 1; Primavera

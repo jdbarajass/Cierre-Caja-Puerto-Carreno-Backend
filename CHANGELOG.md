@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-11-03] (continuación) - Varias tarjetas regalo en una redención
+
+Caso real del grupo: "Entra 15500007, 15500009, 155000010, 155000012 (4 tarjetas de $50.000) y sale 105225119908 y 1051429990034, excedente 20.000 efectivo". Solo se podía una tarjeta por solicitud.
+
+- `tarjeta_regalo` acepta `gift_card_codes` (lista; cada código es una tarjeta que entra 1). Se sigue aceptando `gift_card_code` (uno solo) por si hay una página vieja abierta. Tarjetas repetidas o un código que no es tarjeta dan 400; la regla de nunca devolver plata usa la suma de todas las tarjetas.
+- Tests: 1 nuevo con el caso real (14 en `tests/test_inventory_requests.py`).
+
 ## [2026-11-03] (continuación) - Nunca se devuelve plata, también en tarjeta regalo
 
 Regla del usuario: nunca se devuelve dinero, en ningún caso.
