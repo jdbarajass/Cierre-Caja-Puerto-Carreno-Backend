@@ -7,6 +7,7 @@ Se hace por fases, una a la vez, con el OK del usuario entre fase y fase.
 |---|---|---|
 | 0 | Reglas comunes: clasificación de salidas, costo estimado, módulo único de fórmulas | Propuesta |
 | 0b | Deuda de Primavera con Carreño: tarjeta visible en las dos tiendas, saldo de partida $9.816.659 al 6-nov-2026, baja sola con cada pago | Propuesta (pedida por el usuario) |
+| 0c | Tarjetas de deudas de cada tienda: mamá de Angie (Carreño, $7.500.000) y don Miguel (Primavera, 3 préstamos: $67.000.000), pago libre, detalle al dar clic | Propuesta (pedida por el usuario) |
 | 1 | Mes: estado de resultados, punto de equilibrio, indicadores | Propuesta |
 | 2 | Año: cierre general mes a mes | Propuesta |
 | 3 | Inventario: valor, días, rotación, prendas quietas, por tipo de prenda | Propuesta |
@@ -356,3 +357,25 @@ lo registrado antes queda solo como historial). Cada pago de Primavera **resta d
 ellas) **y resta de la deuda**, pero **no suma a las cuentas de Carreño**: Primavera a veces paga con recompras o con
 ganancias de los dueños, y esa plata no llega a las cuentas de Carreño. Cambia la Fase 0b: el pago ya no crea una entrada
 en Carreño (opcional, solo si la plata sí llegó a una cuenta de Carreño).
+
+### Respuestas del 2026-11-06 (tercera ronda)
+
+**Tarjetas de deudas (Fase 0c nueva, pedida por el usuario).** Una tarjeta por deuda que baja con cada pago; al darle
+clic se abre el detalle: valor total prestado, pagos hechos (fecha, valor, cuenta de donde salió), lo pagado y el saldo.
+- Carreño: **mamá de Angie**, saldo $7.500.000 (deuda de la apertura de Carreño).
+- Primavera: **don Miguel (BBVA)**, una sola tarjeta con 3 préstamos: $10.000.000 + $20.000.000 + $37.000.000 = $67.000.000.
+- La cuota es **libre** (cada pago se escribe con su valor; no hay cuota fija).
+- Es por tienda (`StoreScopedMixin`). El viewer las ve y no registra pagos.
+
+**Primavera paga cosas de Carreño (recompras u otras cosas).** Sale normal de la cuenta de Primavera de donde salió la
+plata y se marca "para pagar cosas / deuda de Carreño": baja la deuda de Primavera con Carreño.
+
+**Primavera paga ganancias de los dueños de Carreño.** El usuario propone registrarlo como gasto operativo de Primavera
+y bajar la deuda. Ojo (por confirmar): como gasto operativo bajaría la utilidad de Primavera; se propone registrarlo
+como "Pago a Carreño" con la nota de para qué fue, que también baja las cuentas de Primavera y la deuda.
+
+**Préstamos nuevos de Carreño a Primavera** desde el 6-nov: **suman a la deuda**.
+
+Dudas abiertas antes de construir: ver la respuesta al usuario del 2026-11-06 (saldos actuales de los 3 préstamos de
+don Miguel, intereses/ajuste de saldo, desde dónde se registra el pago, cuotas ya registradas antes de hoy, recompras
+de una tienda pagadas por la otra).
