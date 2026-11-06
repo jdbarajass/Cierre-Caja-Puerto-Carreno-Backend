@@ -97,12 +97,16 @@ def estimated_cost(list_price_sold: float, margin_pct: float) -> float:
 
 def utility_lines(*, ventas: float, precio_lista: float, margin_pct: float, fletes: float,
                   operativos: float, financieros: float, comisiones: float,
-                  cuotas: float, recompras: float) -> Dict[str, Optional[float]]:
+                  cuotas: float, recompras: float, comisiones_registradas: bool = True) -> Dict[str, Optional[float]]:
     """Estado de resultados de un mes (todo en COP).
 
     operativos  = operativo + sueldo + otro
     financieros = financiero + 4x1000 (sin comisiones: van aparte)
-    comisiones  = datáfono/Addi (registradas o calculadas, nunca las dos)
+    comisiones  = datáfono/Addi calculadas que NO están registradas (si ya se
+                  registraron, van dentro de financieros y aquí va 0)
+    comisiones_registradas = False → las comisiones calculadas bajan la
+                  utilidad (ESTIMADO) pero no "lo que quedó": a lo que quedó
+                  solo se le resta lo registrado (regla del usuario, igual que Año).
     """
     costo = estimated_cost(precio_lista, margin_pct)
     costo_vendido = costo + fletes
@@ -129,7 +133,8 @@ def utility_lines(*, ventas: float, precio_lista: float, margin_pct: float, flet
         'cuotas': cuotas,
         # Como el Excel / Cuentas → Año: ventas − recompras − todo lo que resta
         # utilidad − cuotas (no usa el costo estimado).
-        'lo_que_quedo': ventas - recompras - fletes - operativos - gastos_fin - cuotas,
+        'lo_que_quedo': ventas - recompras - fletes - operativos - financieros - cuotas
+                        - (comisiones if comisiones_registradas else 0),
     }
 
 

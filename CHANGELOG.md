@@ -2,6 +2,17 @@
 
 ---
 
+## [2026-11-06] (continuación) - Radiografía, Fase 1: el mes
+
+- `app/services/radiografia_month.py` (nuevo) + `app/routes/radiografia.py` (`GET /api/radiografia/month?year&month&target`, admin y viewer, solo lee, desde ene-2026).
+- Estado de resultados con costo ESTIMADO (precio de lista × (1 − margen)), fletes, gastos operativos, financieros (4x1000 de gastos y recompras + interés de las cuotas + comisiones calculadas si no están registradas, marcadas), utilidad bruta/operacional/neta, cuotas (capital), recompras y **"lo que quedó" = ganancia real de Cuentas → Año** (solo lo registrado; probado en el test).
+- Indicadores: transacciones, ticket, unidades, prendas por factura, descuentos %, gastos/ventas y nómina/ventas (sin gastos → None, no se inventa).
+- Comparaciones: mes anterior por los mismos días (mes en curso o con días sin cargar), mismo mes del año pasado con la venta real de 2025 (sin datos → None), y gastos/utilidad contra el mes anterior solo entre meses cerrados con gastos.
+- Punto de equilibrio: gastos fijos que restan utilidad (de cada uno el mayor entre su valor y lo pagado; sin retiros ni cuotas) ÷ margen de contribución; diario por días calendario; versión "cubriendo también las cuotas"; avance; ritmo del mes en curso (ESTIMADO); ventas para una utilidad que se escribe (no se guarda).
+- Salidas del mes por clase con "¿baja la utilidad?" y "¿se resta en lo que quedó?".
+- Avisos: días sin cargar en la copia (una tienda que abrió a mitad de mes solo se avisa), días sin prendas, mes sin gastos, mes en curso.
+- `utility_lines` (radiografia.py): las comisiones calculadas no registradas bajan la utilidad pero no "lo que quedó". Tests: `tests/test_radiografia_month.py` (5, nuevo).
+
 ## [2026-11-06] (continuación) - Préstamos: interés del mes repartido si la cuota se paga en partes
 
 Encontrado al cargar los préstamos en producción: la cuota 1 del de 37M ($951.000) se pagó en dos partes ($530.000 descontados del préstamo + $421.000 en efectivo) y el interés del mes solo se cobraba al primer pago (quedaba en $530.000 en vez de ≈ $708.106) y la deuda bajaba de más. Ahora el interés del mes (saldo × tasa) se cubre con los pagos de ese mes en orden y el resto baja la deuda. Test nuevo con el caso real (9 en `tests/test_loans.py`).

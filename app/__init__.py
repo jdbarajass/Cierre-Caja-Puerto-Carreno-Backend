@@ -262,6 +262,7 @@ def create_app(config_class=Config):
     from app.routes.finance import bp as finance_bp
     from app.routes.inventory_requests import bp as inventory_requests_bp
     from app.routes.loans import bp as loans_bp
+    from app.routes.radiografia import bp as radiografia_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -293,6 +294,7 @@ def create_app(config_class=Config):
     app.register_blueprint(finance_bp)  # Configuración financiera e incentivos (PLAN_CUENTAS_DIARIAS, Fase 4)
     app.register_blueprint(inventory_requests_bp)  # Solicitudes de ajuste de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
     app.register_blueprint(loans_bp)  # Préstamos de cada tienda (docs/PLAN_RADIOGRAFIA.md, Fase 0c)
+    app.register_blueprint(radiografia_bp)  # Radiografía financiera (docs/PLAN_RADIOGRAFIA.md)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)

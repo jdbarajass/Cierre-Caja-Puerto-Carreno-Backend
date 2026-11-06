@@ -205,6 +205,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - Sin tablas nuevas.
 
 ### Fase 1 — Mes
+**Estado (2026-11-06): HECHA en código (ver CHANGELOG), falta deploy y verificar con datos reales de las dos tiendas.** Agregado: punto de equilibrio "cubriendo también las cuotas" (pedido implícito: las cuotas salen y no vuelven).
 - `GET /api/radiografia/month?year&month` (admin y viewer; solo lee).
 - Tarjetas: ventas netas, utilidad bruta, utilidad neta, punto de equilibrio con barra de avance.
 - Estado de resultados con fórmula por línea, % sobre ventas, mes anterior (mismos días si va en curso) y mismo mes 2025.
