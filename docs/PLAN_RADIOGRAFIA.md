@@ -1,11 +1,12 @@
 # Plan: Radiografía financiera de los locales
 
-Creado: 2026-11-06. **Estado: PROPUESTA, esperando aprobación del usuario. No se ha construido nada.**
+Creado: 2026-11-06. **Estado: PROPUESTA con respuestas del usuario (2026-11-06, ver §10); faltan 2 respuestas. No se ha construido nada.**
 Se hace por fases, una a la vez, con el OK del usuario entre fase y fase.
 
 | Fase | Qué | Estado |
 |---|---|---|
 | 0 | Reglas comunes: clasificación de salidas, costo estimado, módulo único de fórmulas | Propuesta |
+| 0b | Deuda de Primavera con Carreño: tarjeta visible en las dos tiendas, saldo de partida $9.816.659 al 6-nov-2026, baja sola con cada pago | Propuesta (pedida por el usuario) |
 | 1 | Mes: estado de resultados, punto de equilibrio, indicadores | Propuesta |
 | 2 | Año: cierre general mes a mes | Propuesta |
 | 3 | Inventario: valor, días, rotación, prendas quietas, por tipo de prenda | Propuesta |
@@ -292,3 +293,42 @@ para admin y viewer, siempre de la tienda activa (header `X-Store`).
   código ni en el chat), en las dos tiendas.
 - Datos raros (prendas sin precio, categorías faltantes, duplicados) se muestran con fecha y número de factura y se
   pregunta antes de corregir; toda corrección va primero en simulación y deja rastro.
+
+---
+
+## 10. Respuestas del usuario (2026-11-06) y cómo cambian el plan
+
+| # | Pregunta | Respuesta | Qué cambia |
+|---|---|---|---|
+| 1 | Costo | **35 % de ganancia en todos los productos** | Opción A aprobada: costo estimado = precio de lista × 65 % (`finance_settings.margin_pct`, igual para todo). |
+| 2 | Cuota de crédito | **Sin respuesta todavía** | Se vuelve a preguntar. |
+| 3 | "Otro" resta utilidad | **Sí** | "Otro" va como gasto operativo. |
+| 4 | Gastos de Primavera pagados por Carreño | **Quiere ver lo que Primavera le debe a Carreño: $9.816.659 al 6-nov-2026, en una tarjeta visible, conectada a las cuentas y que baje a medida que Primavera paga** | Fase 0b nueva (abajo). Lo que Carreño pagó por Primavera es préstamo: no es gasto de Carreño ni ingreso de Primavera. |
+| 5 | Año con la misma clasificación | **Sí** | `OPERATING_CATEGORIES` sale del módulo de la Radiografía; Año, comparativo y 70/30 cambian juntos (se muestran antes sep y oct con la regla nueva). |
+| 6 | Dónde | **Pestaña en Gestión → Cuentas** | Pestaña "Radiografía" dentro de `CuentasLayout` (con sus sub-pestañas Mes · Año · Inventario · Flujo · Comparativo). |
+| 7 | Días que abre | **Todos los días, las dos tiendas** | Punto de equilibrio diario = mes ÷ días calendario del mes. |
+| 8a | AHORRO disponible | **Sí cuenta** (hoy está en $0: se usó en la apertura de Primavera) | Entra en "cuánto se puede retirar". |
+| 8b | Restar "reponer lo vendido" | **No lo entendió** | Se explica de nuevo y se vuelve a preguntar. |
+| 9 | Utilidad deseada | **No es una meta: la ganancia que se saca depende de cómo le va al local cada mes** | No se guarda nada. En vez de "ventas para la utilidad X" el foco es "cuánto generó el local y cuánto se puede sacar" (Fase 4). Se deja una calculadora opcional "si quiero sacar X, ¿cuánto hay que vender?" sin guardar. |
+
+### Fase 0b — Deuda de Primavera con Carreño (propuesta)
+Hoy: `GET /api/expenses/inter-store` calcula el saldo con lo registrado en Carreño (`prestamo_tienda` − `devolucion_prestamo_tienda`)
+y se ve solo dentro de Cuentas → Gastos. Si Primavera paga desde sus cuentas, hoy habría que registrarlo dos veces (en
+Primavera como "otro", que además restaría su utilidad, y en Carreño como devolución).
+
+Propuesta:
+1. **Saldo de partida**: $9.816.659 al 6-nov-2026 (dato del usuario), guardado en `app_settings` (compartido: es de las dos
+   tiendas). Lo registrado antes de esa fecha queda solo como historial (para no contarlo dos veces). Saldo de hoy =
+   saldo de partida + préstamos nuevos de Carreño a Primavera − pagos de Primavera, ambos desde el 6-nov.
+2. **Pago de Primavera a Carreño en un solo registro**: en Gastos de Primavera, salida nueva "Pago a Carreño (préstamo)"
+   (`pago_prestamo_tienda`: saca plata de la cuenta de Primavera, **no resta utilidad**). Al guardarlo se crea solo, en
+   Carreño, la entrada `devolucion_prestamo_tienda` en la cuenta de Carreño donde llegó la plata. Editar o borrar uno
+   cambia el otro. Si el pago sale de la caja del día de Primavera, se registra con "De la caja del día".
+3. **Tarjeta visible** en Gestión → Cuentas → Resumen de las dos tiendas: Carreño "Primavera nos debe $X", Primavera
+   "Le debemos a Carreño $X", con los pagos hechos (fecha, valor, cuenta). También en el flujo de caja de la Radiografía.
+4. El rol viewer la ve pero no registra pagos.
+5. Pruebas: pago crea la entrada en Carreño, editar/borrar sincroniza, saldo con el de partida, no resta utilidad en
+   ninguna tienda, no se cuenta dos veces lo anterior al 6-nov.
+
+Preguntas de esta fase: ¿los $9.816.659 son todo lo que Primavera debe al 6-nov (aunque en el sistema haya registros
+de préstamos anteriores con otros valores)? ¿Primavera ya hizo algún pago a Carreño antes de hoy que esté incluido en ese valor?
