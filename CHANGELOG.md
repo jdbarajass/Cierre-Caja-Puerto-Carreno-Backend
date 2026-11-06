@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-06] (continuación) - Préstamos: interés del mes repartido si la cuota se paga en partes
+
+Encontrado al cargar los préstamos en producción: la cuota 1 del de 37M ($951.000) se pagó en dos partes ($530.000 descontados del préstamo + $421.000 en efectivo) y el interés del mes solo se cobraba al primer pago (quedaba en $530.000 en vez de ≈ $708.106) y la deuda bajaba de más. Ahora el interés del mes (saldo × tasa) se cubre con los pagos de ese mes en orden y el resto baja la deuda. Test nuevo con el caso real (9 en `tests/test_loans.py`).
+
+**Cargado en producción 2026-11-06 (pedido del usuario):** préstamo 1 (Carreño, mamá de Angie $7.500.000), 2-4 (Primavera, don Miguel 20M/10M/37M con tasas estimadas), cuotas descontadas ($554.633 del de 20M, $530.000 del de 37M) y los gastos 63 ($527.600, préstamo 10M) y 64 ($421.000, préstamo 37M) desde EFECTIVO de Primavera (bajó de $6.626.268 a $5.677.668). Verificado: Año de Carreño oct (gastos $15.058.640, cuotas $1.506.000, ganancias iguales) y Primavera nov (la ganancia real bajó exactamente $948.600).
+
 ## [2026-11-06] (continuación) - Radiografía, Fase 0c: préstamos de cada tienda
 
 Pedido del usuario: una tarjeta por deuda (mamá de Angie en Carreño; don Miguel BBVA en Primavera con sus 3 préstamos) que baje con cada pago, con el detalle al darle clic, y avisos.

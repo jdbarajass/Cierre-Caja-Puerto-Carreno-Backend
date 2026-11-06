@@ -154,6 +154,23 @@ def test_cuota_descontada_del_prestamo_y_ajuste_de_saldo(client, h):
     assert client.delete(f'/api/loans/payments/{pid}', headers=p).status_code == 200
 
 
+def test_cuota_pagada_en_dos_partes_reparte_el_interes_del_mes(client, h):
+    """Caso real (37M, cuota 1 de $951.000 = $530.000 descontados + $421.000 en efectivo)."""
+    p = h('primavera')
+    lid = _create(client, p, name='Préstamo de $37.000.000', principal=37000000, term_months=72, installment=951000)
+    rate = _loan(client, p, lid)['monthly_rate_pct']
+    client.post(f'/api/loans/{lid}/payments', headers=p, json={'kind': 'descontado', 'amount': 530000, 'date': '2026-11-06'})
+    client.post('/api/expenses', headers=p, json={'date': '2026-11-06', 'concept': 'Cuota 1', 'subcategory': 'cuota_banco',
+                                                  'efectivo': 421000, 'loan_id': lid})
+    loan = _loan(client, p, lid)
+    interest = round(37000000 * rate / 100)
+    first, second = loan['payments']
+    assert first['interest'] == 530000 and first['capital'] == 0
+    assert second['interest'] == interest - 530000          # lo que faltaba del interés del mes
+    assert loan['interest_total'] == interest
+    assert loan['balance'] == pytest.approx(37000000 - (951000 - interest))
+
+
 def test_editar_recalcula_y_deja_rastro(client, h):
     p = h('primavera')
     lid = _create(client, p, name='Préstamo de $37.000.000', principal=37000000, term_months=72, installment=951000)

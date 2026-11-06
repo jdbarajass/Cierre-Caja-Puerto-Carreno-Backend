@@ -79,7 +79,10 @@ def schedule(loan: Loan, payments: Iterable[LoanPayment]) -> Dict[str, Any]:
     """Tabla de pagos con interés y capital de cada uno y el saldo después."""
     balance = loan.principal
     r = (loan.monthly_rate_pct or 0) / 100
-    charged_months = set()
+    # Interés del mes (saldo × tasa, con el saldo del primer pago del mes) que
+    # falta cubrir: si la cuota se paga en partes, cada parte cubre primero lo
+    # que quede de interés de ese mes y el resto baja la deuda.
+    month_interest_left: Dict[tuple, float] = {}
     rows, interest_total, capital_total, paid_total = [], 0.0, 0.0, 0.0
     for p in _ordered(payments):
         interest = 0.0
@@ -87,9 +90,11 @@ def schedule(loan: Loan, payments: Iterable[LoanPayment]) -> Dict[str, Any]:
             capital = p.amount
         else:
             ym = (p.date.year, p.date.month)
-            if r and ym not in charged_months and balance > 0:
-                interest = min(round(balance * r), p.amount)
-                charged_months.add(ym)
+            if r and ym not in month_interest_left:
+                month_interest_left[ym] = round(max(balance, 0) * r)
+            if r:
+                interest = min(month_interest_left[ym], p.amount)
+                month_interest_left[ym] -= interest
             capital = p.amount - interest
             interest_total += interest
             paid_total += p.amount
