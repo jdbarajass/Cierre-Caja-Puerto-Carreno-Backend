@@ -60,7 +60,8 @@ def _seed(app, store='carreno'):
         for aid, d, total, voided in rows:
             db.session.add(InvoiceFact(store_code=store, alegra_id=f'{store}{aid}', date=d, total=total, voided=voided))
         items = [('a', date(2026, 10, 5), 'BUZO CAPOTA', 2, 500000), ('a', date(2026, 10, 5), 'BOLSA PAPEL', 1, 1000),
-                 ('b', date(2026, 10, 5), 'SHORT', 1, 100000), ('c', date(2026, 10, 20), 'JEAN', 4, 300000),
+                 ('b', date(2026, 10, 5), 'SHORT', 1, 100000), ('b', date(2026, 10, 5), 'TARJETA REGALO 100000 / 15', 1, 100000),
+                 ('c', date(2026, 10, 20), 'JEAN', 4, 300000),
                  ('s', date(2026, 9, 3), 'JEAN', 2, 400000), ('n', date(2026, 11, 3), 'BLUSA', 1, 500000)]
         for i, (aid, d, name, qty, price) in enumerate(items):
             db.session.add(InvoiceItemFact(store_code=store, invoice_alegra_id=f'{store}{aid}', line=i, date=d,
@@ -94,15 +95,18 @@ def test_estado_de_resultados_y_lo_que_quedo_igual_a_anio(app, client, h, monkey
     m = _month(client, h())
     s = m['statement']
     assert s['ventas'] == 2000000                          # sin la anulada
-    assert s['precio_lista'] == 2 * 500000 + 100000 + 4 * 300000   # sin la bolsa
-    assert m['indicators']['unidades'] == 7
-    assert s['descuentos'] == 2300000 - 2000000
-    assert s['costo_estimado'] == pytest.approx(2300000 * 0.65)
+    # Ropa a precio de lista + tarjeta regalo vendida (se costea: se canjea por ropa); la bolsa no
+    assert s['ropa_lista'] == 2 * 500000 + 100000 + 4 * 300000
+    assert s['tarjetas_regalo'] == 100000 and s['bolsas'] == 1000
+    assert s['precio_lista'] == 2300000 + 100000
+    assert m['indicators']['unidades'] == 7                # sin bolsa ni tarjeta
+    assert s['descuentos'] == 2400000 + 1000 - 2000000
+    assert s['costo_estimado'] == pytest.approx(2400000 * 0.65)
     assert s['fletes'] == 100400
     assert s['gastos_operativos'] == 1052000 + 1500000
     assert s['gastos_financieros'] == 4000                 # 4x1000 de la recompra
     assert s['cuotas'] == 500000
-    assert s['utilidad_neta'] == pytest.approx(2000000 - 2300000 * 0.65 - 100400 - 2552000 - 4000)
+    assert s['utilidad_neta'] == pytest.approx(2000000 - 2400000 * 0.65 - 100400 - 2552000 - 4000)
     assert m['has_expenses'] is True and m['in_progress'] is False
 
     # "Lo que quedó" = ganancia real de Cuentas → Año (misma regla)
@@ -137,7 +141,7 @@ def test_punto_de_equilibrio_con_gastos_fijos(app, client, h, monkeypatch):
     be = m['break_even']
     assert be['fixed_costs'] == 1052000                    # sin retiros de socios ni cuotas
     assert be['fixed_cuotas'] == 500000
-    contrib = (2000000 - 2300000 * 0.65) / 2000000
+    contrib = (2000000 - 2400000 * 0.65) / 2000000
     assert be['contribution_pct'] == pytest.approx(contrib)
     assert be['month'] == pytest.approx(1052000 / contrib)
     assert be['day'] == pytest.approx(1052000 / contrib / 31)

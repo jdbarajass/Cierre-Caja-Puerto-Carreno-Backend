@@ -96,10 +96,14 @@ def estimated_cost(list_price_sold: float, margin_pct: float) -> float:
 
 
 def utility_lines(*, ventas: float, precio_lista: float, margin_pct: float, fletes: float,
+                  otros_vendidos: float = 0,
                   operativos: float, financieros: float, comisiones: float,
                   cuotas: float, recompras: float, comisiones_registradas: bool = True) -> Dict[str, Optional[float]]:
     """Estado de resultados de un mes (todo en COP).
 
+    precio_lista   = lo que se costea: ropa a precio de lista + tarjetas regalo
+                     vendidas (se canjean por ropa a precio de lista)
+    otros_vendidos = lo vendido sin costo de ropa (bolsas): solo para los descuentos
     operativos  = operativo + sueldo + otro
     financieros = financiero + 4x1000 (sin comisiones: van aparte)
     comisiones  = datáfono/Addi calculadas que NO están registradas (si ya se
@@ -118,7 +122,7 @@ def utility_lines(*, ventas: float, precio_lista: float, margin_pct: float, flet
     return {
         'ventas': ventas,
         'precio_lista': precio_lista,
-        'descuentos': precio_lista - ventas,
+        'descuentos': precio_lista + otros_vendidos - ventas,
         'costo_estimado': costo,
         'fletes': fletes,
         'costo_vendido': costo_vendido,

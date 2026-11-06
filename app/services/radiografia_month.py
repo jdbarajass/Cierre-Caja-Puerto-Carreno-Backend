@@ -49,17 +49,27 @@ def _sales(store: str, start: date, end: date) -> Dict[str, Any]:
     return {'ventas': float(total or 0), 'transacciones': int(count or 0)}
 
 
+GIFT_CARD_KEYWORDS = ('TARJETA REGALO', 'BONO REGALO')
+
+
 def _items(store: str, start: date, end: date) -> Dict[str, float]:
-    from app.services.garment_insights import is_excluded
-    lista = unidades = 0.0
+    """Precio de lista vendido: ropa (sin bolsa), tarjetas regalo vendidas
+    (cuentan como venta en Alegra y se canjean después por ropa sin factura,
+    así que su costo se estima aquí) y bolsas (solo para los descuentos)."""
+    ropa = tarjetas = bolsas = unidades = 0.0
     for name, qty, price in db.session.query(InvoiceItemFact.name, InvoiceItemFact.quantity,
                                              InvoiceItemFact.unit_price).filter(
             InvoiceItemFact.store_code == store, InvoiceItemFact.date >= start, InvoiceItemFact.date <= end):
-        if is_excluded(name):
-            continue
-        lista += (qty or 0) * (price or 0)
-        unidades += qty or 0
-    return {'precio_lista': lista, 'unidades': unidades}
+        value = (qty or 0) * (price or 0)
+        upper = (name or '').upper()
+        if any(k in upper for k in GIFT_CARD_KEYWORDS):
+            tarjetas += value
+        elif 'BOLSA PAPEL' in upper:
+            bolsas += value
+        else:
+            ropa += value
+            unidades += qty or 0
+    return {'precio_lista': ropa, 'tarjetas': tarjetas, 'bolsas': bolsas, 'unidades': unidades}
 
 
 def _data_until(store: str, start: date, end: date) -> Dict[str, Any]:
@@ -147,7 +157,7 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
                             f'{until.isoformat()} (desde el {cov["gaps"][0].isoformat()}).')
 
     sales = _sales(store, start, until) if until >= start else {'ventas': 0.0, 'transacciones': 0}
-    items = _items(store, start, until) if until >= start else {'precio_lista': 0.0, 'unidades': 0.0}
+    items = _items(store, start, until) if until >= start else {'precio_lista': 0.0, 'tarjetas': 0.0, 'bolsas': 0.0, 'unidades': 0.0}
     from app.services.invoice_facts import missing_item_days
     # Días cargados pero sin prendas (los días sin cargar ya se avisaron arriba)
     if until >= start and set(missing_item_days(store, start, until)) - set(cov['gaps']):
@@ -162,8 +172,8 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
     financieros = by_class[r.FINANCIERO] + recompras_fee
 
     lines = r.utility_lines(
-        ventas=sales['ventas'], precio_lista=items['precio_lista'], margin_pct=margin,
-        fletes=by_class[r.COSTO_MERCANCIA], operativos=by_class[r.OPERATIVO],
+        ventas=sales['ventas'], precio_lista=items['precio_lista'] + items['tarjetas'], margin_pct=margin,
+        otros_vendidos=items['bolsas'], fletes=by_class[r.COSTO_MERCANCIA], operativos=by_class[r.OPERATIVO],
         financieros=financieros, comisiones=com['extra'], cuotas=by_class[r.CUOTA_CREDITO], recompras=recompras,
         comisiones_registradas=com['registered'])
     has_expenses = exp['count'] > 0
@@ -186,7 +196,7 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
         'ticket': r.ratio(ventas, sales['transacciones']),
         'unidades': items['unidades'],
         'prendas_por_factura': r.ratio(items['unidades'], sales['transacciones']),
-        'descuentos_pct': r.ratio(lines['descuentos'], items['precio_lista']),
+        'descuentos_pct': r.ratio(lines['descuentos'], lines['precio_lista'] + items['bolsas']),
         'gastos_ventas_pct': r.ratio(lines['gastos_operativos'] + lines['gastos_financieros'], ventas) if has_expenses else None,
         'nomina_ventas_pct': r.ratio(exp['sueldos'], ventas) if has_expenses else None,
     }
@@ -230,7 +240,8 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
             pentries = RepurchaseEntry.for_store(store).filter(RepurchaseEntry.date >= pstart, RepurchaseEntry.date <= pend).all()
             pcom = _commissions(store, pstart, pend, f'{py}-{pm:02d}')
             pl = r.utility_lines(
-                ventas=ps['ventas'], precio_lista=pi['precio_lista'], margin_pct=margin,
+                ventas=ps['ventas'], precio_lista=pi['precio_lista'] + pi['tarjetas'], margin_pct=margin,
+                otros_vendidos=pi['bolsas'],
                 fletes=pexp['by_class'][r.COSTO_MERCANCIA], operativos=pexp['by_class'][r.OPERATIVO],
                 financieros=pexp['by_class'][r.FINANCIERO] + sum(e.fee_4mil for e in pentries),
                 comisiones=pcom['extra'], cuotas=pexp['by_class'][r.CUOTA_CREDITO],
@@ -254,6 +265,7 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
         'days_in_month': days, 'days_elapsed': days_elapsed,
         'margin_pct': margin, 'has_expenses': has_expenses,
         'statement': {**lines, 'recompras': recompras, 'recompras_fee': recompras_fee,
+                      'ropa_lista': items['precio_lista'], 'tarjetas_regalo': items['tarjetas'], 'bolsas': items['bolsas'],
                       'comisiones_calculadas': com['calculated'], 'comisiones_registradas': com['registered']},
         'pct_of_sales': {k: r.ratio(lines[k], ventas) for k in (
             'costo_vendido', 'utilidad_bruta', 'gastos_operativos', 'utilidad_operacional',

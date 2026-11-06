@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-11-06] (continuación) - Radiografía del mes: tarjetas regalo en el costo
+
+Encontrado verificando en producción: en Carreño los descuentos daban negativos (oct: precio de lista $41.559.000 vs ventas $44.553.030) porque las ventas de Alegra incluyen las **tarjetas regalo vendidas** (32 renglones en oct según Alegra) y el precio de lista no. Además la utilidad quedaba inflada: la tarjeta se canjea después por ropa con un ajuste de inventario, sin factura, y ese costo nunca aparecía. Ahora la tarjeta vendida se costea al venderla (valor × (1 − margen)) junto con la ropa; descuentos = ropa + tarjetas + bolsas − ventas. Las ventas no cambian (igual que Año). `statement` trae `ropa_lista`, `tarjetas_regalo`, `bolsas`. Test ajustado.
+
 ## [2026-11-06] (continuación) - Radiografía, Fase 1: el mes
 
 - `app/services/radiografia_month.py` (nuevo) + `app/routes/radiografia.py` (`GET /api/radiografia/month?year&month&target`, admin y viewer, solo lee, desde ene-2026).
