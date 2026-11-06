@@ -32,7 +32,11 @@ PERIOD_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 # "GASTOS FIJOS MES A MES" de septiembre/octubre). Valores de referencia,
 # editables después. Los incentivos (dependen de la meta) no van aquí.
 FIXED_EXPENSES_TEMPLATE = [
-    {'name': 'Cuota Scotiabank', 'amount': 1110000, 'due_day': 5, 'category': 'cuota_credito', 'subcategory': 'cuota_banco'},
+    # 2026-11-06: las cuotas reales son de la mamá de Angie (Carreño) y del BBVA
+    # de don Miguel (Primavera), con valor libre; ya no Scotiabank. Se quitó la
+    # cuota de manejo Bancolombia (pedido del usuario). Las dos tiendas ya tienen
+    # sus gastos fijos creados; la plantilla solo sirve para una tienda nueva.
+    {'name': 'Cuota banco', 'amount': 0, 'due_day': 25, 'category': 'cuota_credito', 'subcategory': 'cuota_banco'},
     {'name': 'Internet', 'amount': 266000, 'due_day': 5, 'category': 'operativo', 'subcategory': 'internet'},
     {'name': 'Sueldos empleadas 1ra quincena', 'amount': 1500000, 'due_day': 15, 'category': 'sueldo', 'subcategory': 'sueldos_empleadas_1'},
     {'name': 'Sueldo Jhonatan por recompras (1ra quincena)', 'amount': 200000, 'due_day': 15, 'category': 'sueldo', 'subcategory': 'sueldo_jhonatan_recompras'},
@@ -42,7 +46,6 @@ FIXED_EXPENSES_TEMPLATE = [
     {'name': 'Sueldo Jhonatan por recompras (2da quincena)', 'amount': 200000, 'due_day': 30, 'category': 'sueldo', 'subcategory': 'sueldo_jhonatan_recompras'},
     {'name': 'Luz', 'amount': 380000, 'due_day': 30, 'category': 'operativo', 'subcategory': 'luz'},
     {'name': 'Arriendo', 'amount': 1052000, 'due_day': 30, 'category': 'operativo', 'subcategory': 'arriendo'},
-    {'name': 'Cuota de manejo Bancolombia', 'amount': 14900, 'due_day': 30, 'category': 'financiero', 'subcategory': 'cuota_manejo'},
     {'name': 'Ganancia Cristhian', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_cristian'},
     {'name': 'Ganancia Jhonatan', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_jhonatan'},
     {'name': 'Ganancia José', 'amount': 1000000, 'due_day': 30, 'category': 'retiro_socio', 'subcategory': 'ganancia_jose'},
