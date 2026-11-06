@@ -409,3 +409,29 @@ de una tienda pagadas por la otra).
   como **aviso / recordatorio** (ej. "la cuota de don Miguel se paga el 28 de cada mes y este mes no está registrada").
 - Por confirmar: que "Cuánto se puede retirar" muestre la plata de hoy y, aparte y sin restarlas, las líneas de aviso
   (fijos y cuotas que faltan este mes, falta por recomprar, deuda con la otra tienda); y el día de pago de cada deuda.
+
+### Respuestas del 2026-11-06 (sexta ronda)
+
+**Préstamos de don Miguel (Primavera):**
+| Préstamo | Plazo | Cuota | Estado al 6-nov | Interés mensual que sale de cuota y plazo (ESTIMADO) |
+|---|---|---|---|---|
+| $20.000.000 | 60 meses | $554.633 | Cuota 1 pagada: se descontó del mismo préstamo (no salió de las cuentas) | ≈ 1,85 % |
+| $10.000.000 | 24 meses | $527.600 | Cuota 1 se envía del EFECTIVO de Primavera | ≈ 1,98 % |
+| $37.000.000 | por confirmar | $421.000 | Cuota se envía del EFECTIVO de Primavera | — (falta el plazo) |
+
+Las dos cuotas que se envían suman $948.600 (salidas "Cuota banco" de Primavera desde EFECTIVO). Cuando exista la
+Fase 0c se ligan como primer pago de su préstamo (no quedan como historial); la cuota 1 del de 20M se registra como
+pago sin mover cuentas ("descontada del préstamo").
+
+**"Quedarían si se pagara todo"**: en un color de aviso que resalte, con "VALOR APROXIMADO / de referencia".
+
+**Avisos (ventana emergente de recordatorios):**
+- Cuotas de las deudas: desde el **25 de cada mes** hasta que se registre el pago.
+- Gastos fijos: desde **2 días antes del fin de mes** (mes de 30 → el 28; de 31 → el 29; febrero de 28 → el 26) hasta que
+  se registren.
+
+**Gastos fijos de cada tienda (lista del usuario):** cuota banco BBVA don Miguel, cuota banco mamá Angie, sueldos
+empleadas 1 y 2, sueldo Jhonatan por recompras, internet, YouTube, Alegra, luz, arriendo, ganancias mes a mes de
+Jhonatan, Cristian y José. La plantilla del código (`FIXED_EXPENSES_TEMPLATE`) trae "Cuota Scotiabank" en vez de las
+cuotas reales y además "Cuota de manejo Bancolombia": revisar en producción qué tiene cada tienda antes de cambiar.
+Las ganancias de los socios son `retiro_socio`: no bajan la utilidad (es reparto de la ganancia).
