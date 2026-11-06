@@ -444,3 +444,15 @@ Las ganancias de los socios son `retiro_socio`: no bajan la utilidad (es reparto
 - **Gastos fijos:** cuota don Miguel solo en Primavera; cuota mamá Angie solo en Carreño; ganancias de los 3 socios en
   las dos tiendas; los valores de Primavera son iguales a los de Carreño salvo los sueldos de empleadas. Quitar
   "Cuota de manejo Bancolombia".
+
+### Respuestas del 2026-11-06 (octava ronda) — plan cerrado
+
+- **37M a 72 meses** (tasa ESTIMADA ≈ 1,91 %).
+- **Préstamos dinámicos:** monto, plazo, tasa y cuota quedan con estos valores de partida y **todo es editable**. Si se
+  edita el plazo o la tasa, se recalcula la cuota; si se edita la cuota, se recalcula la tasa. Con cada cambio se
+  recalculan la tabla de cuotas (interés y capital de cada una), lo que falta por pagar y cuántas cuotas quedan,
+  incluso para los pagos ya hechos. Cada edición deja rastro (quién, cuándo, valor anterior y nuevo).
+- **Cuota fija de don Miguel** (referencia): 554.633 + 527.600 + 951.000 = $2.033.233, sale de los préstamos (si
+  cambia una cuota, cambia sola). Mamá de Angie sin valor fijo.
+- **Sueldos de Primavera:** Yesica $875.000 y Daniela $650.000 por quincena → "Sueldos empleadas" 1ra y 2da quincena
+  de Primavera = $1.525.000 cada una. Lo demás igual a Carreño.
