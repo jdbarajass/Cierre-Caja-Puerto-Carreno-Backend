@@ -118,12 +118,16 @@ def _operational_metrics(store_code, start, end):
     # el rango, separadas como en el resumen anual (operativos vs. lo que no
     # es gasto del mes). Incluye el 4x1000.
     from app.models.expense import Expense
-    from app.services.monthly_summary import OPERATING_CATEGORIES
+    # Reglas en un solo lugar (app/services/radiografia.py): las cuotas de
+    # crédito van aparte pero se restan en la ganancia real, como en Año.
+    from app.services.radiografia import DEBT_CATEGORIES, EXPENSE_CATEGORIES
     expenses = Expense.for_store(store_code).filter(
         Expense.date >= start, Expense.date <= end, Expense.direction == 'out').all()
-    operating = sum(e.total_with_fee for e in expenses if e.category in OPERATING_CATEGORIES)
+    operating = sum(e.total_with_fee for e in expenses if e.category in EXPENSE_CATEGORIES)
     operating += sum(e.fee_4mil for e in entries)  # 4x1000 de las recompras
-    other = sum(e.total_with_fee for e in expenses if e.category not in OPERATING_CATEGORIES)
+    debt = sum(e.total_with_fee for e in expenses if e.category in DEBT_CATEGORIES)
+    other = sum(e.total_with_fee for e in expenses
+                if e.category not in EXPENSE_CATEGORIES and e.category not in DEBT_CATEGORIES)
 
     return {
         'closings_registered': len(closings),
@@ -138,6 +142,7 @@ def _operational_metrics(store_code, start, end):
         'repurchase_sent': round(sum(e.total_enviado for e in entries)),
         'repurchase_purchases': round(sum(p.amount for p in purchases)),
         'expenses_operating': round(operating),
+        'expenses_debt': round(debt),
         'expenses_other': round(other),
     }
 

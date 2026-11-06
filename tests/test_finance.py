@@ -139,10 +139,12 @@ def test_gastos_en_el_comparativo(app, client, h):
     from app.routes.stores import _operational_metrics
     client.post('/api/expenses', headers=h(), json={'date': '2026-10-05', 'concept': 'Arriendo', 'efectivo': 1000000})
     client.post('/api/expenses', headers=h(), json={'date': '2026-10-05', 'concept': 'Cámaras', 'category': 'inversion', 'efectivo': 500000})
+    client.post('/api/expenses', headers=h(), json={'date': '2026-10-05', 'concept': 'Cuota', 'category': 'cuota_credito', 'efectivo': 300000})
     client.post('/api/repurchase', headers=h(), json={'date': '2026-10-05', 'efectivo': 1000000})
     with app.app_context():
         ops = _operational_metrics('carreno', date(2026, 10, 1), date(2026, 10, 31))
     assert ops['expenses_operating'] == 1000000 + 4000     # + 4x1000 de la recompra
+    assert ops['expenses_debt'] == 300000                  # cuotas aparte (Radiografía Fase 0)
     assert ops['expenses_other'] == 500000
 
 

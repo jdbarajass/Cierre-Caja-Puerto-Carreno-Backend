@@ -191,6 +191,11 @@ Pantalla: una página nueva **Radiografía** (pregunta 6) con pestañas Mes · A
 para admin y viewer, siempre de la tienda activa (header `X-Store`).
 
 ### Fase 0 — Reglas comunes (sin pantalla)
+**Estado (2026-11-06): HECHA en código, falta verificar con datos reales tras el deploy.** `app/services/radiografia.py`
+creado; `monthly_summary` y el comparativo leen de ahí. La cuota de crédito sale de "gastos operativos" a su propia
+columna en Año y en el comparativo; la ganancia neta, la real y la regla 70/30 no cambian de número. Si los gastos de un
+mes se escribieron a mano, se entiende que ya traen las cuotas. La comprobación del 35 % con datos reales queda para
+cuando haya acceso de lectura a producción (se hace al verificar).
 - `app/services/radiografia.py`: mapa categoría → clase (§4), `estimated_cost`, `utility_lines`, `break_even`,
   `sales_for_target`, `pct_change`, `ratio` (división por cero → None), periodos en hora de Colombia, "mismos días".
 - `OPERATING_CATEGORIES` de `monthly_summary` pasa a leerse de este módulo (un solo lugar). Si decides cambiar la cuota de

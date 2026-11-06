@@ -123,6 +123,34 @@ def test_resumen_del_mes_y_ganancias(app, client, h):
     assert octubre['ventas_por_medio']['addi'] == 204700
 
 
+def test_cuotas_de_credito_aparte_sin_cambiar_la_ganancia(app, client, h):
+    """Radiografía Fase 0: la cuota sale de gastos operativos a su propia línea,
+    pero la ganancia neta y la real restan lo mismo que antes."""
+    _seed_sales(app)
+    exp = lambda **p: client.post('/api/expenses', headers=h(), json={'date': '2026-10-02', 'concept': 'x', **p})
+    exp(category='operativo', efectivo=1000000)
+    exp(category='cuota_credito', efectivo=554633)
+    octubre = _month(_year(client, h), 10)
+    assert octubre['gastos_operativos'] == 1000000          # sin la cuota
+    assert octubre['cuotas'] == 554633
+    assert octubre['cuotas_en_gastos'] is False
+    antes = 1000000 + 554633                                 # lo que restaba antes de la Fase 0
+    assert octubre['ganancia_neta'] == octubre['ventas'] - antes
+    assert octubre['ganancia_real'] == octubre['ventas'] - antes
+    assert octubre['utilidad_diferencia'] == pytest.approx(octubre['ganancia_real'] - octubre['ventas'] * 0.30)
+
+
+def test_gastos_a_mano_ya_traen_las_cuotas(app, client, h):
+    _seed_sales(app)
+    client.post('/api/expenses', headers=h(), json={'date': '2026-09-10', 'concept': 'x',
+                                                     'category': 'cuota_credito', 'efectivo': 500000})
+    client.put('/api/monthly-summary/override', headers=h(),
+               json={'period': '2026-09', 'field': 'gastos_operativos', 'value': 4150293, 'note': 'Excel sep'})
+    sep = _month(_year(client, h), 9)
+    assert sep['cuotas_en_gastos'] is True and sep['cuotas'] == 0
+    assert sep['ganancia_neta'] == 42239140 - 4150293       # la cuota no se resta dos veces
+
+
 def test_valor_escrito_a_mano_manda_y_se_puede_quitar(app, client, h):
     _seed_sales(app)
     resp = client.put('/api/monthly-summary/override', headers=h(),

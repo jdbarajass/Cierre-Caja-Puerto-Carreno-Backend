@@ -6,10 +6,17 @@ del plan):
 - ventas: facturas de Alegra no anuladas (copia InvoiceFact, desde ene-2026).
 - recompras: lo enviado a Jhonatan (RepurchaseEntry.total_enviado).
 - gastos operativos: gastos que CORRESPONDEN al mes (Expense.period) de las
-  categorías operativo, sueldo, flete, financiero, cuota_credito y otro, con
-  su 4x1000, más el 4x1000 de las recompras.
+  categorías que restan utilidad (operativo, sueldo, flete, financiero y otro,
+  ver app/services/radiografia.py), con su 4x1000, más el 4x1000 de las
+  recompras.
+- cuotas de crédito (desde 2026-11-06, Radiografía Fase 0): van en su propia
+  línea; no son gasto operativo, pero se siguen restando en las ganancias
+  (los números de ganancia no cambiaron). Si los gastos operativos del mes se
+  escribieron a mano, se entiende que ya traen las cuotas (no se restan dos
+  veces).
 - ganancia bruta = ventas − recompras; ganancia neta = ventas − gastos
-  operativos (como el Excel); ganancia real = ventas − recompras − gastos.
+  operativos − cuotas (como el Excel); ganancia real = ventas − recompras −
+  gastos − cuotas.
 - inventario al cierre del mes (Alegra) y cuánto subió/bajó; ganancia real
   + aumento del inventario (si el inventario sube, esa plata está en la tienda).
 - aparte (no son gasto): inversiones, retiros de socios, préstamos, fletes,
@@ -40,11 +47,12 @@ from app.models.monthly_summary import InventorySnapshot, MonthlySummaryOverride
 from app.models.repurchase import RepurchaseEntry
 from app.models.repurchase_purchase import RepurchasePurchase
 from app.services.payment_facts import SALE_MEDIOS, PAYMENTS_START
+# Un solo lugar para las reglas (qué resta utilidad): app/services/radiografia.py
+from app.services.radiografia import DEBT_CATEGORIES, EXPENSE_CATEGORIES as OPERATING_CATEGORIES
 
 # Arranque del resumen (decisión del usuario): desde septiembre 2026
 SUMMARY_START = date(2026, 9, 1)
 
-OPERATING_CATEGORIES = ('operativo', 'sueldo', 'flete', 'financiero', 'cuota_credito', 'otro')
 
 # Datos que el usuario puede escribir a mano
 OVERRIDE_FIELDS = (
@@ -96,6 +104,7 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
         by_cat[e.category] += e.total_with_fee
         expense_count += 1
     gastos_operativos = sum(by_cat[c] for c in OPERATING_CATEGORIES) + recompras_fee
+    cuotas = sum(by_cat[c] for c in DEBT_CATEGORIES)
 
     medios = {m: 0 for m in SALE_MEDIOS + ('otro',)}
     for medio, total in db.session.query(PaymentFact.medio, func.sum(PaymentFact.amount)).filter(
@@ -120,6 +129,7 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
         'excedentes': excedentes,
         'recompras': recompras,
         'gastos_operativos': gastos_operativos,
+        'cuotas': cuotas,
         'inversiones': by_cat['inversion'],
         'retiros': by_cat['retiro_socio'],
         'prestamos': by_cat['prestamo_empleada'] + by_cat['prestamo_tienda'],
@@ -181,16 +191,21 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         row.update(values)
         row['edited'] = edited
         row['computed'] = {f: comp[f] for f in OVERRIDE_FIELDS}
-        for k in ('excedentes', 'gastos_por_categoria', 'recompras_fee', 'compras_jhonatan', 'ventas_por_medio',
+        for k in ('excedentes', 'cuotas', 'gastos_por_categoria', 'recompras_fee', 'compras_jhonatan', 'ventas_por_medio',
                   'has_sales_data', 'has_payments_data', 'has_expenses'):
             row[k] = comp[k]
         # Si se escribieron los gastos a mano, el mes sí tiene gastos
         row['has_expenses'] = comp['has_expenses'] or 'gastos_operativos' in edited
 
-        ventas, recompras, gastos = row['ventas'], row['recompras'], row['gastos_operativos']
+        # Gastos escritos a mano = el total de todo (como el Excel): ya traen
+        # las cuotas, no se restan otra vez.
+        row['cuotas_en_gastos'] = 'gastos_operativos' in edited
+        if row['cuotas_en_gastos']:
+            row['cuotas'] = 0.0
+        ventas, recompras, gastos, cuotas = row['ventas'], row['recompras'], row['gastos_operativos'], row['cuotas']
         row['ganancia_bruta'] = ventas - recompras
-        row['ganancia_neta'] = ventas - gastos
-        row['ganancia_real'] = ventas - recompras - gastos
+        row['ganancia_neta'] = ventas - gastos - cuotas
+        row['ganancia_real'] = ventas - recompras - gastos - cuotas
         row['porcentaje'] = (row['ganancia_real'] / ventas) if ventas else None
         row['ventas_mas_excedentes'] = ventas + row['excedentes']
 
@@ -214,7 +229,7 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
         months.append(row)
 
     done = [m for m in months if not m['future'] and not m['before_start']]
-    numeric = ('ventas', 'excedentes', 'ventas_mas_excedentes', 'recompras', 'gastos_operativos', 'ganancia_bruta', 'ganancia_neta', 'ganancia_real',
+    numeric = ('ventas', 'excedentes', 'ventas_mas_excedentes', 'recompras', 'gastos_operativos', 'cuotas', 'ganancia_bruta', 'ganancia_neta', 'ganancia_real',
                'inversiones', 'retiros', 'prestamos', 'fletes', 'resurtido_esperado', 'resurtido_diferencia',
                'utilidad_esperada', 'utilidad_diferencia')
     totals = {k: sum(m[k] for m in done) for k in numeric}

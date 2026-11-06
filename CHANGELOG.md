@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-11-06] - Radiografía financiera, Fase 0: reglas comunes en un solo lugar
+
+Plan: `docs/PLAN_RADIOGRAFIA.md` (cerrado con el usuario en 8 rondas). Sin tablas nuevas.
+
+- `app/services/radiografia.py` (nuevo): mapa categoría → clase de cada salida (costo de mercancía, operativo, financiero, cuota de crédito, inversión, préstamo, retiro de socio; una categoría desconocida resta como operativo), costo estimado (precio de lista × (1 − margen)), estado de resultados del mes, punto de equilibrio, ventas para una utilidad, división por cero → None, mismos días del mes anterior y valor diario (las dos tiendas abren todos los días).
+- **Decisión del usuario: la cuota de crédito no es gasto operativo** (es devolver un préstamo), pero la plata sale. `monthly_summary` toma las categorías de este módulo: `gastos_operativos` ya no incluye `cuota_credito`; nuevo campo `cuotas` por mes y en el total. **La ganancia neta y la real no cambian** (restan gastos + cuotas), así que la regla 70/30 tampoco. Si los gastos de un mes se escribieron a mano, se entiende que ya traen las cuotas (`cuotas_en_gastos`, no se restan dos veces).
+- Comparativo de tiendas (`_operational_metrics`): nuevo `expenses_debt` (cuotas); `expenses_other` ya no las incluye.
+- Tests: `tests/test_radiografia.py` (5, nuevo) + 2 en `test_monthly_summary.py` + comparativo en `test_finance.py`.
+
 ## [2026-11-03] (continuación) - Varias tarjetas regalo en una redención
 
 Caso real del grupo: "Entra 15500007, 15500009, 155000010, 155000012 (4 tarjetas de $50.000) y sale 105225119908 y 1051429990034, excedente 20.000 efectivo". Solo se podía una tarjeta por solicitud.
