@@ -332,3 +332,27 @@ Propuesta:
 
 Preguntas de esta fase: ¿los $9.816.659 son todo lo que Primavera debe al 6-nov (aunque en el sistema haya registros
 de préstamos anteriores con otros valores)? ¿Primavera ya hizo algún pago a Carreño antes de hoy que esté incluido en ese valor?
+
+### Respuestas del 2026-11-06 (segunda ronda)
+
+**Cuotas de crédito.** No son de banco como decía la plantilla (Scotiabank/Davivienda):
+- Carreño: cuota a la mamá de Angie; quedan **$7.500.000** de la deuda de la apertura de Carreño.
+- Primavera: crédito BBVA de don Miguel (papá de Cristhian).
+- Ellos toman la cuota completa como algo que sale (no calculan intereses).
+
+Propuesta (respeta las dos cosas): la cuota **no baja la utilidad neta** (pagar un préstamo no es gasto: lo que se compró
+con ese préstamo fue la apertura, una inversión), **pero sí se resta en "lo que quedó" y en "cuánto se puede retirar"**,
+en una línea propia "Cuotas de crédito", porque esa plata sale y no vuelve. En Cuentas → Año, "ganancia real / lo que
+quedó" sigue restando las cuotas (no cambia el número que conocen); "gastos operativos" deja de incluirlas y se ven aparte.
+Además, tarjeta "Lo que debe la tienda" con el saldo de cada crédito que baja con cada cuota registrada (falta el saldo
+de Primavera con BBVA).
+
+**Reponer lo vendido.** Entendido; las recompras se siguen haciendo a mano en Cuentas Recompras (no cambia nada ahí). En
+"cuánto se puede retirar" se muestra en su propia línea "Falta por recomprar de lo vendido este mes" (costo estimado de
+lo vendido − recompras del mes, si da positivo), para no confundir plata de mercancía con ganancia.
+
+**Deuda de Primavera con Carreño.** $9.816.659 es el valor neto al 6-nov-2026 (los pagos anteriores ya están descontados;
+lo registrado antes queda solo como historial). Cada pago de Primavera **resta de las cuentas de Primavera** (si salió de
+ellas) **y resta de la deuda**, pero **no suma a las cuentas de Carreño**: Primavera a veces paga con recompras o con
+ganancias de los dueños, y esa plata no llega a las cuentas de Carreño. Cambia la Fase 0b: el pago ya no crea una entrada
+en Carreño (opcional, solo si la plata sí llegó a una cuenta de Carreño).
