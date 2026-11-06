@@ -379,3 +379,23 @@ como "Pago a Carreño" con la nota de para qué fue, que también baja las cuent
 Dudas abiertas antes de construir: ver la respuesta al usuario del 2026-11-06 (saldos actuales de los 3 préstamos de
 don Miguel, intereses/ajuste de saldo, desde dónde se registra el pago, cuotas ya registradas antes de hoy, recompras
 de una tienda pagadas por la otra).
+
+### Respuestas del 2026-11-06 (cuarta ronda) — Fase 0c definida
+
+- **Mamá de Angie (Carreño):** $7.500.000 es el saldo neto de hoy; no se ha abonado nada.
+- **Don Miguel (Primavera):** se deben los $67.000.000, pero puede que ya se haya pagado algo (no se sabe aún): el
+  **valor prestado y el saldo de cada préstamo se pueden ajustar** a mano, con nota y rastro.
+- **Los 3 préstamos de don Miguel van por separado** dentro de una misma tarjeta: al pagar se escoge a cuál préstamo
+  va; baja ese préstamo y el total. La tarjeta muestra cuánto va cada uno.
+- **Cuota e interés:** campos opcionales por préstamo ("valor de la cuota" e "interés del banco") para llenarlos apenas
+  se sepan. Botón "Ajustar saldo" para igualar con el banco (con nota).
+- **Dónde se registra el pago:** en la tarjeta ("Registrar pago") o en Cuentas → Gastos ("Cuota de crédito" + a qué
+  deuda/préstamo). Es **un solo registro**: baja la cuenta una vez y baja la deuda una vez.
+- **Cuotas registradas antes de hoy:** solo historial.
+- **Ganancias de los dueños / cosas de Carreño pagadas por Primavera:** opción única "Pago a Carreño (abono a la deuda)"
+  con nota de para qué fue; baja cuentas de Primavera y la deuda, **no baja su ganancia**. Aprobado.
+- **Recompra de una tienda pagada por la otra:** la tienda dueña de la mercancía la anota en sus Recompras sin mover sus
+  cuentas, con nota automática visible: "No se movió en cuentas: lo pagó <otra tienda> (abono / préstamo entre tiendas)".
+  La que pagó la anota como "Pago a Carreño" (Primavera) o "Préstamo a Primavera" (Carreño, suma a la deuda).
+- **Dónde se ven:** Cuentas → Resumen (Carreño: "Mamá de Angie" y "Primavera nos debe"; Primavera: "Don Miguel" y
+  "Le debemos a Carreño") y el flujo de caja de la Radiografía.
