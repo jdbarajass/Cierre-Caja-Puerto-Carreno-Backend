@@ -435,3 +435,12 @@ empleadas 1 y 2, sueldo Jhonatan por recompras, internet, YouTube, Alegra, luz, 
 Jhonatan, Cristian y José. La plantilla del código (`FIXED_EXPENSES_TEMPLATE`) trae "Cuota Scotiabank" en vez de las
 cuotas reales y además "Cuota de manejo Bancolombia": revisar en producción qué tiene cada tienda antes de cambiar.
 Las ganancias de los socios son `retiro_socio`: no bajan la utilidad (es reparto de la ganancia).
+
+### Respuestas del 2026-11-06 (séptima ronda)
+
+- **Préstamo de 37M:** la cuota es **$951.000**; de la primera ya se abonó $530.000 descontado del mismo préstamo y se
+  envían $421.000 del EFECTIVO de Primavera. Falta el plazo para calcular la tasa (con 72 meses sale ≈ 1,91 %).
+- **Tasas:** ponerlas desde ya como ESTIMADO (20M ≈ 1,85 %, 10M ≈ 1,98 %, 37M según el plazo).
+- **Gastos fijos:** cuota don Miguel solo en Primavera; cuota mamá Angie solo en Carreño; ganancias de los 3 socios en
+  las dos tiendas; los valores de Primavera son iguales a los de Carreño salvo los sueldos de empleadas. Quitar
+  "Cuota de manejo Bancolombia".
