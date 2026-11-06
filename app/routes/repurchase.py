@@ -334,6 +334,10 @@ def update_entry(entry_id):
         return err
 
     entry = RepurchaseEntry.get_for_current_store_or_404(entry_id)
+    if entry.linked_expense_id:
+        # Espejo de un movimiento entre tiendas (Radiografía Fase 0b)
+        return jsonify({'success': False, 'message': 'Esta recompra la pagó la otra tienda y se creó sola: '
+                        'edítala o bórrala desde el movimiento de la otra tienda (Cuentas → Gastos).'}), 400
 
     try:
         data = request.get_json() or {}
@@ -387,6 +391,10 @@ def delete_entry(entry_id):
         return err
 
     entry = RepurchaseEntry.get_for_current_store_or_404(entry_id)
+    if entry.linked_expense_id:
+        # Espejo de un movimiento entre tiendas (Radiografía Fase 0b)
+        return jsonify({'success': False, 'message': 'Esta recompra la pagó la otra tienda y se creó sola: '
+                        'edítala o bórrala desde el movimiento de la otra tienda (Cuentas → Gastos).'}), 400
 
     try:
         if entry.synced_to_accounts:

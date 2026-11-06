@@ -132,7 +132,8 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
         'cuotas': cuotas,
         'inversiones': by_cat['inversion'],
         'retiros': by_cat['retiro_socio'],
-        'prestamos': by_cat['prestamo_empleada'] + by_cat['prestamo_tienda'],
+        # Préstamos y abonos entre tiendas: no son gasto (Radiografía Fase 0b)
+        'prestamos': by_cat['prestamo_empleada'] + by_cat['prestamo_tienda'] + by_cat['pago_prestamo_tienda'],
         'fletes': by_cat['flete'],
         'gastos_por_categoria': dict(by_cat),
         'recompras_fee': recompras_fee,

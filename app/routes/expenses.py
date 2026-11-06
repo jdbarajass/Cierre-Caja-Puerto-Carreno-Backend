@@ -150,11 +150,17 @@ def _apply_payload(expense, data, creating):
 
     if creating or 'related_store_code' in data:
         expense.related_store_code = (data.get('related_store_code') or '').strip() or None
-    if expense.category in ('prestamo_tienda', 'devolucion_prestamo_tienda'):
+    if expense.category in ('prestamo_tienda', 'pago_prestamo_tienda', 'devolucion_prestamo_tienda'):
         if expense.related_store_code not in STORES or expense.related_store_code == get_current_store():
             raise ExpenseError('Elige la otra tienda del préstamo')
     else:
         expense.related_store_code = None
+    # Para qué fue el préstamo o abono entre tiendas (Radiografía Fase 0b)
+    from app.services.inter_store_debt import DebtError, validate_inter_store
+    try:
+        validate_inter_store(expense, data, creating)
+    except DebtError as e:
+        raise ExpenseError(str(e))
 
     if creating or 'employee_name' in data:
         expense.employee_name = (data.get('employee_name') or '').strip() or None
@@ -305,6 +311,15 @@ def _sync_employee_links(expense, is_delete=False, payment_type='quincena'):
 #  GASTOS: listar / crear / editar / borrar
 # ─────────────────────────────────────────────
 
+def _sync_inter_store_mirrors(expense, is_delete=False):
+    """Registros espejo en la otra tienda (app/services/inter_store_debt.py)."""
+    from app.services.inter_store_debt import DebtError, sync_mirrors
+    try:
+        sync_mirrors(expense, is_delete=is_delete)
+    except DebtError as e:
+        raise ExpenseError(str(e))
+
+
 def _month_args():
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
@@ -395,6 +410,7 @@ def create_expense():
         db.session.flush()
         _sync_expense_account_movements(expense)
         _sync_employee_links(expense)
+        _sync_inter_store_mirrors(expense)
         db.session.commit()
         return jsonify({'success': True, 'item': expense.to_dict()}), 201
     except ExpenseError as e:
@@ -415,10 +431,15 @@ def manage_expense(expense_id):
     if err:
         return err
     expense = Expense.get_for_current_store_or_404(expense_id)
+    from app.services.inter_store_debt import mirror_lock_message
+    locked = mirror_lock_message(expense)
+    if locked:
+        return jsonify({'success': False, 'message': locked}), 400
     try:
         if request.method == 'DELETE':
             _sync_expense_account_movements(expense, is_delete=True)
             _sync_employee_links(expense, is_delete=True)
+            _sync_inter_store_mirrors(expense, is_delete=True)
             db.session.delete(expense)
             db.session.commit()
             return jsonify({'success': True}), 200
@@ -426,6 +447,7 @@ def manage_expense(expense_id):
         _apply_payload(expense, request.get_json() or {}, creating=False)
         _sync_expense_account_movements(expense)
         _sync_employee_links(expense)
+        _sync_inter_store_mirrors(expense)
         db.session.commit()
         return jsonify({'success': True, 'item': expense.to_dict()}), 200
     except ExpenseError as e:
@@ -643,3 +665,46 @@ def inter_store_loans():
         'lent': [balance_of(current, o) for o in others],
         'owed': [balance_of(o, current) for o in others],
     }), 200
+
+
+# ─────────────────────────────────────────────
+#  DEUDA ENTRE TIENDAS (Radiografía Fase 0b)
+# ─────────────────────────────────────────────
+
+@bp.route('/api/inter-store-debt', methods=['GET', 'OPTIONS'])
+@token_required
+def inter_store_debt():
+    """Lo que Primavera le debe a Carreño: saldo de partida, préstamos y
+    abonos desde esa fecha y saldo de hoy (igual en las dos tiendas; el
+    viewer también lo ve). Ver app/services/inter_store_debt.py."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    from app.services.inter_store_debt import compute, list_purposes
+    data = compute()
+    current = get_current_store()
+    data['perspective'] = ('lender' if current == data['lender'] else
+                           'borrower' if current == data['borrower'] else None)
+    data['purposes'] = list_purposes()
+    return jsonify({'success': True, 'debt': data}), 200
+
+
+@bp.route('/api/inter-store-debt/opening', methods=['PUT', 'OPTIONS'])
+@token_required
+def inter_store_debt_opening():
+    """Cambia el saldo de partida (con nota; queda en el historial)."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    from app.services.inter_store_debt import DebtError, compute, set_opening
+    data = request.get_json() or {}
+    try:
+        config = set_opening(data.get('opening_balance'), data.get('opening_date'), data.get('note'),
+                             get_current_user())
+    except DebtError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    return jsonify({'success': True, 'debt': compute(config)}), 200

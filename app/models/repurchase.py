@@ -49,6 +49,11 @@ class RepurchaseEntry(StoreScopedMixin, db.Model):
     # sobre total_enviado (comportamiento de siempre).
     fee_override = db.Column(db.Float, nullable=True)
 
+    # Recompra pagada por la otra tienda (Radiografía Fase 0b): no mueve las
+    # cuentas de esta tienda; espejo del movimiento entre tiendas linked_expense_id
+    paid_by_store = db.Column(db.String(20), nullable=True)
+    linked_expense_id = db.Column(db.Integer, nullable=True, index=True)
+
     creator = db.relationship('User', foreign_keys=[created_by], lazy='joined')
 
     @property
@@ -101,6 +106,8 @@ class RepurchaseEntry(StoreScopedMixin, db.Model):
             'total_a_descontar': self.total_a_descontar,
             'notes': self.notes,
             'synced_to_accounts': bool(self.synced_to_accounts),
+            'paid_by_store': self.paid_by_store,
+            'linked_expense_id': self.linked_expense_id,
             'created_by_name': self.creator.name if self.creator else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,

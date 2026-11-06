@@ -34,7 +34,8 @@ OUT_CATEGORIES = (
     'cuota_credito',      # cuotas de créditos (Scotiabank, Davivienda)
     'inversion',          # activos: equipos, herrajería, cámaras
     'prestamo_empleada',  # con empleada -> Empleadas → Préstamos
-    'prestamo_tienda',    # plata de esta tienda para otra (Carreño -> Primavera)
+    'prestamo_tienda',    # plata de esta tienda para otra (Carreño -> Primavera): suma a la deuda
+    'pago_prestamo_tienda',  # abono a la deuda con la otra tienda (Primavera -> Carreño), 2026-11-06
     'retiro_socio',       # ganancia que retira un socio
     'otro',
 )
@@ -61,6 +62,7 @@ EXPENSE_SUBCATEGORIES = {
     'ganancia_jose':             'retiro_socio',
     'prestamo_empleada':         'prestamo_empleada',
     'prestamo_tienda':           'prestamo_tienda',
+    'pago_prestamo_tienda':      'pago_prestamo_tienda',
     'flete':                     'flete',
     'aseo':                      'operativo',
     'moto_carro':                'flete',         # aeropuerto de Carreño -> local
@@ -73,7 +75,21 @@ IN_CATEGORIES = (
     'devolucion_prestamo',        # una empleada u otra persona devuelve plata
     'devolucion_prestamo_tienda', # la otra tienda devuelve lo que se le prestó
     'ingreso_extra',              # plata que entra y no es venta
+    'prestamo_recibido_tienda',   # la otra tienda nos prestó y la plata llegó a una cuenta (espejo)
 )
+
+# Movimientos entre tiendas (Radiografía Fase 0b, docs/PLAN_RADIOGRAFIA.md):
+# el préstamo (sube la deuda) y el abono (la baja) se registran UNA vez, en la
+# tienda que pone la plata, con "para qué fue". Si fue una recompra o la plata
+# llegó a una cuenta de la otra tienda, allá se crea solo un registro espejo
+# (ligado con linked_from_id) que no se edita por separado.
+INTER_STORE_OUT = ('prestamo_tienda', 'pago_prestamo_tienda')
+INTER_STORE_PURPOSES = {
+    'recompra': 'Recompra de la otra tienda',          # espejo: recompra sin mover cuentas allá
+    'cuenta': 'Llegó a una cuenta de la otra tienda',  # espejo: entrada en esa cuenta
+    'ganancias': 'Ganancias de los dueños',            # solo baja la deuda (abonos)
+    'otro': 'Otra cosa de la otra tienda',
+}
 
 # cuentas: mueve el saldo de las cuentas de Resumen (por defecto).
 # caja: salió de la caja del día; el cierre de caja YA abonó a EFECTIVO lo que
@@ -117,6 +133,12 @@ class Expense(StoreScopedMixin, db.Model):
     # Préstamos entre tiendas: la otra tienda (la que recibe el préstamo o la
     # que devuelve)
     related_store_code = db.Column(db.String(20), nullable=True, index=True)
+    # Para qué fue (INTER_STORE_PURPOSES) y, si llegó a una cuenta de la otra
+    # tienda, a cuál (un medio de EXPENSE_METHODS)
+    purpose = db.Column(db.String(20), nullable=True)
+    arrived_method = db.Column(db.String(20), nullable=True)
+    # Registro espejo creado solo desde un movimiento de la otra tienda
+    linked_from_id = db.Column(db.Integer, nullable=True, index=True)
 
     # Enlace con Empleadas (préstamos y sueldos)
     employee_name = db.Column(db.String(100), nullable=True)
@@ -176,6 +198,9 @@ class Expense(StoreScopedMixin, db.Model):
             'total_with_fee': self.total_with_fee,
             'account_mode': self.account_mode,
             'related_store_code': self.related_store_code,
+            'purpose': self.purpose,
+            'arrived_method': self.arrived_method,
+            'linked_from_id': self.linked_from_id,
             'employee_name': self.employee_name,
             'employee_loan_id': self.employee_loan_id,
             'employee_payment_id': self.employee_payment_id,

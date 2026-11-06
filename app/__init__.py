@@ -664,6 +664,12 @@ def _migrate_employee_tables(db, app):
         add_column_if_missing(conn, 'expenses', 'category_detail', 'VARCHAR(120)')
         add_column_if_missing(conn, 'fixed_expenses', 'subcategory', 'VARCHAR(40)')
         add_column_if_missing(conn, 'accounts', 'note', 'TEXT')
+        # Deuda entre tiendas (Radiografía Fase 0b, 2026-11-06)
+        add_column_if_missing(conn, 'expenses', 'purpose', 'VARCHAR(20)')
+        add_column_if_missing(conn, 'expenses', 'arrived_method', 'VARCHAR(20)')
+        add_column_if_missing(conn, 'expenses', 'linked_from_id', 'INTEGER')
+        add_column_if_missing(conn, 'repurchase_entries', 'paid_by_store', 'VARCHAR(20)')
+        add_column_if_missing(conn, 'repurchase_entries', 'linked_expense_id', 'INTEGER')
         if 'fixed_expenses' in tables:
             # Los gastos fijos cargados de la plantilla toman su categoría
             # detallada por nombre (solo los que no tienen; idempotente)

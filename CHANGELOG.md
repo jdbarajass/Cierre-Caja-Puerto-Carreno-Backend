@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-11-06] (continuación) - Radiografía, Fase 0b: deuda de Primavera con Carreño
+
+Pedido del usuario: ver lo que Primavera le debe a Carreño ($9.816.659 al 6-nov-2026) en una tarjeta conectada a las cuentas que baje con cada pago.
+
+- `app/services/inter_store_debt.py` (nuevo): saldo = partida (app_settings `inter_store_debt`, compartido) + préstamos de Carreño a Primavera − abonos de Primavera − devoluciones anotadas a mano en Carreño, desde la fecha de partida; lo anterior queda como historial. Cambiar la partida exige nota y queda en `history` (quién, cuándo, antes y después).
+- Nueva salida `pago_prestamo_tienda` ("Pago a otra tienda (abono a la deuda)"): baja las cuentas de la que paga y la deuda; **no es gasto** (va con los préstamos en Año, clase préstamo en la Radiografía).
+- Préstamos y abonos entre tiendas piden **para qué fue** (`purpose`): recompra de la otra tienda, llegó a una cuenta de la otra tienda (`arrived_method`), ganancias de los dueños (solo abonos) u otra cosa. Registros espejo que se crean, editan y borran solos y no se tocan por su lado (400): recompra en la otra tienda sin mover sus cuentas ni 4x1000, con la nota "No se movió en cuentas: lo pagó …" (`RepurchaseEntry.paid_by_store`, `linked_expense_id`), o entrada en la cuenta donde llegó (`Expense.linked_from_id`; nueva entrada `prestamo_recibido_tienda` cuando presta Carreño). El espejo no baja la deuda otra vez.
+- `GET /api/inter-store-debt` (admin y viewer, mismo saldo en las dos tiendas con `perspective`) y `PUT /api/inter-store-debt/opening` (admin, con nota).
+- Columnas nuevas (migración en `app/__init__.py`): `expenses.purpose`, `arrived_method`, `linked_from_id`; `repurchase_entries.paid_by_store`, `linked_expense_id`.
+- Integralidad: un préstamo entre tiendas nuevo sin "para qué fue" da 400 (el frontend del mismo día lo pide); los viejos se editan sin pedirlo. Tests: `tests/test_inter_store_debt.py` (8, nuevo); ajustados `test_expenses.py` y `test_monthly_summary.py`.
+- En producción (revisado 2026-11-06) no hay préstamos ni devoluciones entre tiendas registrados: el historial está vacío y el saldo arranca en $9.816.659.
+
 ## [2026-11-06] - Radiografía financiera, Fase 0: reglas comunes en un solo lugar
 
 Plan: `docs/PLAN_RADIOGRAFIA.md` (cerrado con el usuario en 8 rondas). Sin tablas nuevas.

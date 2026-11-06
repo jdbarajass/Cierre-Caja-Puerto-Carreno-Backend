@@ -197,11 +197,13 @@ def test_gasto_fijo_crud(client, h):
 
 def test_prestamo_entre_tiendas(client, h):
     assert _post(client, h(), concept='Herrajería Primavera', category='prestamo_tienda',
-                 related_store_code='primavera', qr=500000).status_code == 201
+                 related_store_code='primavera', purpose='otro', qr=500000).status_code == 201
     _post(client, h(), concept='Primavera devuelve', direction='in', category='devolucion_prestamo_tienda',
           related_store_code='primavera', qr=200000)
     # a sí misma: inválido
     assert _post(client, h(), category='prestamo_tienda', related_store_code='carreno', qr=1).status_code == 400
+    # sin "para qué fue": inválido (Radiografía Fase 0b)
+    assert _post(client, h(), category='prestamo_tienda', related_store_code='primavera', qr=1).status_code == 400
 
     carreno = client.get('/api/expenses/inter-store', headers=h()).get_json()
     assert carreno['lent'][0]['balance'] == 300000

@@ -88,7 +88,7 @@ def test_resumen_del_mes_y_ganancias(app, client, h):
     exp(category='operativo', efectivo=53200, account_mode='caja')
     exp(category='inversion', qr=308828, apply_fee=False, account_mode='sin_mover')
     exp(category='retiro_socio', efectivo=1000000)
-    exp(category='prestamo_tienda', related_store_code='primavera', qr=500000, apply_fee=False)
+    exp(category='prestamo_tienda', related_store_code='primavera', purpose='otro', qr=500000, apply_fee=False)
     exp(category='operativo', qr=266000, period='2026-09', date='2026-10-05')   # internet de septiembre
     exp(category='flete', efectivo=607000)
 

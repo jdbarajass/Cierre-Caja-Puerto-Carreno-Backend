@@ -46,6 +46,7 @@ CLASS_BY_CATEGORY: Dict[str, str] = {
     'inversion': INVERSION,
     'prestamo_empleada': PRESTAMO,
     'prestamo_tienda': PRESTAMO,
+    'pago_prestamo_tienda': PRESTAMO,   # abono a la deuda con la otra tienda (Fase 0b)
     'retiro_socio': RETIRO_SOCIO,
 }
 

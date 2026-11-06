@@ -318,6 +318,9 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 | 9 | Utilidad deseada | **No es una meta: la ganancia que se saca depende de cómo le va al local cada mes** | No se guarda nada. En vez de "ventas para la utilidad X" el foco es "cuánto generó el local y cuánto se puede sacar" (Fase 4). Se deja una calculadora opcional "si quiero sacar X, ¿cuánto hay que vender?" sin guardar. |
 
 ### Fase 0b — Deuda de Primavera con Carreño (propuesta)
+**Estado (2026-11-06): HECHA en código (ver CHANGELOG del backend), falta deploy y probar en producción.** Quedó con las
+decisiones de la tercera y cuarta ronda (el abono no suma a Carreño salvo que llegue a una de sus cuentas; "para qué fue";
+espejos de recompra y de entrada). Lo de abajo es la propuesta original.
 Hoy: `GET /api/expenses/inter-store` calcula el saldo con lo registrado en Carreño (`prestamo_tienda` − `devolucion_prestamo_tienda`)
 y se ve solo dentro de Cuentas → Gastos. Si Primavera paga desde sus cuentas, hoy habría que registrarlo dos veces (en
 Primavera como "otro", que además restaría su utilidad, y en Carreño como devolución).
