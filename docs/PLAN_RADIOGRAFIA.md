@@ -464,3 +464,12 @@ Las ganancias de los socios son `retiro_socio`: no bajan la utilidad (es reparto
   cambia una cuota, cambia sola). Mamá de Angie sin valor fijo.
 - **Sueldos de Primavera:** Yesica $875.000 y Daniela $650.000 por quincena → "Sueldos empleadas" 1ra y 2da quincena
   de Primavera = $1.525.000 cada una. Lo demás igual a Carreño.
+
+### Fase 0c — Préstamos de cada tienda: HECHA en código (2026-11-06)
+Ver CHANGELOG del backend. Falta deploy y cargar en producción (con el admin, tras el deploy):
+- Carreño: tarjeta "Mamá de Angie", $7.500.000 desde el 6-nov-2026, cuota libre, aviso el 25, gasto fijo 6.
+- Primavera: tarjeta "Don Miguel (BBVA)" con 20M/60/554.633, 10M/24/527.600 y 37M/72/951.000 (tasas ESTIMADAS
+  ≈ 1,85 %, 1,98 %, 1,91 %), aviso el 25, gasto fijo 19. Pagos ya hechos: cuota 1 del de 20M ($554.633) y $530.000 de la
+  cuota 1 del de 37M, descontados del préstamo. Las cuotas que se envían del efectivo ($527.600 del de 10M y $421.000 del
+  de 37M) las registra el usuario cuando las envíe, desde la tarjeta.
+- Límite conocido: el interés de una cuota descontada del préstamo no entra como gasto del mes (no salió plata).

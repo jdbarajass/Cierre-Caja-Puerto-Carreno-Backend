@@ -2,6 +2,18 @@
 
 ---
 
+## [2026-11-06] (continuación) - Radiografía, Fase 0c: préstamos de cada tienda
+
+Pedido del usuario: una tarjeta por deuda (mamá de Angie en Carreño; don Miguel BBVA en Primavera con sus 3 préstamos) que baje con cada pago, con el detalle al darle clic, y avisos.
+
+- `app/models/loan.py` (nuevo, por tienda): `Loan` (tarjeta `group_name`, monto, fecha, plazo, tasa mensual con marca ESTIMADO, cuota o libre, día de aviso, gasto fijo, `history` con rastro) y `LoanPayment` (`pago` ligado a un gasto, `descontado` del mismo préstamo, `ajuste` de saldo con nota).
+- `app/services/loans.py` (nuevo): cuota fija, tasa desde cuota y plazo (búsqueda por mitades), cuotas que faltan, tabla de pagos (interés = saldo × tasa una vez por mes; sin tasa todo baja la deuda). Al editar: cambiar plazo o tasa recalcula la cuota, cambiar la cuota recalcula la tasa (ESTIMADO); cada cambio queda en `history`.
+- Pago con plata = **un solo registro**: gasto de cuota de crédito con `expenses.loan_id` (desde la tarjeta o desde Gastos) que mueve la cuenta y crea/actualiza/borra su `LoanPayment`. La cuota descontada del préstamo no mueve cuentas ni es gasto del mes.
+- **Interés como gasto financiero**: en Cuentas → Año y en el comparativo la parte de interés de cada cuota (de préstamos con tasa) pasa de "cuotas" a gastos operativos (financiero); la ganancia real resta lo mismo.
+- Rutas `app/routes/loans.py`: `GET /api/loans` (admin y viewer), `POST`, `PUT /api/loans/<id>`, `POST /api/loans/<id>/payments` (descontado/ajuste), `DELETE /api/loans/payments/<id>`.
+- Recordatorios (`app/services/reminders.py`): `loans-AAAA-MM` desde el día de aviso (25) hasta que se registre la cuota del mes; `fixed-AAAA-MM` con los gastos fijos sin registrar desde 2 días antes de fin de mes (30 → 28, 31 → 29, febrero → 26). No restan nada solos.
+- Tablas nuevas `loans`, `loan_payments` (create_all) y columna `expenses.loan_id`. Tests: `tests/test_loans.py` (8, nuevo).
+
 ## [2026-11-06] (continuación) - Radiografía, Fase 0b: deuda de Primavera con Carreño
 
 Pedido del usuario: ver lo que Primavera le debe a Carreño ($9.816.659 al 6-nov-2026) en una tarjeta conectada a las cuentas que baje con cada pago.

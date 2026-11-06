@@ -100,9 +100,16 @@ def computed_month(store: str, year: int, month: int) -> Dict[str, Any]:
 
     by_cat = defaultdict(float)
     expense_count = 0
-    for e in Expense.for_store(store).filter(Expense.period == ym, Expense.direction == 'out').all():
+    month_expenses = Expense.for_store(store).filter(Expense.period == ym, Expense.direction == 'out').all()
+    for e in month_expenses:
         by_cat[e.category] += e.total_with_fee
         expense_count += 1
+    # Cuotas de préstamos con tasa (Radiografía Fase 0c): la parte de interés
+    # es gasto financiero; solo el capital queda como cuota de crédito
+    from app.services.loans import interest_by_expense
+    interest = sum(interest_by_expense(month_expenses).values())
+    by_cat['cuota_credito'] -= interest
+    by_cat['financiero'] += interest
     gastos_operativos = sum(by_cat[c] for c in OPERATING_CATEGORIES) + recompras_fee
     cuotas = sum(by_cat[c] for c in DEBT_CATEGORIES)
 

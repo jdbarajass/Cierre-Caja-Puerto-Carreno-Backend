@@ -11,6 +11,9 @@ plataforma, por tienda:
   cerrado en Cuentas → Mes (desde octubre de 2026).
 - backup-AAAA-MM: del 1 al 10 de cada mes, bajar el respaldo de facturas
   en Excel (se marca a mano "Ya lo hice").
+- loans-AAAA-MM: desde el 25 (día de aviso de cada préstamo) hasta que se
+  registre la cuota del mes (Radiografía Fase 0c).
+- fixed-AAAA-MM: desde 2 días antes de fin de mes, gastos fijos sin registrar.
 - inventory-requests: hay solicitudes de ajuste de inventario por aceptar
   (docs/PLAN_AJUSTES_INVENTARIO.md); se quita sola al no quedar ninguna.
 
@@ -169,7 +172,75 @@ def _inventory_requests(store: str, today: date) -> Optional[Dict[str, Any]]:
     }
 
 
-BUILDERS = (_inventory_requests, _freeze, _month_close, _backup)
+def _fmt_cop(v: float) -> str:
+    return '$ ' + f'{round(v):,}'.replace(',', '.')
+
+
+def _loan_installments(store: str, today: date) -> Optional[Dict[str, Any]]:
+    """Cuotas de los préstamos (Radiografía Fase 0c): desde el día de aviso
+    (25) hasta que se registre un pago del mes. Pedido del usuario 2026-11-06."""
+    from app.services.loans import groups
+    pending = []
+    for g in groups(store, today):
+        for l in g['loans']:
+            if l['pending_this_month'] and today.day >= l['due_day']:
+                pending.append(f"{g['group_name']} · {l['name']}"
+                               + (f" (cuota {_fmt_cop(l['installment'])})" if l['installment'] else ''))
+    if not pending:
+        return None
+    period = today.strftime('%Y-%m')
+    return {
+        'key': f'loans-{period}',
+        'kind': 'loans',
+        'priority': 1,
+        'title': 'Pagar las cuotas de los préstamos',
+        'body': 'Este mes falta registrar: ' + '; '.join(pending) + '.',
+        'steps': [
+            'Entra a Gestión → Cuentas → Resumen y abre la tarjeta del préstamo.',
+            'Toca "Registrar pago", elige el préstamo, el valor y de dónde salió la plata.',
+            'Si la cuota se descontó del mismo préstamo, elige "Descontada del préstamo".',
+        ],
+        'path': '/cuentas',
+        'action_label': 'Ir a Cuentas → Resumen',
+        'done_label': None,   # se quita solo al registrar el pago
+    }
+
+
+def _fixed_expenses(store: str, today: date) -> Optional[Dict[str, Any]]:
+    """Gastos fijos sin pagar: desde 2 días antes de fin de mes (30 → 28,
+    31 → 29, febrero de 28 → 26) hasta que se registren. Las cuotas de crédito
+    van en su propio aviso (_loan_installments)."""
+    import calendar
+    from app.models.expense import Expense, FixedExpense
+    last = calendar.monthrange(today.year, today.month)[1]
+    if today.day < last - 2:
+        return None
+    period = today.strftime('%Y-%m')
+    paid = {e.fixed_expense_id for e in Expense.for_store(store).filter(
+        Expense.period == period, Expense.fixed_expense_id.isnot(None)).all()}
+    missing = [f for f in FixedExpense.for_store(store).filter_by(active=True).order_by(
+        FixedExpense.due_day.asc(), FixedExpense.id.asc()).all()
+        if f.id not in paid and f.category != 'cuota_credito']
+    if not missing:
+        return None
+    return {
+        'key': f'fixed-{period}',
+        'kind': 'fixed_expenses',
+        'priority': 1,
+        'title': f'{len(missing)} gasto{"s" if len(missing) != 1 else ""} fijo{"s" if len(missing) != 1 else ""} sin registrar este mes',
+        'body': 'Falta: ' + ', '.join(f'{f.name} ({_fmt_cop(f.amount)})' for f in missing) + '.',
+        'steps': [
+            'Entra a Gestión → Cuentas → Gastos.',
+            'En "Gastos fijos del mes" toca "Registrar pago" en cada uno y revisa el valor y de dónde salió.',
+            'Solo se descuenta lo que registres: este aviso no resta nada solo.',
+        ],
+        'path': '/cuentas?tab=gastos',
+        'action_label': 'Ir a Cuentas → Gastos',
+        'done_label': None,
+    }
+
+
+BUILDERS = (_inventory_requests, _loan_installments, _fixed_expenses, _freeze, _month_close, _backup)
 
 
 def active(store: str, today: date) -> List[Dict[str, Any]]:

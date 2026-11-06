@@ -71,6 +71,7 @@ def create_app(config_class=Config):
     from app.models.monthly_summary import InventorySnapshot, MonthlySummaryOverride  # Cuentas → Año (Fase 3)
     from app.models.incentive import IncentiveRule  # Incentivos por meta (Fase 4)
     from app.models.inventory_request import InventoryRequest  # Ajustes de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
+    from app.models.loan import Loan, LoanPayment  # Préstamos de cada tienda (docs/PLAN_RADIOGRAFIA.md, Fase 0c)
 
     db.init_app(app)
 
@@ -260,6 +261,7 @@ def create_app(config_class=Config):
     from app.routes.reminders import bp as reminders_bp
     from app.routes.finance import bp as finance_bp
     from app.routes.inventory_requests import bp as inventory_requests_bp
+    from app.routes.loans import bp as loans_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -290,6 +292,7 @@ def create_app(config_class=Config):
     app.register_blueprint(reminders_bp)  # Recordatorios del admin (app/services/reminders.py)
     app.register_blueprint(finance_bp)  # Configuración financiera e incentivos (PLAN_CUENTAS_DIARIAS, Fase 4)
     app.register_blueprint(inventory_requests_bp)  # Solicitudes de ajuste de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
+    app.register_blueprint(loans_bp)  # Préstamos de cada tienda (docs/PLAN_RADIOGRAFIA.md, Fase 0c)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
@@ -668,6 +671,7 @@ def _migrate_employee_tables(db, app):
         add_column_if_missing(conn, 'expenses', 'purpose', 'VARCHAR(20)')
         add_column_if_missing(conn, 'expenses', 'arrived_method', 'VARCHAR(20)')
         add_column_if_missing(conn, 'expenses', 'linked_from_id', 'INTEGER')
+        add_column_if_missing(conn, 'expenses', 'loan_id', 'INTEGER')  # Fase 0c
         add_column_if_missing(conn, 'repurchase_entries', 'paid_by_store', 'VARCHAR(20)')
         add_column_if_missing(conn, 'repurchase_entries', 'linked_expense_id', 'INTEGER')
         if 'fixed_expenses' in tables:

@@ -126,6 +126,11 @@ def _operational_metrics(store_code, start, end):
     operating = sum(e.total_with_fee for e in expenses if e.category in EXPENSE_CATEGORIES)
     operating += sum(e.fee_4mil for e in entries)  # 4x1000 de las recompras
     debt = sum(e.total_with_fee for e in expenses if e.category in DEBT_CATEGORIES)
+    # Interés de las cuotas (Radiografía Fase 0c): pasa de cuotas a gasto
+    from app.services.loans import interest_by_expense
+    interest = sum(interest_by_expense(expenses).values())
+    debt -= interest
+    operating += interest
     other = sum(e.total_with_fee for e in expenses
                 if e.category not in EXPENSE_CATEGORIES and e.category not in DEBT_CATEGORIES)
 

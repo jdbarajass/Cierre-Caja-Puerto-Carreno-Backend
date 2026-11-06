@@ -179,6 +179,13 @@ def _apply_payload(expense, data, creating):
     if creating or 'notes' in data:
         expense.notes = (data.get('notes') or '').strip() or None
 
+    # Préstamo al que abona la cuota (Radiografía Fase 0c)
+    if creating or 'loan_id' in data:
+        loan_id = data.get('loan_id')
+        expense.loan_id = int(loan_id) if loan_id not in (None, '', 0) else None
+    if expense.category != 'cuota_credito' or expense.direction != 'out':
+        expense.loan_id = None
+
 
 def _sync_expense_account_movements(expense, is_delete=False):
     """
@@ -311,6 +318,15 @@ def _sync_employee_links(expense, is_delete=False, payment_type='quincena'):
 #  GASTOS: listar / crear / editar / borrar
 # ─────────────────────────────────────────────
 
+def _sync_loan_payment(expense, is_delete=False):
+    """Cuota de crédito con préstamo = pago del préstamo (app/services/loans.py)."""
+    from app.services.loans import LoanError, sync_from_expense
+    try:
+        sync_from_expense(expense, is_delete=is_delete)
+    except LoanError as e:
+        raise ExpenseError(str(e))
+
+
 def _sync_inter_store_mirrors(expense, is_delete=False):
     """Registros espejo en la otra tienda (app/services/inter_store_debt.py)."""
     from app.services.inter_store_debt import DebtError, sync_mirrors
@@ -411,6 +427,7 @@ def create_expense():
         _sync_expense_account_movements(expense)
         _sync_employee_links(expense)
         _sync_inter_store_mirrors(expense)
+        _sync_loan_payment(expense)
         db.session.commit()
         return jsonify({'success': True, 'item': expense.to_dict()}), 201
     except ExpenseError as e:
@@ -440,6 +457,7 @@ def manage_expense(expense_id):
             _sync_expense_account_movements(expense, is_delete=True)
             _sync_employee_links(expense, is_delete=True)
             _sync_inter_store_mirrors(expense, is_delete=True)
+            _sync_loan_payment(expense, is_delete=True)
             db.session.delete(expense)
             db.session.commit()
             return jsonify({'success': True}), 200
@@ -448,6 +466,7 @@ def manage_expense(expense_id):
         _sync_expense_account_movements(expense)
         _sync_employee_links(expense)
         _sync_inter_store_mirrors(expense)
+        _sync_loan_payment(expense)
         db.session.commit()
         return jsonify({'success': True, 'item': expense.to_dict()}), 200
     except ExpenseError as e:

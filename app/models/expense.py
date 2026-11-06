@@ -139,6 +139,8 @@ class Expense(StoreScopedMixin, db.Model):
     arrived_method = db.Column(db.String(20), nullable=True)
     # Registro espejo creado solo desde un movimiento de la otra tienda
     linked_from_id = db.Column(db.Integer, nullable=True, index=True)
+    # Préstamo al que abona esta cuota de crédito (Radiografía Fase 0c, app/models/loan.py)
+    loan_id = db.Column(db.Integer, nullable=True, index=True)
 
     # Enlace con Empleadas (préstamos y sueldos)
     employee_name = db.Column(db.String(100), nullable=True)
@@ -201,6 +203,7 @@ class Expense(StoreScopedMixin, db.Model):
             'purpose': self.purpose,
             'arrived_method': self.arrived_method,
             'linked_from_id': self.linked_from_id,
+            'loan_id': self.loan_id,
             'employee_name': self.employee_name,
             'employee_loan_id': self.employee_loan_id,
             'employee_payment_id': self.employee_payment_id,
