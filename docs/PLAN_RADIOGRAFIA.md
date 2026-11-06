@@ -399,3 +399,13 @@ de una tienda pagadas por la otra).
   La que pagó la anota como "Pago a Carreño" (Primavera) o "Préstamo a Primavera" (Carreño, suma a la deuda).
 - **Dónde se ven:** Cuentas → Resumen (Carreño: "Mamá de Angie" y "Primavera nos debe"; Primavera: "Don Miguel" y
   "Le debemos a Carreño") y el flujo de caja de la Radiografía.
+
+### Respuestas del 2026-11-06 (quinta ronda)
+
+- **Interés aprobado:** cuando se ponga la tasa de un préstamo, cada pago se parte: interés = saldo × tasa (gasto
+  financiero, baja la ganancia) y el resto baja la deuda. Sin tasa, todo el pago baja la deuda.
+- **Regla del usuario (vale para todo):** a las cuentas, a la utilidad y a las deudas **solo se resta lo que se registra
+  a mano** (un gasto, una cuota, un pago). Nada pendiente o estimado se descuenta solo. Lo que falta por pagar se muestra
+  como **aviso / recordatorio** (ej. "la cuota de don Miguel se paga el 28 de cada mes y este mes no está registrada").
+- Por confirmar: que "Cuánto se puede retirar" muestre la plata de hoy y, aparte y sin restarlas, las líneas de aviso
+  (fijos y cuotas que faltan este mes, falta por recomprar, deuda con la otra tienda); y el día de pago de cada deuda.
