@@ -335,7 +335,7 @@ def build_cash_flow(store: str, year: int, month: int, today: date,
     flow = _month_flow(store, start, min(end, today), period)
     warnings: List[str] = []
     if flow['first_day'] is None or flow['first_day'] > start:
-        first = flow['first_day'].isoformat() if flow['first_day'] else None
+        first = flow['first_day'].strftime('%d/%m/%Y') if flow['first_day'] else None
         warnings.append('Las cuentas se llevan en la plataforma desde el '
                         f'{first}: antes de eso los saldos no son confiables.' if first else
                         'Esta tienda todavía no tiene movimientos en las cuentas.')

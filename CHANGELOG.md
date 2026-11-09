@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 6: exportar a Excel y PDF
+
+- `app/services/radiografia_export.py` (nuevo): cada vista (Mes, Año, Inventario, Flujo de caja, Comparativo) con `&format=xlsx` o `&format=pdf` devuelve el archivo armado con la MISMA respuesta de la pantalla (no recalcula). Excel (openpyxl): hoja "Radiografía" con todas las secciones (números con formato de pesos, % y miles), las listas largas en su propia hoja (detalle de salidas, por tipo de prenda, prendas quietas) y hoja "Notas" con los avisos de la pantalla, fórmulas, margen y qué es ESTIMADO. PDF (reportlab, horizontal): las mismas secciones y notas. Nombre: `radiografia_<vista>_<tienda>_<periodo>.<xlsx|pdf>` (comparativo sin tienda). `format` distinto de xlsx/pdf → 400. Admin y viewer.
+- El aviso "Las cuentas se llevan en la plataforma desde el …" del Flujo de caja ahora con la fecha en dd/mm/aaaa.
+- Tests: `tests/test_radiografia_export.py` (6, nuevo: cada vista en los dos formatos con las cifras de la pantalla, inventario, por tienda, viewer, mes futuro y sin gastos). Suite: 371 pasan; solo falla la de siempre (`test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa`).
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 5 verificada en producción
 
 - Verificado (oct y nov-2026, solo lectura): cada tienda igual a su Mes y su Flujo de caja; "Las dos" = suma exacta (oct: ventas $56.012.937, utilidad neta $837.210, lo que quedó $9.148.983; nov: ventas $16.316.032); hoy: plata $15.987.047, lo que debe sin la otra tienda $73.742.973, préstamo entre tiendas $9.816.659 aparte.
