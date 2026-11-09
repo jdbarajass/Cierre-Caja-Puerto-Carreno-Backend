@@ -2,6 +2,7 @@
 Radiografía financiera (docs/PLAN_RADIOGRAFIA.md). Solo lee: admin y viewer.
 
 - GET /api/radiografia/month?year=&month=&target=   Fase 1 (Mes)
+- GET /api/radiografia/year?year=                    Fase 2 (Año)
 """
 import logging
 
@@ -44,3 +45,22 @@ def month():
     from app.services.radiografia_month import build_month
     data = build_month(get_current_store(), year, month_n, today, target)
     return jsonify({'success': True, 'month': data}), 200
+
+
+@bp.route('/api/radiografia/year', methods=['GET', 'OPTIONS'])
+@token_required
+def year():
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    today = get_colombia_now().date()
+    try:
+        year_n = int(request.args.get('year') or today.year)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Parámetros inválidos'}), 400
+    if year_n < 2026 or year_n > today.year:
+        return jsonify({'success': False, 'message': 'La Radiografía es desde 2026 y hasta el año en curso'}), 400
+    from app.services.radiografia_year import build_year
+    return jsonify({'success': True, 'year': build_year(get_current_store(), year_n, today)}), 200

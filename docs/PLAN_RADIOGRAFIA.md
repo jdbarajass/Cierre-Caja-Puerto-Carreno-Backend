@@ -216,6 +216,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - Verificación: ventas = Cuentas → Mes/Año = Alegra; "lo que quedó" = ganancia real de Año.
 
 ### Fase 2 — Año
+**Estado (2026-11-09): HECHA en código (ver CHANGELOG), falta deploy y verificar con datos reales de las dos tiendas.** Agregado: vs. mismo mes del año pasado, transacciones, ticket, unidades, mejor y peor mes.
 - `GET /api/radiografia/year?year`: por mes ventas, costo estimado, utilidad bruta, recompras, gastos operativos y
   financieros, utilidad neta, lo que quedó, inventario de fin de mes (precio de venta y a costo) y variación; total y promedio
   (solo meses con datos). Reusa `build_year` (mismas sobrescrituras a mano) para que cuadre al peso con Cuentas → Año.

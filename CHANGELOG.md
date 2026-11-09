@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-11-09] - Radiografía, Fase 2: el año
+
+- `app/services/radiografia_year.py` (nuevo) + `GET /api/radiografia/year?year` (admin y viewer, solo lee, 2026 hasta el año en curso).
+- Por mes: ventas, vs. mismo mes del año pasado (venta real; mes en curso por los mismos días), precio de lista, descuentos, costo ESTIMADO, fletes, utilidad bruta, gastos operativos y financieros, utilidad neta, cuotas, recompras, lo que quedó, transacciones, ticket, unidades e inventario de fin de mes (precio de venta, a costo ESTIMADO y cambio).
+- Parte de `monthly_summary.build_year` para cuadrar al peso con Cuentas → Año, con las cifras escritas a mano: ventas/recompras/inventario a mano mandan; gastos a mano son el total de todo (no se separan; el mes se marca y las cuotas quedan en 0, como en Año). "Lo que quedó" = ganancia real de Año.
+- Un mes sin gastos no inventa utilidad neta (None). Totales: ventas y bruta de los meses con datos; gastos y neta solo de los meses con gastos; lo que quedó de los mismos meses que suma Año. Promedios solo de meses cerrados. Mejor y peor mes en ventas.
+- Tests: `tests/test_radiografia_year.py` (4, nuevo).
+
 ## [2026-11-06] (continuación) - Radiografía del mes: tarjetas regalo en el costo
 
 Encontrado verificando en producción: en Carreño los descuentos daban negativos (oct: precio de lista $41.559.000 vs ventas $44.553.030) porque las ventas de Alegra incluyen las **tarjetas regalo vendidas** (32 renglones en oct según Alegra) y el precio de lista no. Además la utilidad quedaba inflada: la tarjeta se canjea después por ropa con un ajuste de inventario, sin factura, y ese costo nunca aparecía. Ahora la tarjeta vendida se costea al venderla (valor × (1 − margen)) junto con la ropa; descuentos = ropa + tarjetas + bolsas − ventas. Las ventas no cambian (igual que Año). `statement` trae `ropa_lista`, `tarjetas_regalo`, `bolsas`. Test ajustado.
