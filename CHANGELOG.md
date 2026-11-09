@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-11-09] (continuación) - Arreglo: el stock de Alegra pasaba de 120 s (Inventario y Prendas en error 500)
+
+- Al probar la Fase 6 en producción, Radiografía → Inventario y Estadísticas → Prendas (stock) daban error 500 a los 120 s en las dos tiendas (el servidor corta ahí): `AlegraClient.get_active_items()` pedía las ~57 páginas de 30 productos una por una y hoy tardaba más de 120 s (en la Fase 3 tardaba 60-70 s). No era la exportación.
+- `_fetch_all_active_items` ahora pide `ITEMS_PARALLEL = 4` páginas a la vez, las procesa en orden y para en la primera corta o repetida; si Alegra responde 429/503 la sesión reintenta con espera (Retry ya existente) y si una página falla no se devuelve una lista a medias. Lo usan todas las pantallas que leen la lista de productos (Estadísticas → Inventario y Prendas, Radiografía → Inventario, ajustes de inventario, reconstrucción 2025).
+- Tests: `test_estadisticas_fase_a.py` actualizado (4 llamadas por tanda) y uno nuevo con dos tandas de páginas, en orden.
+- Fase 6 verificada en producción (sin el inventario, pendiente de este arreglo): Mes, Año, Flujo de caja y Comparativo en Excel y PDF en las dos tiendas, con las mismas cifras de la pantalla.
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 6: exportar a Excel y PDF
 
 - `app/services/radiografia_export.py` (nuevo): cada vista (Mes, Año, Inventario, Flujo de caja, Comparativo) con `&format=xlsx` o `&format=pdf` devuelve el archivo armado con la MISMA respuesta de la pantalla (no recalcula). Excel (openpyxl): hoja "Radiografía" con todas las secciones (números con formato de pesos, % y miles), las listas largas en su propia hoja (detalle de salidas, por tipo de prenda, prendas quietas) y hoja "Notas" con los avisos de la pantalla, fórmulas, margen y qué es ESTIMADO. PDF (reportlab, horizontal): las mismas secciones y notas. Nombre: `radiografia_<vista>_<tienda>_<periodo>.<xlsx|pdf>` (comparativo sin tienda). `format` distinto de xlsx/pdf → 400. Admin y viewer.

@@ -62,6 +62,7 @@ def _items_lock_for(key: str) -> threading.Lock:
 ITEMS_CACHE_TTL_SECONDS = 300
 ITEMS_PAGE_SIZE = 30   # máximo que acepta /items de Alegra
 ITEMS_MAX_PAGES = 300  # tope de seguridad: 9.000 ítems
+ITEMS_PARALLEL = 4     # páginas pedidas a la vez (con 1 pasaba de 120 s en producción, 2026-11-09)
 
 
 class AlegraClient:
@@ -825,25 +826,43 @@ class AlegraClient:
             return items
 
     def _fetch_all_active_items(self) -> List[Dict]:
+        """
+        Todas las páginas de /items activos, ITEMS_PARALLEL a la vez (2026-11-09):
+        una por una, ~1.700 ítems pasaban de 120 s y el servidor cortaba la
+        petición (Radiografía → Inventario, Estadísticas → Prendas). Las páginas
+        se procesan en orden; si Alegra responde 429/503 la sesión reintenta con
+        espera (Retry del __init__). Si una página falla, falla todo (nunca una
+        lista a medias).
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
         all_items: List[Dict] = []
         seen_ids = set()
         start = 0
-        for _ in range(ITEMS_MAX_PAGES):
-            page = self._get_active_items_page(start, ITEMS_PAGE_SIZE)
-            new_items = [it for it in page if it.get('id') not in seen_ids]
-            if page and not new_items:
-                # Alegra ignoró `start` y repitió la página: no quedarse en ciclo
-                logger.warning(f"Alegra repitió la página de items (start={start}); se detiene la paginación")
-                break
-            seen_ids.update(it.get('id') for it in new_items)
-            all_items.extend(new_items)
-            if len(page) < ITEMS_PAGE_SIZE:
-                break
-            start += ITEMS_PAGE_SIZE
-        else:
+        pages_read = 0
+        done = False
+        with ThreadPoolExecutor(max_workers=ITEMS_PARALLEL) as pool:
+            while not done and pages_read < ITEMS_MAX_PAGES:
+                starts = [start + i * ITEMS_PAGE_SIZE for i in range(ITEMS_PARALLEL)]
+                pages = list(pool.map(lambda s: self._get_active_items_page(s, ITEMS_PAGE_SIZE), starts))
+                for s, page in zip(starts, pages):
+                    pages_read += 1
+                    new_items = [it for it in page if it.get('id') not in seen_ids]
+                    if page and not new_items:
+                        # Alegra ignoró `start` y repitió la página: no quedarse en ciclo
+                        logger.warning(f"Alegra repitió la página de items (start={s}); se detiene la paginación")
+                        done = True
+                        break
+                    seen_ids.update(it.get('id') for it in new_items)
+                    all_items.extend(new_items)
+                    if len(page) < ITEMS_PAGE_SIZE:
+                        done = True
+                        break
+                start += ITEMS_PARALLEL * ITEMS_PAGE_SIZE
+        if not done:
             logger.warning(f"Se alcanzó el tope de {ITEMS_MAX_PAGES} páginas de items")
 
-        logger.info(f"✓ {len(all_items)} items activos obtenidos de Alegra (paginado)")
+        logger.info(f"✓ {len(all_items)} items activos obtenidos de Alegra (paginado, {ITEMS_PARALLEL} a la vez)")
         return all_items
 
     def _get_active_items_page(self, start: int, limit: int) -> List[Dict]:

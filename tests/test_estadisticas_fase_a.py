@@ -97,11 +97,27 @@ def test_items_activos_pagina_hasta_el_final_y_cachea(alegra, monkeypatch):
     monkeypatch.setattr(alegra.session, 'get', fake_get)
     items = alegra.get_active_items()
     assert len(items) == 65  # antes: 30 (una sola petición)
-    assert [c['start'] for c in calls] == [0, 30, 60]
+    # 4 páginas a la vez (ITEMS_PARALLEL, 2026-11-09): la de 90 sale vacía y se para
+    assert sorted(c['start'] for c in calls) == [0, 30, 60, 90]
     assert all(c['limit'] == 30 and c['status'] == 'active' for c in calls)
+    assert [i['id'] for i in items] == [str(i) for i in range(65)]   # en orden
 
     # Las otras pestañas no vuelven a pedir ~55 páginas a Alegra
-    assert len(alegra.get_active_items()) == 65 and len(calls) == 3
+    assert len(alegra.get_active_items()) == 65 and len(calls) == 4
+
+
+def test_items_mas_de_una_tanda_de_paginas(alegra, monkeypatch):
+    catalog = [variant(i) for i in range(200)]   # 7 páginas: dos tandas de 4
+    calls = []
+
+    def fake_get(url, params=None, timeout=None):
+        calls.append(params['start'])
+        return FakeResponse(catalog[params['start']:params['start'] + params['limit']])
+
+    monkeypatch.setattr(alegra.session, 'get', fake_get)
+    items = alegra.get_active_items()
+    assert [i['id'] for i in items] == [str(i) for i in range(200)]
+    assert sorted(calls) == [0, 30, 60, 90, 120, 150, 180, 210]
 
 
 def test_items_cache_por_tienda(alegra, monkeypatch):
@@ -117,7 +133,7 @@ def test_items_no_queda_en_ciclo_si_alegra_ignora_start(alegra, monkeypatch):
     calls = []
     monkeypatch.setattr(alegra.session, 'get',
                         lambda url, params=None, timeout=None: calls.append(params) or FakeResponse(page))
-    assert len(alegra.get_active_items()) == 30 and len(calls) == 2
+    assert len(alegra.get_active_items()) == 30 and len(calls) == 4   # una tanda de 4 páginas
 
 
 def test_items_si_alegra_falla_no_devuelve_lista_a_medias(alegra, monkeypatch):

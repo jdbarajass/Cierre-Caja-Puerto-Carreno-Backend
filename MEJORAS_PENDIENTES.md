@@ -49,6 +49,7 @@ Lista de mejoras identificadas en la auditoría técnica del 2026-08-19 que **no
 **Qué cambiar:**
 - `AlegraDirectClient.get_inventory_value_report_paginated()` (`app/services/alegra_direct_client.py`) trae el inventario completo (hasta 3000 items) en páginas secuenciales de 200 items, una llamada HTTP a Alegra tras otra. Con el catálogo completo de la tienda, esto puede tomar más de 2 minutos.
 - El 2026-09-02 se subió el timeout de Gunicorn de 120s a 240s (`Procfile`) como parche para que la petición no se corte a mitad de camino, pero la causa de fondo (paginación 100% secuencial) sigue igual.
+- 2026-11-09: la lista de productos de `AlegraClient.get_active_items()` (otra paginación, de 30 en 30) pasó de 120 s en producción y ya se pide de a 4 páginas a la vez (`ITEMS_PARALLEL`, ver CHANGELOG). El reporte de valor de inventario de este punto sigue secuencial.
 - Alternativas a evaluar: paralelizar las páginas con `concurrent.futures`/`asyncio` (cuidado con el rate limit de Alegra, que es la razón por la que ya se usa `page_size=200` en vez de un límite mayor — ver comentario "para evitar error 503" en el código), o cachear el resultado completo por `to_date` con el mismo `ttl_cache.py` que ya existe para `alegra_client.py` (el inventario de un día pasado no cambia).
 
 **Efectos de hacer este cambio:**
