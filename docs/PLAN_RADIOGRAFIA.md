@@ -216,7 +216,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - Verificación: ventas = Cuentas → Mes/Año = Alegra; "lo que quedó" = ganancia real de Año.
 
 ### Fase 2 — Año
-**Estado (2026-11-09): HECHA en código (ver CHANGELOG), falta deploy y verificar con datos reales de las dos tiendas.** Agregado: vs. mismo mes del año pasado, transacciones, ticket, unidades, mejor y peor mes.
+**Estado: HECHA, SUBIDA y DESPLEGADA; verificada en producción 2026-11-09 (backend 8f769b6, frontend 5ea35d8).** Carreño (11 meses) y Primavera (2): ventas, recompras y lo que quedó de cada mes iguales a Cuentas → Año, total de lo que quedó igual (Carreño 28.864.672, Primavera 12.012.560); utilidad bruta y neta iguales a la vista Mes. Datos raros mostrados al usuario: cambio de inventario de Carreño en oct (−410.919.960, incluye el ajuste R3 de 395.721.300 del 7-oct) y foto de Primavera de oct (329.600). Agregado: vs. mismo mes del año pasado, transacciones, ticket, unidades, mejor y peor mes.
 - `GET /api/radiografia/year?year`: por mes ventas, costo estimado, utilidad bruta, recompras, gastos operativos y
   financieros, utilidad neta, lo que quedó, inventario de fin de mes (precio de venta y a costo) y variación; total y promedio
   (solo meses con datos). Reusa `build_year` (mismas sobrescrituras a mano) para que cuadre al peso con Cuentas → Año.
