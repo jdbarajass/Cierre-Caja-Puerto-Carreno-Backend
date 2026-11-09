@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-11-09] (continuación) - Verificación completa de la Radiografía en producción
+
+- Tras el deploy del arreglo del stock (751f893), verificado en las dos tiendas (solo lectura):
+  - Inventario: Carreño 49 s la primera vez (antes 500 a los 120 s), Primavera 60 s; Estadísticas → Prendas (stock) responde en las dos (Carreño 94 s cuando le tocó cargar a otro proceso del servidor: hay que vigilarlo, ver MEJORAS_PENDIENTES).
+  - Cuadre (oct y nov-2026): ventas del Mes = Año; lo que quedó = ganancia real de Cuentas → Año; flujo de caja cuadra y cada cuenta = Cuentas → Mes; puente utilidad → plata; plata de hoy = Resumen; préstamos = sus tarjetas; Comparativo = cada tienda y "Las dos" = suma; deuda entre tiendas $9.816.659. Sin diferencias.
+  - Exportar: las 9 descargas (Mes, Año, Inventario, Flujo en las dos tiendas + Comparativo) en Excel y PDF, con las mismas cifras de la pantalla; botones probados en el navegador (computador y celular, sin desborde).
+- Arreglo: el PDF del inventario dejaba una hoja en blanco antes de "Prendas quietas" (el título se pegaba a una tabla de 173 filas); ahora el título solo se mantiene pegado a su tabla si es corta (hasta 30 filas).
+
 ## [2026-11-09] (continuación) - Arreglo: el stock de Alegra pasaba de 120 s (Inventario y Prendas en error 500)
 
 - Al probar la Fase 6 en producción, Radiografía → Inventario y Estadísticas → Prendas (stock) daban error 500 a los 120 s en las dos tiendas (el servidor corta ahí): `AlegraClient.get_active_items()` pedía las ~57 páginas de 30 productos una por una y hoy tardaba más de 120 s (en la Fase 3 tardaba 60-70 s). No era la exportación.

@@ -13,7 +13,7 @@ Se hace por fases, una a la vez, con el OK del usuario entre fase y fase.
 | 3 | Inventario: valor, días, rotación, prendas quietas, por tipo de prenda | Propuesta |
 | 4 | Flujo de caja: cuentas, por llegar, lo que se debe y le deben, cuánto se puede retirar (ESTIMADO) | Hecha y verificada (2026-11-09) |
 | 5 | Comparativo entre tiendas y consolidado | Hecha y verificada (2026-11-09) |
-| 6 | Exportar cada vista a Excel y PDF | Hecha en código (2026-11-09) |
+| 6 | Exportar cada vista a Excel y PDF | Hecha y verificada (2026-11-09) |
 
 Alcance acordado (2026-11-06): **solo 2026**. Lo de 2025 se deja como está (la reconstrucción ya existe y no se toca);
 de 2025 solo se leen las ventas para "mismo mes del año pasado" con las reglas que ya existen (`real_sales_total`).
@@ -252,7 +252,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
   Carreño "le deben" y lo que Primavera "debe" se cancelan) y nunca suma como gasto ni ingreso.
 
 ### Fase 6 — Exportar
-**Estado (2026-11-09): HECHA y desplegada; Mes, Año, Flujo y Comparativo verificados en producción en las dos tiendas. El Inventario (y Estadísticas → Prendas) daban 500 porque el stock de Alegra pasaba de 120 s: arreglado pidiendo 4 páginas a la vez, falta subirlo y verificar.**
+**Estado (2026-11-09): HECHA, desplegada y VERIFICADA en producción en las dos tiendas (las 9 descargas, con las cifras de la pantalla). El stock de Alegra que pasaba de 120 s quedó arreglado (4 páginas a la vez). Queda en commit sin subir el arreglo de la hoja en blanco del PDF del inventario.**
 - `?format=xlsx` y `?format=pdf` en cada endpoint (openpyxl y reportlab, ya instalados): el archivo sale de los mismos
   datos de la pantalla, no se recalcula. Nombre con la tienda y el periodo. Fórmulas y avisos ESTIMADO en una hoja de notas.
 

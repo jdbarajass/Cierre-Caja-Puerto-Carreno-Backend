@@ -475,7 +475,8 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
         return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
     for sec in report['sections']:
-        story.append(Paragraph(esc(sec['title']), h3))
+        # El título no queda solo al final de la hoja; en una tabla larga eso dejaba una hoja en blanco
+        story.append(Paragraph(esc(sec['title']), h3 if len(sec['rows']) <= 30 else styles['Heading3']))
         if not sec['rows']:
             story.append(Paragraph('Nada.', small))
             continue
