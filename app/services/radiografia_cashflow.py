@@ -103,11 +103,13 @@ def _month_flow(store: str, start: date, end: date, period: str) -> Dict[str, An
     def add_out(e: Expense, amount: float, from_caja: bool = False):
         part = min(interest.get(e.id, 0), amount)
         cls = r.expense_class(e.category)
+        base = {'id': e.id, 'date': e.date.isoformat(), 'category': e.category, 'caja': from_caja}
         if part:
+            # El interés de una cuota es gasto financiero: se ve en su clase con su detalle
             outs[r.FINANCIERO] += part
+            out_items[r.FINANCIERO].append({**base, 'concept': f'Interés de: {e.concept}', 'amount': part, 'interest': 0})
         outs[cls] += amount - part
-        out_items[cls].append({'id': e.id, 'date': e.date.isoformat(), 'concept': e.concept,
-                               'category': e.category, 'amount': amount, 'interest': part, 'caja': from_caja})
+        out_items[cls].append({**base, 'concept': e.concept, 'amount': amount - part, 'interest': part})
 
     for eid, amount in by_expense.items():
         e = expenses.get(eid)

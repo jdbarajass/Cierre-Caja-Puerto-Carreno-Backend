@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 4 verificada en producción
+
+- Verificado en las dos tiendas (oct y nov-2026, solo lectura): la plata del mes cuadra (inicial + entradas − salidas + ajustes + traslados = final) y cada cuenta da igual que Cuentas → Mes; la plata de hoy = suma de Resumen (Carreño $7.465.006, Primavera $8.522.041); deuda entre tiendas $9.816.659 y préstamos (mamá de Angie $7.500.000, don Miguel $66.242.973) iguales a sus tarjetas; Jhonatan en $0 en las dos (las compras igualan lo enviado).
+- Arreglo: el interés de una cuota ahora se ve en el detalle de "Gastos financieros" ("Interés de: …") y la cuota muestra solo el capital (antes los financieros de Primavera salían sin detalle).
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 4: flujo de caja
 
 - `app/services/radiografia_cashflow.py` (nuevo) + `GET /api/radiografia/cash-flow?year=&month=` (admin y viewer, solo lee).

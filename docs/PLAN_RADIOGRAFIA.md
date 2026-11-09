@@ -11,7 +11,7 @@ Se hace por fases, una a la vez, con el OK del usuario entre fase y fase.
 | 1 | Mes: estado de resultados, punto de equilibrio, indicadores | Propuesta |
 | 2 | Año: cierre general mes a mes | Propuesta |
 | 3 | Inventario: valor, días, rotación, prendas quietas, por tipo de prenda | Propuesta |
-| 4 | Flujo de caja: cuentas, por llegar, lo que se debe y le deben, cuánto se puede retirar (ESTIMADO) | Hecha en código (2026-11-09) |
+| 4 | Flujo de caja: cuentas, por llegar, lo que se debe y le deben, cuánto se puede retirar (ESTIMADO) | Hecha y verificada (2026-11-09) |
 | 5 | Comparativo entre tiendas y consolidado | Propuesta |
 | 6 | Exportar cada vista a Excel y PDF | Propuesta |
 
@@ -233,7 +233,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
   rentabilidad real por prenda necesita los costos reales (C5). En Primavera, todo es recién llegado hasta diciembre.
 
 ### Fase 4 — Flujo de caja
-**Estado (2026-11-09): HECHA en código (ver CHANGELOG), falta push, deploy y verificar con datos reales de las dos tiendas.** Quedó con la regla de la quinta ronda (el usuario dijo "sigue con la fase 4" tras proponerla): "cuánto se puede retirar" es la plata de hoy y las líneas de aviso (fijos, cuotas, falta por recomprar, deuda con la otra tienda) van aparte sin restarse solas; "quedarían si se pagara todo" es un valor aproximado. Las ganancias de los socios no son aviso (son lo que se retira); se muestra cuánto ya se sacó en el mes.
+**Estado (2026-11-09): HECHA, desplegada y VERIFICADA en producción en las dos tiendas (cifras en el CHANGELOG del backend); el arreglo del detalle del interés queda en commit sin subir.** Quedó con la regla de la quinta ronda (el usuario dijo "sigue con la fase 4" tras proponerla): "cuánto se puede retirar" es la plata de hoy y las líneas de aviso (fijos, cuotas, falta por recomprar, deuda con la otra tienda) van aparte sin restarse solas; "quedarían si se pagara todo" es un valor aproximado. Las ganancias de los socios no son aviso (son lo que se retira); se muestra cuánto ya se sacó en el mes.
 - `GET /api/radiografia/cash-flow?year&month`: saldo inicial y final por cuenta (`account_statement`), entradas
   (ventas por medio, llegadas de datáfono/Addi/Bold, excedentes, devoluciones, ingresos extra) y salidas por clase (§4);
   traslados entre cuentas propias aparte (no cuentan).
