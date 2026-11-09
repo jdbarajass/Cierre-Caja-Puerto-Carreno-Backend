@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 5: comparativo y consolidado
+
+- `app/services/radiografia_compare.py` (nuevo) + `GET /api/radiografia/compare?year=&month=` (admin y viewer; 403 si el usuario no ve las dos tiendas). No recalcula: toma el Mes (Fase 1) y el Flujo de caja (Fase 4) de cada tienda (`build_cash_flow` acepta `month_data` para no calcular el mes dos veces).
+- Columna "Las dos": ventas, costo estimado, gastos, utilidad, cuotas, recompras, lo que quedó, transacciones, punto de equilibrio, plata y lo de hoy sumados; los porcentajes (márgenes, ticket, descuentos, gastos y nómina ÷ ventas) salen de las sumas. Si una tienda no tiene gastos en el mes, la utilidad de las dos no se suma ("sin gastos").
+- El préstamo entre tiendas no aparece en "Las dos": la deuda se quita de lo que le deben, lo que debe y los avisos; lo que una tienda le pagó a la otra y llegó a una cuenta de ella se cancela en entradas y salidas (queda solo lo que salió de las dos, como el 4x1000 o abonos en ganancias de los dueños: `inter_store_net`).
+- Inventario: última foto de fin de mes de Alegra (`InventorySnapshot`) a precio de venta y a costo ESTIMADO (no pide el stock de las dos tiendas a Alegra).
+- Arreglo (Fase 1): la Radiografía del mes se caía (error 500) en un mes sin ningún día cargado (el día 1 antes del cron, o una tienda sin facturas) al calcular "el mismo mes del año pasado"; también quedaba acotado el 29 de febrero.
+- Tests: `tests/test_radiografia_compare.py` (3, nuevo) y uno nuevo en `test_radiografia_month.py`. Suite: 365 pasan; solo falla la de siempre (`test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa`).
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 4 verificada en producción
 
 - Verificado en las dos tiendas (oct y nov-2026, solo lectura): la plata del mes cuadra (inicial + entradas − salidas + ajustes + traslados = final) y cada cuenta da igual que Cuentas → Mes; la plata de hoy = suma de Resumen (Carreño $7.465.006, Primavera $8.522.041); deuda entre tiendas $9.816.659 y préstamos (mamá de Angie $7.500.000, don Miguel $66.242.973) iguales a sus tarjetas; Jhonatan en $0 en las dos (las compras igualan lo enviado).

@@ -5,6 +5,7 @@ Radiografía financiera (docs/PLAN_RADIOGRAFIA.md). Solo lee: admin y viewer.
 - GET /api/radiografia/year?year=                    Fase 2 (Año)
 - GET /api/radiografia/inventory?quiet=60|90|180       Fase 3 (Inventario)
 - GET /api/radiografia/cash-flow?year=&month=          Fase 4 (Flujo de caja)
+- GET /api/radiografia/compare?year=&month=            Fase 5 (Comparativo y consolidado)
 """
 import logging
 
@@ -118,3 +119,28 @@ def cash_flow():
     from app.services.radiografia_cashflow import build_cash_flow
     data = build_cash_flow(get_current_store(), year_n, month_n, today)
     return jsonify({'success': True, 'cash_flow': data}), 200
+
+
+@bp.route('/api/radiografia/compare', methods=['GET', 'OPTIONS'])
+@token_required
+def compare():
+    """Fase 5: las tiendas lado a lado y "Las dos" sumadas (solo quien ve las dos tiendas)."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    from app.stores import STORES, stores_for_user
+    stores = [s for s in STORES if s in stores_for_user(get_current_user())]
+    if len(stores) < 2:
+        return jsonify({'success': False, 'message': 'El comparativo necesita acceso a las dos tiendas'}), 403
+    today = get_colombia_now().date()
+    try:
+        year_n = int(request.args.get('year') or today.year)
+        month_n = int(request.args.get('month') or today.month)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Parámetros inválidos'}), 400
+    if not 1 <= month_n <= 12 or year_n < 2026:
+        return jsonify({'success': False, 'message': 'La Radiografía es desde enero de 2026'}), 400
+    from app.services.radiografia_compare import build_compare
+    return jsonify({'success': True, 'compare': build_compare(year_n, month_n, today, stores)}), 200

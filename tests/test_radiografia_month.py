@@ -183,3 +183,12 @@ def test_viewer_puede_ver(app, client, h, monkeypatch):
     _seed(app)
     resp = client.get('/api/radiografia/month?year=2026&month=10', headers=h(role='viewer'))
     assert resp.status_code == 200
+
+
+def test_mes_sin_ningun_dia_cargado_no_se_cae(app, client, h, monkeypatch):
+    # Bug encontrado en la Fase 5: el 1 de un mes (o una tienda sin facturas) el
+    # "mismo mes del año pasado" usaba el día 31 del mes anterior
+    _today(monkeypatch, date(2026, 11, 6))
+    m = _month(client, h('primavera'), 2026, 11)
+    assert m['data_until'] is None and m['statement']['ventas'] == 0
+    assert any('Todavía no hay facturas' in w for w in m['warnings'])

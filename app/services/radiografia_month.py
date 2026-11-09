@@ -207,7 +207,9 @@ def build_month(store: str, year: int, month: int, today: date, target: Optional
     prev_sales = _sales(store, p_start, p_end) if days_elapsed else {'ventas': 0.0, 'transacciones': 0}
     prev_items = _items(store, p_start, p_end) if days_elapsed else {'unidades': 0.0}
     ly_start, ly_month_end = r.month_bounds(year - 1, month)
-    ly_end = ly_month_end if until >= end else min(ly_start.replace(day=max(until.day, 1)), ly_month_end)
+    # Sin días cargados todavía (until = día antes del mes) o 29 de febrero: el día se acota al mes del año pasado
+    ly_day = min(until.day if until >= start else 1, ly_month_end.day)
+    ly_end = ly_month_end if until >= end else ly_start.replace(day=ly_day)
     ly = _sales(store, ly_start, ly_end) if days_elapsed else {'ventas': 0.0, 'transacciones': 0}
 
     def comp(cur, prev):

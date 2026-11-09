@@ -318,17 +318,20 @@ def _today(store: str, today: date, current_month: Dict[str, Any]) -> Dict[str, 
 #  Respuesta completa
 # ─────────────────────────────────────────────
 
-def build_cash_flow(store: str, year: int, month: int, today: date) -> Dict[str, Any]:
+def build_cash_flow(store: str, year: int, month: int, today: date,
+                    month_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """month_data: la Radiografía del mes ya calculada (el comparativo la reutiliza)."""
     from app.services.radiografia_month import build_month
     start, end = r.month_bounds(year, month)
     period = f'{year}-{month:02d}'
-    current = build_month(store, today.year, today.month, today)
+    current = (month_data if month_data and (year, month) == (today.year, today.month)
+               else build_month(store, today.year, today.month, today))
     out: Dict[str, Any] = {'period': period, 'year': year, 'month': month,
                            'label': f'{MONTHS_ES[month - 1]} {year}', 'future': start > today,
                            'today': _today(store, today, current)}
     if start > today:
         return out
-    m = current if (year, month) == (today.year, today.month) else build_month(store, year, month, today)
+    m = month_data or (current if (year, month) == (today.year, today.month) else build_month(store, year, month, today))
     flow = _month_flow(store, start, min(end, today), period)
     warnings: List[str] = []
     if flow['first_day'] is None or flow['first_day'] > start:
