@@ -112,3 +112,24 @@ def test_tiendas_separadas_y_limites(app, client, h, monkeypatch):
     assert client.get('/api/radiografia/year?year=2025', headers=h()).status_code == 400
     assert client.get('/api/radiografia/year?year=2027', headers=h()).status_code == 400
     assert client.get('/api/radiografia/year?year=2026', headers=h(role='viewer')).status_code == 200
+
+
+def test_nota_del_ajuste_de_2025_en_el_inventario(app, client, h, monkeypatch):
+    _today(monkeypatch, date(2026, 11, 6))
+    _seed(app)
+    from app.services import history_2025 as hist
+    with app.app_context():
+        hist._save_state('carreno', {'date': '2026-10-07', 'value': 395721300, 'completed': True,
+                                     'done': [{'part': 1, 'number': '1716'}, {'part': 2, 'number': '1717'}]})
+    _override(client, h(), '2026-09', 'inventario', 605000000)
+    _override(client, h(), '2026-10', 'inventario', 194000000)
+    y = _year(client, h())
+    oct_ = y['months'][9]
+    assert oct_['inventario_cambio'] == -411000000                     # la cifra no cambia
+    assert oct_['inventario_ajuste_2025'] == 395721300
+    assert oct_['inventario_cambio_sin_ajuste'] == -411000000 + 395721300
+    assert '1716, 1717' in oct_['inventario_nota'] and '$395.721.300' in oct_['inventario_nota']
+    assert any('Inventario de octubre' in w for w in y['warnings'])
+    assert 'inventario_nota' not in y['months'][8]
+    # La otra tienda no tiene ajuste
+    assert all('inventario_nota' not in m for m in _year(client, h('primavera'))['months'])

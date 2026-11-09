@@ -80,6 +80,7 @@ def _month_row(store: str, row: Dict[str, Any], today: date, margin: float) -> D
     out['inventario_costo'] = r.estimated_cost(inv, margin) if inv is not None else None
     out['inventario_cambio'] = row['inventario_cambio']
     out['inventory_as_of'] = row.get('inventory_as_of')
+    _adjustment_note(store, out, start, end)
     # Mismo mes del año pasado (venta real de 2025); mes en curso: mismos días
     ly_start, ly_end = r.month_bounds(year - 1, month)
     if until < end:
@@ -88,6 +89,33 @@ def _month_row(store: str, row: Dict[str, Any], today: date, margin: float) -> D
     out['ventas_anio_anterior'] = ly or None
     out['ventas_vs_anio_anterior'] = r.pct_change(row['ventas'], ly) if ly else None
     return out
+
+
+def _adjustment_note(store: str, out: Dict[str, Any], start: date, end: date) -> None:
+    """El ajuste de salida de la reconstrucción de 2025 (R3, docs/PLAN_RECONSTRUCCION_2025.md)
+    bajó el inventario de Alegra sin ser mercancía vendida: se explica en su mes
+    y se muestra el cambio sin él. Solo nota; ninguna cifra cambia."""
+    from app.services.history_2025 import adjustment_state
+    state = adjustment_state(store)
+    if not state or not state.get('completed') or not state.get('date'):
+        return
+    d = date.fromisoformat(state['date'][:10])
+    if not start <= d <= end:
+        return
+    value = float(state.get('value') or 0)
+    numbers = [str(x.get('number')) for x in state.get('done') or [] if x.get('number')]
+    out['inventario_ajuste_2025'] = value
+    if out['inventario_cambio'] is not None:
+        out['inventario_cambio_sin_ajuste'] = out['inventario_cambio'] + value
+    which = f" (ajustes {', '.join(numbers)} en Alegra)" if numbers else ''
+    out['inventario_nota'] = (
+        f"El {d.strftime('%d/%m/%Y')} se hizo el ajuste de salida de la reconstrucción de 2025{which} por "
+        f"{_cop(value)}: no es mercancía vendida, es corregir el inventario inflado por la "
+        'anulación de las facturas de 2025.')
+
+
+def _cop(value: float) -> str:
+    return ('-' if value < 0 else '') + '$' + f"{abs(value):,.0f}".replace(',', '.')
 
 
 def _sum(rows: List[Dict[str, Any]], key: str):
@@ -153,6 +181,13 @@ def build_year(store: str, year: int, today: date) -> Dict[str, Any]:
     if any(m.get('comisiones_calculadas') for m in with_data):
         warnings.append('En algunos meses las comisiones de datáfono/Addi no están registradas: se calculan '
                         '(ESTIMADO) y bajan la utilidad, no "lo que quedó".')
+    for m in with_data:
+        if m.get('inventario_nota'):
+            extra = ''
+            if m.get('inventario_cambio_sin_ajuste') is not None:
+                extra = (f" Sin ese ajuste, el inventario de {m['label'].lower()} cambió "
+                         f"{_cop(m['inventario_cambio_sin_ajuste'])}.")
+            warnings.append(f"Inventario de {m['label'].lower()}: {m['inventario_nota']}{extra}")
     if any(m['in_progress'] for m in with_data):
         warnings.append('El mes en curso no entra en los promedios.')
 

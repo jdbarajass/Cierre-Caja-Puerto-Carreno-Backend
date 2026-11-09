@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía Año: nota del ajuste de 2025 en el inventario
+
+- Pedido del usuario: el mes del ajuste de salida de la reconstrucción de 2025 (R3, en Carreño el 07/10/2026, $395.721.300) explica que esa baja del inventario no es mercancía vendida. `radiografia_year._adjustment_note` lee el estado guardado del ajuste (`history_2025.adjustment_state`: fecha, valor y números de Alegra) y agrega `inventario_nota`, `inventario_ajuste_2025` y `inventario_cambio_sin_ajuste`, más un aviso. Solo nota: ninguna cifra cambia. Test nuevo en `tests/test_radiografia_year.py`.
+
 ## [2026-11-09] - Radiografía, Fase 2: el año
 
 - `app/services/radiografia_year.py` (nuevo) + `GET /api/radiografia/year?year` (admin y viewer, solo lee, 2026 hasta el año en curso).
