@@ -205,7 +205,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - Sin tablas nuevas.
 
 ### Fase 1 — Mes
-**Estado (2026-11-06): HECHA en código (ver CHANGELOG), falta deploy y verificar con datos reales de las dos tiendas.** Agregado: punto de equilibrio "cubriendo también las cuotas" (pedido implícito: las cuotas salen y no vuelven).
+**Estado: HECHA, SUBIDA y DESPLEGADA; verificada en producción 2026-11-09 (backend c3a7c14, frontend 35e2b4e).** Ventas y "lo que quedó" iguales a Año en todos los meses de las dos tiendas; tras costear las tarjetas regalo los descuentos dan positivos (Carreño oct: lista ropa 41.559.000 + tarjetas 3.284.000 + bolsas 47.400, descuentos 337.370, U. neta ESTIMADA 9.597; Primavera oct: descuentos 6.293). Pendiente: el usuario revisa la pantalla en computador y celular. Agregado: punto de equilibrio "cubriendo también las cuotas" (pedido implícito: las cuotas salen y no vuelven).
 - `GET /api/radiografia/month?year&month` (admin y viewer; solo lee).
 - Tarjetas: ventas netas, utilidad bruta, utilidad neta, punto de equilibrio con barra de avance.
 - Estado de resultados con fórmula por línea, % sobre ventas, mes anterior (mismos días si va en curso) y mismo mes 2025.
