@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 4: flujo de caja
+
+- `app/services/radiografia_cashflow.py` (nuevo) + `GET /api/radiografia/cash-flow?year=&month=` (admin y viewer, solo lee).
+- La plata del mes (por fecha, las mismas cuentas y saldos de Cuentas → Mes): saldo inicial y final por cuenta, lo que entró (ventas de los cierres, llegadas de datáfono/Addi/Bold, excedentes, devoluciones, ingresos extra) y lo que salió por clase (recompras con su 4x1000, fletes, operativos, financieros con el interés de las cuotas, cuotas, inversiones, préstamos, retiros). Traslados entre cuentas propias aparte (no cuentan) y ajustes a mano en su línea. Los gastos "de la caja del día" se suman a las ventas y se restan en su clase (el cierre ya los había descontado del efectivo). Cuadra: inicial + entradas − salidas + ajustes + traslados = final.
+- Utilidad contra plata: utilidad neta del mes (Fase 1) + costo estimado + comisiones sin registrar − recompras − cuotas − inversiones − préstamos − retiros + excedentes + ajustes + diferencias de fechas = cambio en la plata.
+- Hoy: lo que le deben (por llegar con fecha, préstamos a empleadas, la otra tienda, plata en manos de Jhonatan) y lo que debe (préstamos de la Fase 0c, la otra tienda). "Cuánto se puede retirar" (ESTIMADO) = plata en las cuentas hoy (con AHORRO; sin lo por llegar si la cuenta ADDI + DATÁFONO todavía no es "plata real del banco"); aparte y SIN restarse solos: gastos fijos sin registrar este mes (sin cuotas ni ganancias de socios), cuotas de préstamos sin pagar este mes, falta por recomprar de lo vendido (costo estimado − recompras del mes) y la deuda con la otra tienda; "quedarían si se pagara todo" = plata − avisos (valor aproximado).
+- Tests: `tests/test_radiografia_cashflow.py` (3, nuevo). Suite: 361 pasan; la única que falla es la que ya fallaba (`test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa`).
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 3: el inventario
 
 - `app/services/radiografia_inventory.py` (nuevo) + `GET /api/radiografia/inventory?quiet=60|90|180` (admin y viewer, solo lee; usa la lista de ítems de Alegra en caché, la misma de Prendas).

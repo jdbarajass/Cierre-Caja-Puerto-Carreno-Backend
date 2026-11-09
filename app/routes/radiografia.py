@@ -4,6 +4,7 @@ Radiografía financiera (docs/PLAN_RADIOGRAFIA.md). Solo lee: admin y viewer.
 - GET /api/radiografia/month?year=&month=&target=   Fase 1 (Mes)
 - GET /api/radiografia/year?year=                    Fase 2 (Año)
 - GET /api/radiografia/inventory?quiet=60|90|180       Fase 3 (Inventario)
+- GET /api/radiografia/cash-flow?year=&month=          Fase 4 (Flujo de caja)
 """
 import logging
 
@@ -95,3 +96,25 @@ def inventory():
         return jsonify({'success': False, 'message': e.message, 'code': 'alegra_error'}), 502
     data = build_inventory(store, get_colombia_now().date(), items, quiet)
     return jsonify({'success': True, 'inventory': data}), 200
+
+
+@bp.route('/api/radiografia/cash-flow', methods=['GET', 'OPTIONS'])
+@token_required
+def cash_flow():
+    """Fase 4: la plata del mes por cuenta y, hoy, lo que le deben, lo que debe y cuánto se puede retirar."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    today = get_colombia_now().date()
+    try:
+        year_n = int(request.args.get('year') or today.year)
+        month_n = int(request.args.get('month') or today.month)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Parámetros inválidos'}), 400
+    if not 1 <= month_n <= 12 or year_n < 2026:
+        return jsonify({'success': False, 'message': 'La Radiografía es desde enero de 2026'}), 400
+    from app.services.radiografia_cashflow import build_cash_flow
+    data = build_cash_flow(get_current_store(), year_n, month_n, today)
+    return jsonify({'success': True, 'cash_flow': data}), 200
