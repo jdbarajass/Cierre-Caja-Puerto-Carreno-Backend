@@ -2,6 +2,11 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 5 verificada en producción
+
+- Verificado (oct y nov-2026, solo lectura): cada tienda igual a su Mes y su Flujo de caja; "Las dos" = suma exacta (oct: ventas $56.012.937, utilidad neta $837.210, lo que quedó $9.148.983; nov: ventas $16.316.032); hoy: plata $15.987.047, lo que debe sin la otra tienda $73.742.973, préstamo entre tiendas $9.816.659 aparte.
+- Arreglo: el inventario del comparativo usa la foto de Alegra del mes elegido (o la más reciente anterior), no la última (al mirar octubre salía la del 9-nov).
+
 ## [2026-11-09] (continuación) - Radiografía, Fase 5: comparativo y consolidado
 
 - `app/services/radiografia_compare.py` (nuevo) + `GET /api/radiografia/compare?year=&month=` (admin y viewer; 403 si el usuario no ve las dos tiendas). No recalcula: toma el Mes (Fase 1) y el Flujo de caja (Fase 4) de cada tienda (`build_cash_flow` acepta `month_data` para no calcular el mes dos veces).

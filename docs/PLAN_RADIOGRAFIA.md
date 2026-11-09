@@ -12,7 +12,7 @@ Se hace por fases, una a la vez, con el OK del usuario entre fase y fase.
 | 2 | Año: cierre general mes a mes | Propuesta |
 | 3 | Inventario: valor, días, rotación, prendas quietas, por tipo de prenda | Propuesta |
 | 4 | Flujo de caja: cuentas, por llegar, lo que se debe y le deben, cuánto se puede retirar (ESTIMADO) | Hecha y verificada (2026-11-09) |
-| 5 | Comparativo entre tiendas y consolidado | Hecha en código (2026-11-09) |
+| 5 | Comparativo entre tiendas y consolidado | Hecha y verificada (2026-11-09) |
 | 6 | Exportar cada vista a Excel y PDF | Propuesta |
 
 Alcance acordado (2026-11-06): **solo 2026**. Lo de 2025 se deja como está (la reconstrucción ya existe y no se toca);
@@ -245,7 +245,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - "Cuánto se puede retirar" con la fórmula a la vista y la palabra ESTIMADO.
 
 ### Fase 5 — Comparativo y consolidado
-**Estado (2026-11-09): HECHA en código (ver CHANGELOG), falta push, deploy y verificar con datos reales.** Decisiones al construir: pestaña propia "Comparativo" en la Radiografía (no se tocó `StoreComparison.jsx`, que consulta Alegra en vivo); el inventario sale de la foto de fin de mes de Alegra (pedir el stock de las dos tiendas tardaría ~2 min); lo que una tienda pagó a la otra y no llegó a sus cuentas (ganancias de los dueños, recompras) sí cuenta como plata que salió de las dos.
+**Estado (2026-11-09): HECHA, desplegada y VERIFICADA en producción (cifras en el CHANGELOG del backend); el arreglo de la foto de inventario del mes queda en commit sin subir.** Decisiones al construir: pestaña propia "Comparativo" en la Radiografía (no se tocó `StoreComparison.jsx`, que consulta Alegra en vivo); el inventario sale de la foto de fin de mes de Alegra (pedir el stock de las dos tiendas tardaría ~2 min); lo que una tienda pagó a la otra y no llegó a sus cuentas (ganancias de los dueños, recompras) sí cuenta como plata que salió de las dos.
 - `GET /api/radiografia/compare?year&month`: las mismas cifras de Mes/Inventario/Flujo para cada tienda, una al lado de la
   otra (solo usuarios con acceso a las dos tiendas). Se agregan también a `StoreComparison.jsx` si prefieres no duplicar pantallas.
 - Consolidado: ventas, costo, gastos, utilidad e inventario sumados; el préstamo entre tiendas **no aparece** (lo que

@@ -28,6 +28,8 @@ def _seed_inventory(app):
     with app.app_context():
         db.session.add(InventorySnapshot(store_code='carreno', period='2026-10', value=1000000, as_of=date(2026, 10, 31)))
         db.session.add(InventorySnapshot(store_code='primavera', period='2026-10', value=400000, as_of=date(2026, 10, 31)))
+        # La de noviembre no se usa al mirar octubre
+        db.session.add(InventorySnapshot(store_code='carreno', period='2026-11', value=5000000, as_of=date(2026, 11, 6)))
         db.session.commit()
 
 
@@ -52,7 +54,7 @@ def test_cada_tienda_igual_a_su_mes_y_las_dos_suman(app, client, h, monkeypatch)
     # Porcentajes de las sumas, no sumados
     assert both['pct']['utilidad_neta'] == pytest.approx(both['statement']['utilidad_neta'] / both['statement']['ventas'])
     assert both['indicators']['ticket'] == pytest.approx(4000000 / 6)
-    assert both['inventory']['valor_venta'] == 1400000
+    assert both['inventory']['valor_venta'] == 1400000 and both['inventory']['as_of'] == '2026-10-31'
     assert both['inventory']['valor_costo'] == pytest.approx(1400000 * 0.65)
 
 

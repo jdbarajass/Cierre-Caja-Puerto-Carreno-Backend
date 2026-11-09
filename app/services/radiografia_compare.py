@@ -3,7 +3,7 @@ Radiografía, Fase 5: comparativo de las tiendas y consolidado (docs/PLAN_RADIOG
 
 Solo lee y no recalcula nada: toma lo mismo que ven Mes (Fase 1) y Flujo de
 caja (Fase 4) de cada tienda y lo pone lado a lado, más una columna "Las dos"
-con la suma. El inventario sale de la última foto de fin de mes de Alegra
+con la suma. El inventario sale de la foto de Alegra del mes elegido
 (InventorySnapshot, la de Cuentas → Año) para no pedir el stock de las dos
 tiendas a Alegra (~1 min cada una); el detalle por prenda está en Inventario.
 
@@ -28,9 +28,12 @@ INTER_STORE_OUT = ('prestamo_tienda', 'pago_prestamo_tienda')
 INTER_STORE_IN = ('devolucion_prestamo_tienda', 'prestamo_recibido_tienda')
 
 
-def _inventory(store: str, margin: float) -> Optional[Dict[str, Any]]:
+def _inventory(store: str, margin: float, period: str) -> Optional[Dict[str, Any]]:
+    """Foto de Alegra del mes elegido (fin de mes, o la de hoy si el mes va en
+    curso); si ese mes no tiene, la más reciente anterior."""
     from app.models.monthly_summary import InventorySnapshot
-    snap = InventorySnapshot.for_store(store).order_by(InventorySnapshot.as_of.desc()).first()
+    snap = InventorySnapshot.for_store(store).filter(InventorySnapshot.period <= period).order_by(
+        InventorySnapshot.period.desc(), InventorySnapshot.as_of.desc()).first()
     if not snap:
         return None
     return {'as_of': snap.as_of.isoformat(), 'period': snap.period, 'valor_venta': snap.value,
@@ -45,7 +48,7 @@ def _store_column(store: str, year: int, month: int, today: date) -> Dict[str, A
     m = build_month(store, year, month, today)
     cf = build_cash_flow(store, year, month, today, month_data=m)
     col = {'store': store, 'name': STORES[store]['name'], 'margin_pct': margin, 'future': m.get('future', False),
-           'inventory': _inventory(store, margin), 'today': cf['today']}
+           'inventory': _inventory(store, margin, f'{year}-{month:02d}'), 'today': cf['today']}
     if m.get('future'):
         return col
     flow = cf['flow']
@@ -143,7 +146,7 @@ def build_compare(year: int, month: int, today: date, stores: Optional[List[str]
         'consolidated': _consolidated(cols),
         'notes': [
             'El préstamo entre las tiendas no aparece en "Las dos": lo que una le debe a la otra se cancela.',
-            'Inventario: última foto de fin de mes de Alegra (Cuentas → Año) a precio de venta y a costo ESTIMADO.',
+            'Inventario: foto de Alegra del mes (la de Cuentas → Año; si el mes va en curso, la de hoy) a precio de venta y a costo ESTIMADO.',
             'Los porcentajes de "Las dos" salen de las sumas, no se suman.',
         ],
     }
