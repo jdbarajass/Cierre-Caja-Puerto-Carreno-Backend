@@ -223,6 +223,7 @@ cuando haya acceso de lectura a producción (se hace al verificar).
 - Sin tablas nuevas.
 
 ### Fase 3 — Inventario
+**Estado (2026-11-09): HECHA en código (ver CHANGELOG), falta deploy y verificar con datos reales de las dos tiendas.** Decisiones al construir: el ritmo de venta es de los últimos 90 días (no 30: con pocas ventas por tipo, 30 días es muy ruidoso); la rotación usa el inventario de hoy y no el promedio de las fotos (infladas en Carreño antes del 7-oct); en una tienda recién abierta todo cuenta como llegado el día que abrió (Primavera entró su mercancía con ajustes, no con compras).
 - `GET /api/radiografia/inventory?quiet=60|90|180`: valor (precio de venta y a costo), días de inventario, rotación,
   prendas quietas = con stock, sin venta en N días **y** sin llegada en N días (no marca lo recién llegado), con su plata
   parada; las que más rotan y baja rotación; por tipo de prenda y departamento (`parse_garment`): ventas, unidades,

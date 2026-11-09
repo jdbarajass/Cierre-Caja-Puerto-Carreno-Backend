@@ -2,6 +2,15 @@
 
 ---
 
+## [2026-11-09] (continuación) - Radiografía, Fase 3: el inventario
+
+- `app/services/radiografia_inventory.py` (nuevo) + `GET /api/radiografia/inventory?quiet=60|90|180` (admin y viewer, solo lee; usa la lista de ítems de Alegra en caché, la misma de Prendas).
+- Valor del stock de hoy a precio de lista y a costo ESTIMADO (sin obsoletos `*`, bolsa ni tarjetas; los negativos y sin precio no suman y se avisan), días de inventario (valor ÷ precio de lista vendido al día en los últimos 90 días con prendas cargadas), rotación al año ESTIMADA (lo vendido en hasta 365 días llevado a 12 meses ÷ inventario de HOY: las fotos de fin de mes de Carreño antes del 7-oct-2026 están infladas por la anulación de 2025).
+- Prendas quietas: con stock, sin venta y sin llegada (compras guardadas) en N días, con su plata parada (stock × precio × (1 − margen)). Una tienda que abrió hace poco (primer día de ventas más de un mes después del 1-ene, Primavera) cuenta todo como llegado ese día.
+- Por tipo de prenda y por departamento (`parse_garment`): vendidas, ventas, descuento %, utilidad estimada, stock, valor a costo, días de inventario y plata parada; las que más y menos rotan.
+- Tests: `tests/test_radiografia_inventory.py` (4, nuevo; Alegra simulado).
+- Datos: inventario de Primavera de oct-2026 vuelto a pedir a Alegra (pedido del usuario, 2026-11-09): 329.600 → 578.300 al 31-oct. Sigue bajo: en Alegra la mercancía de Primavera figura entrando en noviembre.
+
 ## [2026-11-09] (continuación) - Radiografía Año: nota del ajuste de 2025 en el inventario
 
 - Pedido del usuario: el mes del ajuste de salida de la reconstrucción de 2025 (R3, en Carreño el 07/10/2026, $395.721.300) explica que esa baja del inventario no es mercancía vendida. `radiografia_year._adjustment_note` lee el estado guardado del ajuste (`history_2025.adjustment_state`: fecha, valor y números de Alegra) y agrega `inventario_nota`, `inventario_ajuste_2025` y `inventario_cambio_sin_ajuste`, más un aviso. Solo nota: ninguna cifra cambia. Test nuevo en `tests/test_radiografia_year.py`.

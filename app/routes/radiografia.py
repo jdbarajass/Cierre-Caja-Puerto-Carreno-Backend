@@ -3,6 +3,7 @@ Radiografía financiera (docs/PLAN_RADIOGRAFIA.md). Solo lee: admin y viewer.
 
 - GET /api/radiografia/month?year=&month=&target=   Fase 1 (Mes)
 - GET /api/radiografia/year?year=                    Fase 2 (Año)
+- GET /api/radiografia/inventory?quiet=60|90|180       Fase 3 (Inventario)
 """
 import logging
 
@@ -64,3 +65,33 @@ def year():
         return jsonify({'success': False, 'message': 'La Radiografía es desde 2026 y hasta el año en curso'}), 400
     from app.services.radiografia_year import build_year
     return jsonify({'success': True, 'year': build_year(get_current_store(), year_n, today)}), 200
+
+
+@bp.route('/api/radiografia/inventory', methods=['GET', 'OPTIONS'])
+@token_required
+def inventory():
+    """Fase 3: necesita el stock de Alegra (la primera vez ~1 min; luego caché por tienda)."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    err = _require_admin()
+    if err:
+        return err
+    from app.exceptions import CierreCajaException, ConfigurationError
+    from app.services.radiografia_inventory import QUIET_OPTIONS, build_inventory
+    from app.stores import get_alegra_client
+    try:
+        quiet = int(request.args.get('quiet') or 90)
+    except ValueError:
+        quiet = 0
+    if quiet not in QUIET_OPTIONS:
+        return jsonify({'success': False, 'message': 'quiet debe ser 60, 90 o 180'}), 400
+    store = get_current_store()
+    try:
+        items = get_alegra_client().get_active_items()
+    except ConfigurationError as e:
+        return jsonify({'success': False, 'message': e.message, 'code': 'alegra_not_configured'}), 503
+    except CierreCajaException as e:
+        logger.error(f'[{store}] Radiografía inventario: {e}')
+        return jsonify({'success': False, 'message': e.message, 'code': 'alegra_error'}), 502
+    data = build_inventory(store, get_colombia_now().date(), items, quiet)
+    return jsonify({'success': True, 'inventory': data}), 200
