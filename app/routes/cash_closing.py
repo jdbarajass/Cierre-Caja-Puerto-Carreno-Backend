@@ -611,7 +611,7 @@ def pending_closing_dates():
       - Cierre de Caja
     responses:
       200:
-        description: Lista de fechas (YYYY-MM-DD, ascendente) sin cierre registrado
+        description: Lista de fechas (YYYY-MM-DD, ascendente) sin cierre registrado y cierres no exitosos sin corregir
     """
     if request.method == 'OPTIONS':
         return '', 204
@@ -639,7 +639,14 @@ def pending_closing_dates():
             missing_dates.append(d.isoformat())
         d += timedelta(days=1)
 
-    return jsonify({'success': True, 'missing_dates': missing_dates}), 200
+    # Cierres guardados que no salieron exitosos y siguen sin corregir: el
+    # aviso sigue visible para vendedoras y admin hasta que se corrijan y se
+    # reenvíen (o el admin los corrija en Cuentas → Corrección de cierres).
+    from app.services.closing_corrections import unsuccessful
+    unsuccessful_closings = unsuccessful(get_current_store(), today - timedelta(days=60), today)
+
+    return jsonify({'success': True, 'missing_dates': missing_dates,
+                    'unsuccessful_closings': unsuccessful_closings}), 200
 
 
 @bp.route('/monthly_sales', methods=['GET', 'OPTIONS'])

@@ -263,6 +263,7 @@ def create_app(config_class=Config):
     from app.routes.inventory_requests import bp as inventory_requests_bp
     from app.routes.loans import bp as loans_bp
     from app.routes.radiografia import bp as radiografia_bp
+    from app.routes.closing_corrections import bp as closing_corrections_bp
 
     app.register_blueprint(cash_bp, url_prefix='/api')
     app.register_blueprint(health_bp)
@@ -295,6 +296,7 @@ def create_app(config_class=Config):
     app.register_blueprint(inventory_requests_bp)  # Solicitudes de ajuste de inventario (docs/PLAN_AJUSTES_INVENTARIO.md)
     app.register_blueprint(loans_bp)  # Préstamos de cada tienda (docs/PLAN_RADIOGRAFIA.md, Fase 0c)
     app.register_blueprint(radiografia_bp)  # Radiografía financiera (docs/PLAN_RADIOGRAFIA.md)
+    app.register_blueprint(closing_corrections_bp)  # Corrección de cierres por el admin (2026-11-09)
 
     # Configurar manejadores de errores
     setup_error_handlers(app)
@@ -662,6 +664,8 @@ def _migrate_employee_tables(db, app):
             add_column_if_missing(conn, 'cash_closings', column, 'FLOAT')
         add_column_if_missing(conn, 'cash_closings', 'validation_status', 'VARCHAR(10)')
         add_column_if_missing(conn, 'cash_closings', 'validation_message', 'VARCHAR(500)')
+        # Corrección de cierres por el admin (2026-11-09)
+        add_column_if_missing(conn, 'cash_closings', 'correction_log', 'TEXT')
 
         # Categoría detallada de Gastos y nota por tarjeta de Cuentas
         # (2026-10-09). NULL en lo ya guardado (se muestra con su grupo).

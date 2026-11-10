@@ -50,6 +50,13 @@ class CashClosing(StoreScopedMixin, db.Model):
     # de este cambio: se deja sincronizar como siempre.
     validation_status = db.Column(db.String(10), nullable=True)
     validation_message = db.Column(db.String(500), nullable=True)
+    # Corrección del admin (Cuentas → Corrección de cierres, 2026-11-09): un
+    # cierre que no salió exitoso por un error que no se arregla en Alegra
+    # (ej. venta en efectivo registrada como transferencia) se corrige con lo
+    # que pasó de verdad, siempre que el total de ventas sea el de Alegra.
+    # validation_status pasa a 'corrected' (se puede sincronizar) y aquí queda
+    # el rastro en JSON: [{at, by, note, before, after}].
+    correction_log = db.Column(db.Text, nullable=True)
 
     # Totales reportados por Alegra para ese día (para verificación, no para acreditar)
     alegra_total_efectivo = db.Column(db.Float, nullable=True)
@@ -83,8 +90,8 @@ class CashClosing(StoreScopedMixin, db.Model):
 
     @property
     def can_sync(self):
-        """Solo un Cierre exitoso pasa a Cuentas (NULL = cierre antiguo, se permite)."""
-        return self.validation_status in (None, 'success')
+        """Solo un Cierre exitoso o corregido por el admin pasa a Cuentas (NULL = cierre antiguo, se permite)."""
+        return self.validation_status in (None, 'success', 'corrected')
 
     def to_dict(self):
         return {
@@ -101,6 +108,7 @@ class CashClosing(StoreScopedMixin, db.Model):
             'validation_status': self.validation_status,
             'validation_message': self.validation_message,
             'can_sync': self.can_sync,
+            'corrected': self.validation_status == 'corrected',
             'alegra_total_efectivo': self.alegra_total_efectivo,
             'alegra_total_transferencia': self.alegra_total_transferencia,
             'alegra_total_tarjeta': self.alegra_total_tarjeta,

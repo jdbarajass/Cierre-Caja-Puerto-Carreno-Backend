@@ -2,6 +2,14 @@
 
 ---
 
+## [2026-11-09] (continuación) - Corrección de cierres por el admin + aviso de cierres no exitosos
+
+- Pedido del usuario (cierre del 6-nov de Carreño: la factura KPC4868 de $59.900 se pagó en efectivo y quedó como transferencia en Alegra; el cierre salió "no exitoso" y no pasaba a Cuentas). Regla del usuario: no importa que Alegra quede con el medio de pago mal; el TOTAL de ventas del día debe ser igual entre Alegra y la plataforma, y en la plataforma todo debe quedar como pasó de verdad.
+- `app/services/closing_corrections.py` + `app/routes/closing_corrections.py` (nuevos): `GET /api/closing-corrections` (cierres no exitosos sin sincronizar + corregidos de 90 días, con la venta de Alegra del día por medio) y `POST /api/closing-corrections/<AAAA-MM-DD>` (venta real por medio, excedentes y nota obligatoria). Solo admin (el de solo lectura no, aunque entre como admin). Valida que la venta sume el total de Alegra del día (los excedentes van aparte); efectivo a consignar = venta en efectivo + excedente en efectivo − gastos de la caja de ese día; crea las correcciones de medio del día en Cuentas → Mes (`SaleMethodCorrection` con nota "Corrección del cierre AAAA-MM-DD", una nueva reemplaza las anteriores); deja el cierre `validation_status='corrected'` (se puede sincronizar) con rastro en `cash_closings.correction_log` (quién, cuándo, nota, antes y después) y lo pasa a Cuentas enseguida. No corrige un cierre ya sincronizado ni de un mes cerrado.
+- `GET /api/cash_closing/pending-dates` ahora trae también `unsuccessful_closings` (cierres guardados no exitosos sin corregir, 60 días) para el aviso rojo de Cierre de Caja.
+- Columna nueva `cash_closings.correction_log` (migración en `app/__init__.py`).
+- Tests: `tests/test_closing_corrections.py` (3, nuevo; el caso real del 6-nov). Suite: 375 pasan; solo falla la de siempre.
+
 ## [2026-11-09] (continuación) - Verificación completa de la Radiografía en producción
 
 - Tras el deploy del arreglo del stock (751f893), verificado en las dos tiendas (solo lectura):
