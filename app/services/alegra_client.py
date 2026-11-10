@@ -274,6 +274,10 @@ class AlegraClient:
 
             logger.info(f"✓ TOTAL: {len(all_invoices)} facturas obtenidas para {date} (esperadas: {total_invoices})")
 
+            # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma con paymentForm
+            from app.utils.formatters import ensure_invoice_payments
+            ensure_invoice_payments(all_invoices)
+
             complete = not total_invoices or len(all_invoices) >= total_invoices
             if not complete:
                 # No se guarda en caché un día a medias: la próxima consulta lo vuelve a pedir
@@ -582,6 +586,8 @@ class AlegraClient:
                     continue
 
             logger.info(f"✓ {len(data)} facturas obtenidas, {len(filtered_data)} dentro del rango {start_date} - {end_date}, hay facturas más antiguas: {has_older_invoices}")
+            from app.utils.formatters import ensure_invoice_payments
+            ensure_invoice_payments(filtered_data)   # Alegra ya no manda `payments` (2026-11-09)
             return filtered_data, has_older_invoices, len(data)
 
         except requests.exceptions.Timeout:

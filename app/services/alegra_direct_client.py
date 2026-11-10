@@ -481,6 +481,9 @@ class AlegraDirectClient:
                 date_str = current_date.strftime('%Y-%m-%d')
                 try:
                     day_invoices = self._get_invoices_for_day(date_str)
+                    # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma con paymentForm
+                    from app.utils.formatters import ensure_invoice_payments
+                    ensure_invoice_payments(day_invoices)
                     logger.info(f"Obtenidas {len(day_invoices)} facturas para {date_str}")
                     all_invoices.extend(day_invoices)
                     days_processed += 1

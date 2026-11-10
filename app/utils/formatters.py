@@ -73,6 +73,57 @@ def format_cop(amount):
         return f"${amount}"
 
 
+# Forma de pago de la factura en Alegra (paymentForm) -> método normalizado.
+# OJO: "DEBIT_TRANSFER" contiene "debit" y normalize_payment_method lo leería
+# como tarjeta débito; por eso este mapa va aparte y se revisa primero.
+PAYMENT_FORM_METHODS = {
+    'CASH': 'cash',
+    'DEBIT_CARD': 'debit-card',
+    'CREDIT_CARD': 'credit-card',
+    'DEBIT_TRANSFER': 'transfer',
+    'CREDIT_TRANSFER': 'transfer',
+    'TRANSFER': 'transfer',
+}
+
+
+def payment_form_method(form) -> str:
+    return PAYMENT_FORM_METHODS.get(str(form or '').upper(), 'other')
+
+
+def ensure_invoice_payments(invoices):
+    """
+    Desde el 2026-11-09 Alegra devuelve /invoices SIN el detalle `payments`
+    (verificado en producción: ninguna factura del 6 al 9-nov lo trae), así que
+    el cierre de caja, la preconsulta y Estadísticas sumaban $0 por medio de
+    pago. Cada factura sí trae `paymentForm` (CASH, DEBIT_CARD, CREDIT_CARD,
+    DEBIT_TRANSFER) y `totalPaid`: si falta el detalle, se arma un pago con eso
+    (`synthesized: True`). Una factura pagada con dos medios queda en el de su
+    paymentForm (Alegra ya no manda la división). Si Alegra vuelve a mandar
+    `payments`, se usan tal cual. Modifica y devuelve la misma lista.
+    """
+    for inv in invoices or []:
+        if not isinstance(inv, dict) or inv.get('payments'):
+            continue
+        if str(inv.get('status') or '').lower() == 'void':
+            continue
+        paid = inv.get('totalPaid')
+        if paid in (None, ''):
+            paid = inv.get('total') if (inv.get('balance') in (0, '0', None)) else 0
+        try:
+            paid = float(paid or 0)
+        except (TypeError, ValueError):
+            paid = 0
+        if paid <= 0 or not inv.get('paymentForm'):
+            continue
+        inv['payments'] = [{
+            'amount': paid,
+            'paymentMethod': payment_form_method(inv.get('paymentForm')),
+            'date': inv.get('date'),
+            'synthesized': True,
+        }]
+    return invoices
+
+
 def normalize_payment_method(pm: str) -> str:
     """
     Normaliza métodos de pago a valores estándar

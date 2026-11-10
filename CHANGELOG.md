@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-09] (continuación) - Arreglo urgente: Alegra dejó de mandar los pagos dentro de las facturas
+
+- Síntoma (cierre del 9-nov de Carreño): al subir el Excel, "Alegra hoy dice $ 0" y el cierre salía "no exitoso". `/api/preconsulta` encontraba las 5 facturas (KPC4886-KPC4890) pero sumaba $0 por medio; igual el 6, 7 y 8-nov. Causa verificada en producción: Alegra ya no incluye `payments` en `/invoices` (cambio de Alegra; el cierre del 8-nov todavía se validó bien). Cada factura sigue trayendo `paymentForm` (CASH, DEBIT_CARD, CREDIT_CARD, DEBIT_TRANSFER) y `totalPaid`.
+- `app/utils/formatters.py`: `ensure_invoice_payments` arma el pago con `paymentForm` + `totalPaid` cuando falta el detalle (`synthesized: True`; si Alegra vuelve a mandar `payments` se usan tal cual; anuladas y sin pagar no inventan pagos) y `payment_form_method` (DEBIT_TRANSFER = transferencia, no débito). Se aplica en `AlegraClient.get_invoices_by_date` (cierre, preconsulta, validación, copia de facturas), `get_invoices_by_date_range` y `AlegraDirectClient.get_all_invoices_for_date_range` (Estadísticas). Límite: una factura pagada con dos medios queda en el de su paymentForm (Alegra ya no manda la división); Cuentas → Mes no cambia (usa los recibos de pago, `/payments`).
+- Tests: `tests/test_alegra_sin_payments.py` (2, nuevo; las 5 facturas reales del 9-nov: efectivo 159.800, transferencia 301.800, débito 357.700 = 819.300). Suite: 377 pasan; solo falla la de siempre.
+
 ## [2026-11-09] (continuación) - Solo lectura puede usar Ajustes de inventario; cierre del 6-nov corregido
 
 - Pedido del usuario: el admin de solo lectura (koaj.carreno.primavera@gmail.com) puede hacer TODO en Gestión → Ajustes de inventario (crear conteo, cambio de prenda y redimir tarjeta regalo, cancelar, aceptar —crea el ajuste en Alegra— y rechazar) y nada más. `app/middlewares/auth.py`: `READ_ONLY_ALLOWED_BLUEPRINTS = {'inventory_requests'}`. `tests/test_inventory_requests.py` actualizado (el de solo lectura crea, rechaza y acepta; en Gastos sigue con 403).
