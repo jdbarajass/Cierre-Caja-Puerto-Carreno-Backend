@@ -23,6 +23,10 @@ STORE_AGNOSTIC_ENDPOINTS = {'auth.verify_token', 'stores.list_user_stores'}
 
 # Admin de solo lectura: además de GET, solo estos endpoints (no guardan nada).
 READ_ONLY_ALLOWED_ENDPOINTS = {'inventory.upload_inventory_file'}
+# Lo único que el admin de solo lectura SÍ puede modificar (pedido del usuario,
+# 2026-11-09): Gestión → Ajustes de inventario completo (crear conteo, cambio de
+# prenda y redimir tarjeta regalo, cancelar, aceptar y rechazar).
+READ_ONLY_ALLOWED_BLUEPRINTS = {'inventory_requests'}
 
 
 def _apply_read_only(user):
@@ -37,7 +41,8 @@ def _apply_read_only(user):
         return None
     user['role'] = 'admin'
     user['read_only'] = True
-    if request.method in ('GET', 'HEAD') or request.endpoint in READ_ONLY_ALLOWED_ENDPOINTS:
+    if (request.method in ('GET', 'HEAD') or request.endpoint in READ_ONLY_ALLOWED_ENDPOINTS
+            or request.blueprint in READ_ONLY_ALLOWED_BLUEPRINTS):
         return None
     logger.warning(f"Solo lectura: bloqueado {request.method} {request.path} - Usuario: {user.get('email')}")
     return jsonify({

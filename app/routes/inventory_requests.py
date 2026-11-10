@@ -5,7 +5,8 @@ tienda (X-Store).
 - Vendedoras (sales) y admin: buscar un código, crear, ver y cancelar las
   suyas mientras estén pendientes.
 - Solo admin: revisar contra Alegra, aceptar (crea el ajuste en Alegra),
-  aceptar todas y rechazar. El admin de solo lectura solo puede ver.
+  aceptar todas y rechazar. El admin de solo lectura también puede hacer todo
+  aquí (es lo único que puede modificar: READ_ONLY_ALLOWED_BLUEPRINTS, 2026-11-09).
 """
 import logging
 from datetime import datetime

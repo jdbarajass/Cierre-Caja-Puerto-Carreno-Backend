@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-09] (continuación) - Solo lectura puede usar Ajustes de inventario; cierre del 6-nov corregido
+
+- Pedido del usuario: el admin de solo lectura (koaj.carreno.primavera@gmail.com) puede hacer TODO en Gestión → Ajustes de inventario (crear conteo, cambio de prenda y redimir tarjeta regalo, cancelar, aceptar —crea el ajuste en Alegra— y rechazar) y nada más. `app/middlewares/auth.py`: `READ_ONLY_ALLOWED_BLUEPRINTS = {'inventory_requests'}`. `tests/test_inventory_requests.py` actualizado (el de solo lectura crea, rechaza y acepta; en Gastos sigue con 403).
+- Producción (2026-11-09, con la corrección de cierres): cierre del 6-nov de Carreño corregido (KPC4868 $59.900 en efectivo; efectivo a consignar $219.700 sin el préstamo de $3.700 ya repuesto, QR $1.173.815, datáfono $903.400, excedente de datáfono $39.800 por un cambio de prenda). Acreditado: EFECTIVO +219.700, QR +1.173.815, ADDI + DATÁFONO +39.800 (excedente); Cuentas → Mes del 6-nov con $59.900 pasados de QR a efectivo; total $2.296.915 igual a Alegra.
+- El cierre del 9-nov de Carreño salió "no exitoso" aunque cuadra con Alegra (efectivo 159.800 + excedente 200, transferencias 301.800, datáfono 357.700): al enviarlo no se pudo leer Alegra y comparó contra $0. Se resuelve reenviándolo desde Cierre de Caja.
+
 ## [2026-11-09] (continuación) - Corrección de cierres por el admin + aviso de cierres no exitosos
 
 - Pedido del usuario (cierre del 6-nov de Carreño: la factura KPC4868 de $59.900 se pagó en efectivo y quedó como transferencia en Alegra; el cierre salió "no exitoso" y no pasaba a Cuentas). Regla del usuario: no importa que Alegra quede con el medio de pago mal; el TOTAL de ventas del día debe ser igual entre Alegra y la plataforma, y en la plataforma todo debe quedar como pasó de verdad.

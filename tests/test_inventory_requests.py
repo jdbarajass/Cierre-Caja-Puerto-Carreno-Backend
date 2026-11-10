@@ -261,16 +261,26 @@ def test_aceptar_todas_rechazar_y_cancelar(app, client, fake):
     assert len(client.get('/api/inventory-requests?status=all', headers=admin).get_json()['items']) == 4
 
 
-def test_cada_tienda_ve_solo_lo_suyo_y_solo_lectura_no_acepta(app, client, fake):
+def test_cada_tienda_ve_solo_lo_suyo_y_solo_lectura_si_acepta(app, client, fake):
     rid = client.post('/api/inventory-requests', headers=_headers(app, 1, 'admin', 'primavera'), json=CONTEO).get_json()['request']['id']
     assert client.get('/api/inventory-requests', headers=_headers(app, 1, 'admin', 'carreno')).get_json()['open_count'] == 0
     assert client.post(f'/api/inventory-requests/{rid}/approve', headers=_headers(app, 1, 'admin', 'carreno')).status_code == 404
     assert client.get('/api/inventory-requests', headers=_headers(app, 1, 'admin', 'primavera')).get_json()['items'][0]['store_code'] == 'primavera'
 
+    # El admin de solo lectura SÍ puede hacer todo en Ajustes de inventario (pedido del usuario 2026-11-09)
     viewer = _headers(app, 9, 'viewer', 'primavera')
     assert client.get('/api/inventory-requests', headers=viewer).status_code == 200
-    assert client.post(f'/api/inventory-requests/{rid}/approve', headers=viewer).status_code == 403
-    assert fake.created == []
+    created = client.post('/api/inventory-requests', headers=viewer, json=CONTEO)
+    assert created.status_code == 201, created.get_json()
+    other = created.get_json()['request']['id']
+    assert client.post(f'/api/inventory-requests/{other}/reject', headers=viewer,
+                       json={'reason': 'Prueba'}).status_code == 200
+    resp = client.post(f'/api/inventory-requests/{rid}/approve', headers=viewer)
+    assert resp.status_code == 200, resp.get_json()
+    assert len(fake.created) == 1
+    # ...y en el resto sigue sin poder cambiar nada
+    r = client.post('/api/expenses', headers=viewer, json={'concept': 'x'})
+    assert r.status_code == 403 and r.get_json()['read_only'] is True
 
 
 CAMBIO = {'kind': 'cambio_prenda', 'requested_by': 'Yesica',
