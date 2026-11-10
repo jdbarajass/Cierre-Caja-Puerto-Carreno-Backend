@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-11-09] (continuación) - Prueba de llegadas de tarjeta que fallaba
+
+- `tests/test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa` fallaba desde noviembre: el ajuste de "igualar al banco" toma su fecha del reloj real y la prueba (escrita el 15-oct) simula octubre, así que el ajuste caía fuera del mes. No era un error de la plataforma (en producción el reloj real es el correcto). Ahora la prueba fija la fecha del ajuste. Toda la suite pasa.
+
 ## [2026-11-09] (continuación) - Arreglo urgente: Alegra dejó de mandar los pagos dentro de las facturas
 
 - Síntoma (cierre del 9-nov de Carreño): al subir el Excel, "Alegra hoy dice $ 0" y el cierre salía "no exitoso". `/api/preconsulta` encontraba las 5 facturas (KPC4886-KPC4890) pero sumaba $0 por medio; igual el 6, 7 y 8-nov. Causa verificada en producción: Alegra ya no incluye `payments` en `/invoices` (cambio de Alegra; el cierre del 8-nov todavía se validó bien). Cada factura sigue trayendo `paymentForm` (CASH, DEBIT_CARD, CREDIT_CARD, DEBIT_TRANSFER) y `totalPaid`.

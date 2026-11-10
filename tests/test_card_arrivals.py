@@ -148,6 +148,15 @@ def test_el_cierre_ya_no_suma_datafono_ni_addi(app, client, h, today):
 def test_hoja_del_mes_llegadas_aparte_y_comision_informativa(app, client, h, today):
     _load(app)
     _start(client, h, 1000000)
+    # El ajuste de "igualar al banco" toma su fecha del reloj real (created_at);
+    # se fija al 5-oct simulado para que la prueba no dependa del día en que se
+    # corre (falló desde noviembre de 2026: el ajuste caía fuera de octubre).
+    from app.models.account import AccountMovement
+    from app.models.user import db
+    with app.app_context():
+        AccountMovement.query.filter_by(type='manual_adjustment').update(
+            {'created_at': datetime(2026, 10, 5, 17, 0)}, synchronize_session=False)
+        db.session.commit()
     today(date(2026, 10, 6))
     r = client.post('/api/month-sheet/commissions', headers=h, json={'year': 2026, 'month': 10})
     assert r.status_code == 200
