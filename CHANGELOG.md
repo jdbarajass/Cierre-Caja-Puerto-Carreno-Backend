@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-11] - El admin no podía entrar ("El servidor no responde")
+
+- Síntoma (desde el 10-nov en la tarde): koaj.puertocarreno@gmail.com no entra; las vendedoras sí. Verificado en producción: `/health` sano y un correo inexistente da 401, pero `/auth/login` con ese correo da **500** tanto con la contraseña que tiene el usuario como con una errada a propósito (el frontend reintenta los 500 y muestra "El servidor no responde"). El fallo está al comprobar la contraseña o el contador de intentos de esa cuenta.
+- `User.increment_failed_attempts` aguanta `failed_login_attempts` en NULL (antes `None + 1` = 500); `auth.login` trata un `password_hash` dañado (no bcrypt) como contraseña incorrecta y lo deja en el log; el error inesperado hace `rollback` y queda con traza completa (`logger.exception`). Pruebas: `tests/test_login_robusto.py`.
+- Si tras el deploy responde "Credenciales incorrectas", la contraseña guardada no es la que tiene el usuario: resetearla (ver la respuesta del 11-nov).
+
 ## [2026-11-09] (continuación) - Prueba de llegadas de tarjeta que fallaba
 
 - `tests/test_card_arrivals.py::test_hoja_del_mes_llegadas_aparte_y_comision_informativa` fallaba desde noviembre: el ajuste de "igualar al banco" toma su fecha del reloj real y la prueba (escrita el 15-oct) simula octubre, así que el ajuste caía fuera del mes. No era un error de la plataforma (en producción el reloj real es el correcto). Ahora la prueba fija la fecha del ajuste. Toda la suite pasa.

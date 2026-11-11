@@ -54,7 +54,8 @@ class User(db.Model):
 
     def increment_failed_attempts(self):
         """Incrementa el contador de intentos fallidos"""
-        self.failed_login_attempts += 1
+        # NULL en usuarios creados sin el valor por defecto: antes daba 500 en el login
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
 
     def reset_failed_attempts(self):
         """Resetea el contador de intentos fallidos"""

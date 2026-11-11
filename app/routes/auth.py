@@ -153,7 +153,15 @@ def login():
         max_attempts = current_app.config.get('MAX_LOGIN_ATTEMPTS', 5)
         lockout_time = current_app.config.get('LOCKOUT_TIME_MINUTES', 15)
 
-        if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
+        try:
+            password_ok = bcrypt.checkpw(password.encode('utf-8'), (user.password_hash or '').encode('utf-8'))
+        except ValueError:
+            # Hash guardado dañado (no es bcrypt): se trata como contraseña
+            # incorrecta y queda en el log para que el admin la resetee.
+            logger.error(f"password_hash invalido para {email}: hay que resetear la contrasena")
+            password_ok = False
+
+        if not password_ok:
             # Incrementar intentos fallidos
             user.increment_failed_attempts()
 
@@ -245,7 +253,8 @@ def login():
         return response
 
     except Exception as e:
-        logger.error(f"Error en login: {str(e)} - IP: {request.remote_addr}")
+        db.session.rollback()
+        logger.exception(f"Error en login ({type(e).__name__}): {str(e)} - IP: {request.remote_addr}")
         return jsonify({
             'success': False,
             'message': 'Error interno del servidor'
