@@ -1,7 +1,7 @@
 """
 Modelo de Usuario para autenticación
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -50,7 +50,13 @@ class User(db.Model):
         """Verifica si la cuenta está bloqueada"""
         if self.locked_until is None:
             return False
-        return datetime.utcnow() < self.locked_until
+        # En producción (Postgres) la columna puede ser "timestamp with time
+        # zone" y devolver la fecha con zona: compararla con utcnow() (sin
+        # zona) daba 500 en el login de una cuenta bloqueada (2026-11-11).
+        locked_until = self.locked_until
+        if locked_until.tzinfo is not None:
+            locked_until = locked_until.astimezone(timezone.utc).replace(tzinfo=None)
+        return datetime.utcnow() < locked_until
 
     def increment_failed_attempts(self):
         """Incrementa el contador de intentos fallidos"""

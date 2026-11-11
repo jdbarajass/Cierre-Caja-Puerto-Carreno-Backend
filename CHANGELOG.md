@@ -6,7 +6,8 @@
 
 - Síntoma (desde el 10-nov en la tarde): koaj.puertocarreno@gmail.com no entra; las vendedoras sí. Verificado en producción: `/health` sano y un correo inexistente da 401, pero `/auth/login` con ese correo da **500** tanto con la contraseña que tiene el usuario como con una errada a propósito (el frontend reintenta los 500 y muestra "El servidor no responde"). El fallo está al comprobar la contraseña o el contador de intentos de esa cuenta.
 - `User.increment_failed_attempts` aguanta `failed_login_attempts` en NULL (antes `None + 1` = 500); `auth.login` trata un `password_hash` dañado (no bcrypt) como contraseña incorrecta y lo deja en el log; el error inesperado hace `rollback` y queda con traza completa (`logger.exception`). Pruebas: `tests/test_login_robusto.py`.
-- Si tras el deploy responde "Credenciales incorrectas", la contraseña guardada no es la que tiene el usuario: resetearla (ver la respuesta del 11-nov).
+- **Causa real (log de Render):** `Error en login: can't compare offset-naive and offset-aware datetimes`. La cuenta quedó bloqueada (5 intentos fallidos el 10-nov) y en Postgres `users.locked_until` vuelve con zona horaria; `User.is_locked()` lo comparaba con `datetime.utcnow()` (sin zona) y cada login de esa cuenta daba 500, aun pasado el bloqueo de 15 min. Ahora `is_locked` pasa la fecha a UTC sin zona antes de comparar (prueba `test_bloqueo_con_fecha_con_zona_no_revienta`).
+- Si tras el deploy responde "Credenciales incorrectas", la contraseña guardada no es la que tiene el usuario: resetearla.
 
 ## [2026-11-09] (continuación) - Prueba de llegadas de tarjeta que fallaba
 

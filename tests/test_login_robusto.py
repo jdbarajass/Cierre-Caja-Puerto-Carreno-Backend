@@ -36,6 +36,21 @@ def test_contador_null_con_clave_correcta_entra(app, client):
     assert r.status_code == 200, r.get_json()
 
 
+def test_bloqueo_con_fecha_con_zona_no_revienta():
+    """Causa real del 10/11-nov (log de Render): Postgres devuelve locked_until
+    con zona horaria y compararlo con utcnow() daba TypeError (500)."""
+    from datetime import datetime, timedelta, timezone
+    u = User(email='z@test.com', password_hash='x', name='Z')
+    u.locked_until = datetime.now(timezone.utc) + timedelta(minutes=10)
+    assert u.is_locked() is True
+    u.locked_until = datetime.now(timezone.utc) - timedelta(hours=20)
+    assert u.is_locked() is False
+    u.locked_until = (datetime.now(timezone.utc) + timedelta(minutes=10)).astimezone(timezone(timedelta(hours=-5)))
+    assert u.is_locked() is True
+    u.locked_until = datetime.utcnow() + timedelta(minutes=10)  # sin zona (SQLite / tests)
+    assert u.is_locked() is True
+
+
 def test_hash_danado_da_401_no_500(app, client):
     _user(app, 'hash@test.com', 'esto-no-es-bcrypt', failed=0)
     r = client.post('/auth/login', json={'email': 'hash@test.com', 'password': 'Correcta.2026*'})
