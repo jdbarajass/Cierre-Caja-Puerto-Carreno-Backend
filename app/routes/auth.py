@@ -149,6 +149,12 @@ def login():
                 'message': 'Cuenta bloqueada temporalmente. Intente mas tarde.'
             }), 403
 
+        # Bloqueo ya vencido: se empieza de cero (5 intentos nuevos). Antes el
+        # contador seguía en 5 y un solo error volvía a bloquear 15 minutos.
+        if user.locked_until is not None:
+            user.reset_failed_attempts()
+            db.session.commit()
+
         # Verificar contrasena con bcrypt
         max_attempts = current_app.config.get('MAX_LOGIN_ATTEMPTS', 5)
         lockout_time = current_app.config.get('LOCKOUT_TIME_MINUTES', 15)

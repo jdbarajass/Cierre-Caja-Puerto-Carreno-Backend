@@ -51,6 +51,26 @@ def test_bloqueo_con_fecha_con_zona_no_revienta():
     assert u.is_locked() is True
 
 
+def test_bloqueo_vencido_da_5_intentos_nuevos(app, client):
+    from datetime import datetime, timedelta
+    _user(app, 'lock@test.com', _hash('Correcta.2026*'), failed=0)
+    for _ in range(4):
+        assert client.post('/auth/login', json={'email': 'lock@test.com', 'password': 'Errada.2026*'}).status_code == 401
+    # 5.º error: bloquea
+    assert client.post('/auth/login', json={'email': 'lock@test.com', 'password': 'Errada.2026*'}).status_code == 403
+    # Durante el bloqueo, ni la correcta entra
+    assert client.post('/auth/login', json={'email': 'lock@test.com', 'password': 'Correcta.2026*'}).status_code == 403
+    # Pasan los 15 minutos
+    with app.app_context():
+        u = User.query.filter_by(email='lock@test.com').first()
+        u.locked_until = datetime.utcnow() - timedelta(minutes=1)
+        db.session.commit()
+    # Un error ya no vuelve a bloquear: es el intento 1/5
+    r = client.post('/auth/login', json={'email': 'lock@test.com', 'password': 'Errada.2026*'})
+    assert r.status_code == 401 and '(1/5' in r.get_json()['message']
+    assert client.post('/auth/login', json={'email': 'lock@test.com', 'password': 'Correcta.2026*'}).status_code == 200
+
+
 def test_hash_danado_da_401_no_500(app, client):
     _user(app, 'hash@test.com', 'esto-no-es-bcrypt', failed=0)
     r = client.post('/auth/login', json={'email': 'hash@test.com', 'password': 'Correcta.2026*'})
