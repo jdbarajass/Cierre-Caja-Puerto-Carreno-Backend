@@ -666,6 +666,8 @@ def _migrate_employee_tables(db, app):
         add_column_if_missing(conn, 'cash_closings', 'validation_message', 'VARCHAR(500)')
         # Corrección de cierres por el admin (2026-11-09)
         add_column_if_missing(conn, 'cash_closings', 'correction_log', 'TEXT')
+        # Fecha de negocio de un ajuste manual hecho tarde (2026-11-12)
+        add_column_if_missing(conn, 'account_movements', 'business_date', 'DATE')
 
         # Categoría detallada de Gastos y nota por tarjeta de Cuentas
         # (2026-10-09). NULL en lo ya guardado (se muestra con su grupo).

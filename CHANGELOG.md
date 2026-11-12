@@ -2,6 +2,12 @@
 
 ---
 
+## [2026-11-12] (continuación) - Fecha de negocio de un ajuste manual hecho tarde
+
+- Caso: en Carreño el 5-oct se descontaron dos veces cuota, internet y YouTube (ajuste manual + gastos) y el ajuste de +1.342.728 que lo compensa se hizo el 9-oct; el QR se veía negativo del 6 al 8-oct aunque el saldo final estaba bien.
+- `AccountMovement.business_date` (columna nueva, migración en `app/__init__.py`): día al que corresponde un **ajuste manual**. `month_sheet._effective_dates` lo usa (Cuentas → Mes, Flujo de caja de la Radiografía). No cambia montos ni el saldo. `POST /api/accounts/manual-adjustment` acepta `business_date` opcional y `PATCH /api/accounts/movements/<id>/business-date` lo pone o quita (solo ajustes manuales, no futura, no en un mes cerrado en Cuentas → Mes; deja rastro en la descripción). Pruebas: `tests/test_ajuste_con_fecha.py`.
+- Datos corregidos en producción el mismo día (por API, saldos de hoy idénticos antes y después): las 7 preguntas de octubre y las fechas reales de las ganancias pagadas el 4/5-nov (Carreño #54, #55, #58; Primavera #50, #51, #60), gastos de antes del saldo inicial de Primavera al 28-oct. Cada registro tocado lleva la nota "Ajuste del 12-nov: …".
+
 ## [2026-11-12] - Aviso de gasto repetido en el mes
 
 - Pedido del usuario tras encontrar Alegra pagada dos veces en octubre de Carreño (se dejan los dos). `POST/PUT /api/expenses` responde **409** `{duplicate: true, existing: [...]}` si ya hay en el mismo mes (al que corresponde) un gasto del mismo gasto fijo o de una categoría que se paga una vez al mes (`ONCE_A_MONTH_SUBCATEGORIES`: internet, youtube, alegra, luz, arriendo, cuota de manejo). Sueldos y ganancias no avisan (van por quincena o en partes). Con `confirm_duplicate: true` se guarda igual. Al editar solo avisa si la edición lo vuelve repetido (cambia mes, categoría o gasto fijo). Pruebas: `tests/test_gasto_repetido.py`.

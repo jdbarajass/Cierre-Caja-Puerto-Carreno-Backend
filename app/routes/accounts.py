@@ -301,6 +301,13 @@ def manual_adjustment():
         if amount <= 0:
             return jsonify({'success': False, 'message': 'El monto debe ser mayor a 0'}), 400
 
+        # Día al que corresponde, si el ajuste se hace tarde (opcional)
+        business_date = None
+        if data.get('business_date'):
+            business_date, msg = _parse_business_date(data['business_date'])
+            if msg:
+                return jsonify({'success': False, 'message': msg}), 400
+
         # Bloquea la fila para que un ajuste y una transferencia concurrentes
         # sobre la misma cuenta no lean el mismo balance antes de que ninguno
         # de los dos haga commit (evita corromper el saldo).
@@ -315,7 +322,8 @@ def manual_adjustment():
             type='manual_adjustment',
             amount=signed_amount,
             description=description,
-            created_by=get_current_user().get('userId')
+            created_by=get_current_user().get('userId'),
+            business_date=business_date,
         )
         account.balance += signed_amount
 
@@ -336,6 +344,65 @@ def manual_adjustment():
         db.session.rollback()
         logger.error(f"Error en ajuste manual: {e}")
         return jsonify({'success': False, 'message': 'Error al registrar el ajuste'}), 500
+
+
+def _closed_period(store, day):
+    """El mes del día está cerrado en Cuentas → Mes (su foto ya se guardó)."""
+    from app.models.month_sheet import MonthClose
+    return MonthClose.for_store(store).filter_by(period=day.strftime('%Y-%m')).first() is not None
+
+
+def _parse_business_date(value):
+    """(fecha, mensaje de error). No puede ser futura."""
+    try:
+        day = datetime.strptime(str(value), '%Y-%m-%d').date()
+    except ValueError:
+        return None, 'Fecha inválida (AAAA-MM-DD)'
+    if day > get_colombia_now().date():
+        return None, 'La fecha no puede ser futura'
+    if _closed_period(get_current_store(), day):
+        return None, f'{day.strftime("%m/%Y")} ya está cerrado en Cuentas → Mes: reábrelo primero'
+    return day, None
+
+
+@bp.route('/api/accounts/movements/<int:movement_id>/business-date', methods=['PATCH', 'OPTIONS'])
+@token_required
+@role_required('admin')
+def set_business_date(movement_id):
+    """
+    Día al que corresponde un ajuste manual hecho tarde (2026-11-12). No
+    cambia el monto ni el saldo de la cuenta: solo en qué día aparece en el
+    detalle diario (Cuentas → Mes, Flujo de caja). Deja rastro en la
+    descripción. business_date null = volver al día en que se registró.
+    """
+    if request.method == 'OPTIONS':
+        return '', 204
+    from app.services.month_sheet import _effective_dates
+    movement = (AccountMovement.query.join(Account, AccountMovement.account_id == Account.id)
+                .filter(AccountMovement.id == movement_id, Account.store_code == get_current_store()).first())
+    if not movement:
+        return jsonify({'success': False, 'message': 'Movimiento no encontrado'}), 404
+    if movement.type != 'manual_adjustment':
+        return jsonify({'success': False, 'message': 'Solo los ajustes manuales llevan fecha puesta a mano; '
+                        'los demás toman la fecha del cierre, gasto o envío'}), 400
+    data = request.get_json() or {}
+    new_day = None
+    if data.get('business_date'):
+        new_day, msg = _parse_business_date(data['business_date'])
+        if msg:
+            return jsonify({'success': False, 'message': msg}), 400
+    old_day = _effective_dates([movement])[movement.id]
+    if _closed_period(get_current_store(), old_day):
+        return jsonify({'success': False, 'message': f'{old_day.strftime("%m/%Y")} ya está cerrado en Cuentas → Mes: '
+                        'reábrelo primero'}), 400
+    note = (data.get('note') or '').strip()[:200]
+    movement.business_date = new_day
+    shown = (new_day or _effective_dates([movement])[movement.id]).strftime('%d/%m/%Y')
+    trail = f'[Fecha {shown} (antes {old_day.strftime("%d/%m/%Y")}), puesta el {get_colombia_now().strftime("%d/%m/%Y")}'
+    trail += f': {note}]' if note else ']'
+    movement.description = ((movement.description or '') + ' ' + trail).strip()
+    db.session.commit()
+    return jsonify({'success': True, 'movement': movement.to_dict()}), 200
 
 
 # ─────────────────────────────────────────────

@@ -155,8 +155,8 @@ def sales_by_day(store: str, start: date, end: date, today: date) -> Dict[str, A
 def _effective_dates(movements: List[AccountMovement]) -> Dict[int, date]:
     """
     Fecha "de negocio" de cada movimiento: la del cierre, el envío o el gasto
-    al que pertenece; si no tiene (ajustes, transferencias), el día en
-    Colombia en que se registró.
+    al que pertenece; si no tiene (ajustes, transferencias), la fecha puesta a
+    mano (business_date) o, si no, el día en Colombia en que se registró.
     """
     closing_ids = {m.cash_closing_id for m in movements if m.cash_closing_id}
     entry_ids, expense_ids = set(), set()
@@ -174,7 +174,10 @@ def _effective_dates(movements: List[AccountMovement]) -> Dict[int, date]:
     for m in movements:
         ref = m.reference_id or ''
         d = None
-        if m.cash_closing_id:
+        if m.type == 'manual_adjustment' and getattr(m, 'business_date', None):
+            # Ajuste manual hecho tarde, con su día puesto a mano
+            d = m.business_date
+        elif m.cash_closing_id:
             d = closings.get(m.cash_closing_id)
         elif ref.startswith(card_arrivals.REF_PREFIX):
             d = card_arrivals.parse_reference(ref)

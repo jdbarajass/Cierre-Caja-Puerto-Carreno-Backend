@@ -90,6 +90,12 @@ class AccountMovement(db.Model):
     cash_closing_id = db.Column(db.Integer, db.ForeignKey('cash_closings.id'), nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    # Día al que corresponde un ajuste manual hecho tarde (2026-11-12). Solo
+    # mueve el día en el detalle diario (Cuentas → Mes, Flujo de caja); el
+    # saldo de la cuenta no cambia. NULL = el día en que se registró. Solo
+    # aplica a type='manual_adjustment' (cierres, gastos y envíos usan la
+    # fecha de su registro de origen).
+    business_date = db.Column(db.Date, nullable=True)
 
     account = db.relationship('Account', foreign_keys=[account_id])
     creator = db.relationship('User', foreign_keys=[created_by], lazy='joined')
@@ -106,4 +112,5 @@ class AccountMovement(db.Model):
             'cash_closing_id': self.cash_closing_id,
             'created_by_name': self.creator.name if self.creator else None,
             'created_at': _iso_utc(self.created_at),
+            'business_date': self.business_date.isoformat() if self.business_date else None,
         }
