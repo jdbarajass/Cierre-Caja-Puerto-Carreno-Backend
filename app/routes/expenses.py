@@ -56,6 +56,48 @@ class ExpenseError(ValueError):
     """Dato inválido o inconsistente: se responde 400 con el mensaje."""
 
 
+# Gastos que se pagan UNA vez al mes (pedido del usuario 2026-11-12, tras
+# encontrar Alegra pagada dos veces en octubre). Sueldos y ganancias no: se
+# pagan por quincena o en partes.
+ONCE_A_MONTH_SUBCATEGORIES = ('internet', 'youtube', 'alegra', 'luz', 'arriendo', 'cuota_manejo')
+
+
+def _possible_duplicates(expense):
+    """Otros gastos del mismo mes (al que corresponden) que parecen el mismo
+    pago: mismo gasto fijo, o misma categoría de las que se pagan una vez al
+    mes. Solo avisa: con confirm_duplicate se guarda igual."""
+    if expense.direction != 'out':
+        return []
+    filters = []
+    if expense.fixed_expense_id:
+        filters.append(Expense.fixed_expense_id == expense.fixed_expense_id)
+    if expense.subcategory in ONCE_A_MONTH_SUBCATEGORIES:
+        filters.append(Expense.subcategory == expense.subcategory)
+    if not filters:
+        return []
+    q = Expense.for_store(expense.store_code or get_current_store()).filter(
+        Expense.period == expense.period, Expense.direction == 'out', db.or_(*filters))
+    if expense.id:
+        q = q.filter(Expense.id != expense.id)
+    return q.order_by(Expense.date.asc()).all()
+
+
+def _duplicate_response(expense, data):
+    """409 con los gastos parecidos, salvo que el usuario ya confirmó."""
+    if data.get('confirm_duplicate'):
+        return None
+    dups = _possible_duplicates(expense)
+    if not dups:
+        return None
+    listed = '; '.join(f'{d.date.strftime("%d/%m/%Y")} "{d.concept}" ${d.total:,.0f}'.replace(',', '.') for d in dups)
+    return jsonify({
+        'success': False,
+        'duplicate': True,
+        'message': f'Ya hay un pago de esto en {expense.period}: {listed}. ¿Seguro que es otro pago?',
+        'existing': [d.to_dict() for d in dups],
+    }), 409
+
+
 def _require_admin():
     if get_current_user().get('role') != 'admin':
         return jsonify({'success': False, 'message': 'Solo el administrador puede acceder'}), 403
@@ -421,7 +463,11 @@ def create_expense():
         return err
     try:
         expense = Expense(created_by=get_current_user().get('userId'))
-        _apply_payload(expense, request.get_json() or {}, creating=True)
+        data = request.get_json() or {}
+        _apply_payload(expense, data, creating=True)
+        dup = _duplicate_response(expense, data)
+        if dup:
+            return dup
         db.session.add(expense)
         db.session.flush()
         _sync_expense_account_movements(expense)
@@ -462,7 +508,16 @@ def manage_expense(expense_id):
             db.session.commit()
             return jsonify({'success': True}), 200
 
-        _apply_payload(expense, request.get_json() or {}, creating=False)
+        data = request.get_json() or {}
+        before = (expense.period, expense.subcategory, expense.fixed_expense_id)
+        _apply_payload(expense, data, creating=False)
+        # Solo se avisa si la edición lo vuelve repetido (no al tocar otra cosa
+        # de un gasto que ya se dejó así a propósito)
+        if (expense.period, expense.subcategory, expense.fixed_expense_id) != before:
+            dup = _duplicate_response(expense, data)
+            if dup:
+                db.session.rollback()
+                return dup
         _sync_expense_account_movements(expense)
         _sync_employee_links(expense)
         _sync_inter_store_mirrors(expense)

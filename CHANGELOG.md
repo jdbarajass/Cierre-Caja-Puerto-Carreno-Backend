@@ -2,6 +2,10 @@
 
 ---
 
+## [2026-11-12] - Aviso de gasto repetido en el mes
+
+- Pedido del usuario tras encontrar Alegra pagada dos veces en octubre de Carreño (se dejan los dos). `POST/PUT /api/expenses` responde **409** `{duplicate: true, existing: [...]}` si ya hay en el mismo mes (al que corresponde) un gasto del mismo gasto fijo o de una categoría que se paga una vez al mes (`ONCE_A_MONTH_SUBCATEGORIES`: internet, youtube, alegra, luz, arriendo, cuota de manejo). Sueldos y ganancias no avisan (van por quincena o en partes). Con `confirm_duplicate: true` se guarda igual. Al editar solo avisa si la edición lo vuelve repetido (cambia mes, categoría o gasto fijo). Pruebas: `tests/test_gasto_repetido.py`.
+
 ## [2026-11-11] - El admin no podía entrar ("El servidor no responde")
 
 - Síntoma (desde el 10-nov en la tarde): koaj.puertocarreno@gmail.com no entra; las vendedoras sí. Verificado en producción: `/health` sano y un correo inexistente da 401, pero `/auth/login` con ese correo da **500** tanto con la contraseña que tiene el usuario como con una errada a propósito (el frontend reintenta los 500 y muestra "El servidor no responde"). El fallo está al comprobar la contraseña o el contador de intentos de esa cuenta.
