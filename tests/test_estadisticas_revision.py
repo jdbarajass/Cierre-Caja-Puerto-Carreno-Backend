@@ -101,7 +101,8 @@ def test_dia_pasado_incompleto_no_queda_en_cache(alegra, monkeypatch):
     calls = []
 
     def fake_get(url, params=None, timeout=None):
-        calls.append(params)
+        if url.endswith('/invoices'):   # /payments (recibos, pagos mixtos) no cuenta aquí
+            calls.append(params)
         return FakeResponse({'metadata': {'total': 5}, 'data': [_inv(1), _inv(2)]})
     monkeypatch.setattr(alegra.session, 'get', fake_get)
     alegra.get_invoices_by_date('2026-09-30')
@@ -114,7 +115,8 @@ def test_dia_pasado_completo_si_queda_en_cache(alegra, monkeypatch):
     calls = []
 
     def fake_get(url, params=None, timeout=None):
-        calls.append(params)
+        if url.endswith('/invoices'):
+            calls.append(params)
         return FakeResponse({'metadata': {'total': 2}, 'data': [_inv(1), _inv(2)]})
     monkeypatch.setattr(alegra.session, 'get', fake_get)
     alegra.get_invoices_by_date('2026-09-30')

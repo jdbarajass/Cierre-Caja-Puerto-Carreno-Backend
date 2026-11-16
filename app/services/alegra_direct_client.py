@@ -481,9 +481,10 @@ class AlegraDirectClient:
                 date_str = current_date.strftime('%Y-%m-%d')
                 try:
                     day_invoices = self._get_invoices_for_day(date_str)
-                    # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma con paymentForm
+                    # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma
+                    # con los recibos del día (pagos mixtos) o paymentForm
                     from app.utils.formatters import ensure_invoice_payments
-                    ensure_invoice_payments(day_invoices)
+                    ensure_invoice_payments(day_invoices, self._receipts_by_invoice(date_str, day_invoices))
                     logger.info(f"Obtenidas {len(day_invoices)} facturas para {date_str}")
                     all_invoices.extend(day_invoices)
                     days_processed += 1
@@ -517,6 +518,23 @@ class AlegraDirectClient:
                 'error': str(e),
                 'data': []
             }
+
+    def _receipts_by_invoice(self, date_str: str, invoices: List[Dict[str, Any]]):
+        """Pagos reales por factura según los recibos (app/services/invoice_receipts.py)."""
+        from app.services.invoice_receipts import receipts_by_invoice_for_date, needs_receipts
+        from app.utils.timezone import get_colombia_today_string
+        if not needs_receipts(invoices):
+            return None
+
+        def fetch_page(start: int, limit: int) -> List[Dict[str, Any]]:
+            data = self._make_request('/payments', {'type': 'in', 'order_direction': 'DESC',
+                                                    'start': start, 'limit': limit})
+            if isinstance(data, dict) and isinstance(data.get('data'), list):
+                data = data['data']
+            return data if isinstance(data, list) else []
+
+        return receipts_by_invoice_for_date(fetch_page, self.username, date_str,
+                                            get_colombia_today_string())
 
     def _get_invoices_for_day(self, date_str: str) -> List[Dict[str, Any]]:
         """Todas las facturas de un día (páginas de 30). Lanza excepción si una página falla tras reintentar."""

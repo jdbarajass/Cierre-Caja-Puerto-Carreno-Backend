@@ -274,9 +274,10 @@ class AlegraClient:
 
             logger.info(f"✓ TOTAL: {len(all_invoices)} facturas obtenidas para {date} (esperadas: {total_invoices})")
 
-            # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma con paymentForm
+            # Alegra ya no manda `payments` dentro de la factura (2026-11-09): se arma
+            # con los recibos del día (división real de los pagos mixtos) o paymentForm
             from app.utils.formatters import ensure_invoice_payments
-            ensure_invoice_payments(all_invoices)
+            ensure_invoice_payments(all_invoices, self.receipts_by_invoice(date, all_invoices))
 
             complete = not total_invoices or len(all_invoices) >= total_invoices
             if not complete:
@@ -1029,6 +1030,16 @@ class AlegraClient:
         )
 
         return comparison
+
+    def receipts_by_invoice(self, date: str, invoices: List[Dict]) -> Optional[Dict[str, List[Dict]]]:
+        """Pagos reales por factura del día según los recibos de Alegra (ver
+        app/services/invoice_receipts.py). Solo pide /payments si alguna factura
+        activa llegó sin `payments`; None = usar paymentForm."""
+        from app.services.invoice_receipts import receipts_by_invoice_for_date, needs_receipts
+        if not needs_receipts(invoices):
+            return None
+        return receipts_by_invoice_for_date(self.get_payments_page, self.username, date,
+                                            get_colombia_today_string())
 
     def get_payments_page(self, start: int, limit: int = 30) -> List[Dict]:
         """

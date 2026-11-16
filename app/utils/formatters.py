@@ -90,17 +90,25 @@ def payment_form_method(form) -> str:
     return PAYMENT_FORM_METHODS.get(str(form or '').upper(), 'other')
 
 
-def ensure_invoice_payments(invoices):
+def ensure_invoice_payments(invoices, receipts_by_invoice=None):
     """
     Desde el 2026-11-09 Alegra devuelve /invoices SIN el detalle `payments`
     (verificado en producción: ninguna factura del 6 al 9-nov lo trae), así que
     el cierre de caja, la preconsulta y Estadísticas sumaban $0 por medio de
-    pago. Cada factura sí trae `paymentForm` (CASH, DEBIT_CARD, CREDIT_CARD,
-    DEBIT_TRANSFER) y `totalPaid`: si falta el detalle, se arma un pago con eso
-    (`synthesized: True`). Una factura pagada con dos medios queda en el de su
-    paymentForm (Alegra ya no manda la división). Si Alegra vuelve a mandar
-    `payments`, se usan tal cual. Modifica y devuelve la misma lista.
+    pago. Si falta el detalle, se arma (`synthesized: True`):
+
+    1. Con los recibos de Alegra (`receipts_by_invoice`, de
+       app/services/invoice_receipts.py): traen la división real de una factura
+       pagada con dos medios (ej. KPC4934 del 15-nov: $60.100 efectivo + $110.000
+       QR). Si los recibos suman menos que `totalPaid`, el resto va al medio de
+       paymentForm; si suman más (dato raro), no se usan.
+    2. Sin recibos: con `paymentForm` (CASH, DEBIT_CARD, CREDIT_CARD,
+       DEBIT_TRANSFER) y `totalPaid`; la factura queda completa en ese medio.
+
+    Si Alegra vuelve a mandar `payments`, se usan tal cual. Modifica y devuelve
+    la misma lista.
     """
+    receipts_by_invoice = receipts_by_invoice or {}
     for inv in invoices or []:
         if not isinstance(inv, dict) or inv.get('payments'):
             continue
@@ -113,7 +121,25 @@ def ensure_invoice_payments(invoices):
             paid = float(paid or 0)
         except (TypeError, ValueError):
             paid = 0
-        if paid <= 0 or not inv.get('paymentForm'):
+        if paid <= 0:
+            continue
+        form_method = payment_form_method(inv.get('paymentForm'))
+        receipts = receipts_by_invoice.get(str(inv.get('id'))) or []
+        from_receipts = sum(float(r.get('amount') or 0) for r in receipts)
+        if receipts and 0 < from_receipts <= paid + 1:
+            payments = [{
+                'amount': float(r['amount']),
+                'paymentMethod': r.get('paymentMethod') or form_method,
+                'date': inv.get('date'),
+                'synthesized': True,
+                'source': 'receipts',
+            } for r in receipts]
+            if paid - from_receipts > 1:   # parte sin recibo: al medio de la factura
+                payments.append({'amount': paid - from_receipts, 'paymentMethod': form_method,
+                                 'date': inv.get('date'), 'synthesized': True})
+            inv['payments'] = payments
+            continue
+        if not inv.get('paymentForm'):
             continue
         inv['payments'] = [{
             'amount': paid,

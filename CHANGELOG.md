@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-11-16] - Pagos mixtos: el cierre no cuadraba efectivo y transferencia con Alegra
+
+- Síntoma (cierre del 15-nov de Carreño): la preconsulta decía efectivo $282.800 / transferencia $320.100 y el Reporte diario de Alegra (y el Excel del cierre) efectivo $342.900 / transferencia $260.000; la tarjeta ($40.000) y el total ($642.900) sí coincidían. Diferencia exacta: $60.100.
+- Causa (verificada en Alegra): la factura KPC4934 ($170.100, nota "EFECTIVO 60100 QR 110.000") se pagó con dos medios. Desde el 9-nov /invoices no trae `payments` y `ensure_invoice_payments` la ponía completa en su `paymentForm` (DEBIT_TRANSFER). Era el límite anotado el 9-nov: cualquier día con una factura de pago mixto salía descuadrado (y el cierre "no exitoso").
+- Arreglo: `app/services/invoice_receipts.py` lee los recibos de pago (`/payments`, del más nuevo al más viejo hasta pasar el día; hoy = 1 página; caché por día pasado y por usuario de Alegra) y arma {factura: [monto, medio]}. `ensure_invoice_payments(invoices, receipts_by_invoice)` usa esa división (`source: 'receipts'`); lo que falte va al medio de paymentForm; si los recibos suman más que `totalPaid`, o Alegra falla, o el día tiene más de 62 días, se sigue con paymentForm como antes. Se aplica en `AlegraClient.get_invoices_by_date` (cierre, preconsulta, validación, Estadísticas por rango) y `AlegraDirectClient.get_all_invoices_for_date_range`. Solo se piden recibos si alguna factura activa llegó sin `payments`. Pruebas con los datos reales del 15-nov: `tests/test_alegra_sin_payments.py`.
+- Cierres ya guardados del 9 al 15-nov con una factura de pago mixto quedaron con la división de paymentForm: revisarlos (corrección del admin) si salieron "no exitosos" por esto.
+
 ## [2026-11-12] (continuación) - Fecha de negocio de un ajuste manual hecho tarde
 
 - Caso: en Carreño el 5-oct se descontaron dos veces cuota, internet y YouTube (ajuste manual + gastos) y el ajuste de +1.342.728 que lo compensa se hizo el 9-oct; el QR se veía negativo del 6 al 8-oct aunque el saldo final estaba bien.
