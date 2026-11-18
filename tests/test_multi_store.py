@@ -185,7 +185,7 @@ def test_recompra_descuenta_solo_cuentas_de_su_tienda(client, admin_headers):
         accounts = client.get('/api/accounts', headers=admin_headers(store)).get_json()['accounts']
         return next(a['balance'] for a in accounts if a['payment_key'] == 'cash')
 
-    assert cash_balance('primavera') == -(1000000 + 4000)  # envío + comisión 4x1000
+    assert cash_balance('primavera') == -1000000  # el efectivo no paga 4x1000
     assert cash_balance('carreno') == 0
     assert client.get('/api/repurchase', headers=admin_headers()).get_json()['count'] == 0
     assert client.get('/api/repurchase', headers=admin_headers('primavera')).get_json()['count'] == 1

@@ -99,7 +99,7 @@ def test_resumen_del_mes_y_ganancias(app, client, h):
     assert sep['gastos_operativos'] == 266000 + 1064    # el internet cuenta en septiembre, con 4x1000
     assert octubre['ventas'] == 4382400 + 1344500
     assert octubre['recompras'] == 2710000
-    fee_recompra = round(2710000 * 4 / 1000)
+    fee_recompra = 0                                    # en efectivo: sin 4x1000
     assert octubre['gastos_operativos'] == 53200 + 607000 + fee_recompra
     assert octubre['inversiones'] == 308828
     assert octubre['retiros'] == 1000000

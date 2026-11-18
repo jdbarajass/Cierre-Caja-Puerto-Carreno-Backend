@@ -2,6 +2,13 @@
 
 ---
 
+## [2026-11-18] - Recompras: el efectivo no paga 4x1000
+
+- Caso: recompra de Jhonatan del 18-nov por $2.009.900 en efectivo dejó EFECTIVO en -$8.040 (el 4x1000 se cobraba sobre todo lo enviado, también el efectivo). En Gastos el efectivo ya estaba exento.
+- `RepurchaseEntry.fee_4mil` calcula el 4x1000 solo sobre lo enviado por bancos (`fee_base`) y `_sync_entry_account_movements` reparte la comisión solo entre los medios de banco (si todo es efectivo y hay comisión escrita a mano, sale del efectivo). Aplica a las dos tiendas.
+- Solo para envíos creados desde `CASH_FEE_EXEMPT_SINCE` (18-nov-2026 00:00 hora Colombia; `cash_fee_exempt` en `to_dict`): los anteriores conservan su comisión, así no cambian meses cerrados ni saldos (también al editarlos). Lo usan solos Año, Radiografía, comparativo y Flujo de caja (todos leen `fee_4mil`).
+- Pruebas: `tests/test_repurchase_fee.py`; ajustadas las que daban por hecho 4x1000 en recompras en efectivo.
+
 ## [2026-11-16] - Pagos mixtos: el cierre no cuadraba efectivo y transferencia con Alegra
 
 - Síntoma (cierre del 15-nov de Carreño): la preconsulta decía efectivo $282.800 / transferencia $320.100 y el Reporte diario de Alegra (y el Excel del cierre) efectivo $342.900 / transferencia $260.000; la tarjeta ($40.000) y el total ($642.900) sí coincidían. Diferencia exacta: $60.100.

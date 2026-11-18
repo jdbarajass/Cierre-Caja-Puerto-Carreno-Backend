@@ -109,7 +109,6 @@ def _sync_entry_account_movements(entry, is_delete=False):
     # al último medio procesado, para que la suma de lo descontado cuadre
     # exacto con total_a_descontar.
     user_id = get_current_user().get('userId')
-    total_enviado = entry.total_enviado
     fee_total = entry.fee_4mil
     fee_asignada = 0
 
@@ -127,15 +126,27 @@ def _sync_entry_account_movements(entry, is_delete=False):
             continue
         medios_a_procesar.append((field, account))
 
-    for idx, (field, account) in enumerate(medios_a_procesar):
+    # El efectivo no paga 4x1000 (envíos nuevos, ver cash_fee_exempt): la
+    # comisión se reparte solo entre los medios de banco. Si todo salió en
+    # efectivo y aun así se escribió una comisión a mano, esa sale del efectivo.
+    fee_medios = medios_a_procesar
+    if entry.cash_fee_exempt:
+        bancos = [(f, a) for f, a in medios_a_procesar if f != 'efectivo']
+        if bancos:
+            fee_medios = bancos
+    fee_fields = [f for f, _ in fee_medios]
+    fee_base = sum(getattr(entry, f) for f in fee_fields)
+
+    for field, account in medios_a_procesar:
         amount = getattr(entry, field)
         account = locked_by_id.get(account.id, account)
 
-        es_ultimo = (idx == len(medios_a_procesar) - 1)
-        if es_ultimo:
+        if field not in fee_fields:
+            fee_share = 0
+        elif field == fee_fields[-1]:
             fee_share = fee_total - fee_asignada  # el resto exacto, sin error de redondeo
         else:
-            fee_share = round(fee_total * amount / total_enviado) if total_enviado else 0
+            fee_share = round(fee_total * amount / fee_base) if fee_base else 0
         fee_asignada += fee_share
 
         total_a_descontar = amount + fee_share

@@ -104,7 +104,7 @@ def test_hoy_le_deben_debe_y_cuanto_se_puede_retirar(app, client, h, monkeypatch
     assert loan.status_code == 201, loan.get_json()
 
     t = _cf(client, h(), 2026, 11)['today']
-    assert t['plata'] == pytest.approx(3000000 + 500000 - 100400 - 200000)   # recompra con su 4x1000
+    assert t['plata'] == pytest.approx(3000000 + 500000 - 100000 - 200000)   # recompra en efectivo: sin 4x1000
     rec = {x['key']: x for x in t['receivable']}
     assert rec['empleadas']['value'] == 200000 and rec['empleadas']['items'][0]['name'] == 'Rita'
     assert rec['otra_tienda']['value'] == 9816659                       # Primavera le debe a Carreño

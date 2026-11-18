@@ -5,6 +5,12 @@ from datetime import datetime
 from app.models.user import db
 from app.models.store_scoped import StoreScopedMixin
 
+# Desde aquí (18-nov-2026, 00:00 hora Colombia = 05:00 UTC; created_at se
+# guarda en UTC) lo enviado en EFECTIVO no paga 4x1000, igual que en Gastos.
+# Los envíos creados antes conservan su comisión (meses cerrados y saldos
+# intactos).
+CASH_FEE_EXEMPT_SINCE = datetime(2026, 11, 18, 5, 0, 0)
+
 
 class RepurchaseEntry(StoreScopedMixin, db.Model):
     __tablename__ = 'repurchase_entries'
@@ -62,11 +68,24 @@ class RepurchaseEntry(StoreScopedMixin, db.Model):
                 self.daviplata + self.nequi + self.bbva)
 
     @property
+    def cash_fee_exempt(self):
+        """True si el efectivo de este envío no paga 4x1000 (envíos creados
+        desde CASH_FEE_EXEMPT_SINCE). Los envíos anteriores se quedan con la
+        regla vieja para no cambiar meses ya cerrados ni saldos de cuentas."""
+        return self.created_at is None or self.created_at >= CASH_FEE_EXEMPT_SINCE
+
+    @property
+    def fee_base(self):
+        """Lo que paga 4x1000: lo enviado por bancos (el efectivo no, si aplica)."""
+        return self.total_enviado - (self.efectivo if self.cash_fee_exempt else 0)
+
+    @property
     def fee_4mil(self):
-        """Comisión sobre el total enviado: 4 por mil automático, salvo que se haya sobrescrito manualmente."""
+        """Comisión: 4 por mil automático sobre lo que no es efectivo, salvo que
+        se haya sobrescrito manualmente."""
         if self.fee_override is not None:
             return self.fee_override
-        return round(self.total_enviado * 4 / 1000)
+        return round(self.fee_base * 4 / 1000)
 
     @property
     def valor_sobrante(self):
@@ -102,6 +121,7 @@ class RepurchaseEntry(StoreScopedMixin, db.Model):
             'total_enviado': self.total_enviado,
             'fee_4mil': self.fee_4mil,
             'fee_override': self.fee_override,
+            'cash_fee_exempt': self.cash_fee_exempt,
             'valor_sobrante': self.valor_sobrante,
             'total_a_descontar': self.total_a_descontar,
             'notes': self.notes,
